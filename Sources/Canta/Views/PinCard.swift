@@ -59,7 +59,7 @@ struct PinCard: View {
             HStack(spacing: 5) {
                 Image(systemName: pin.isFavorite ? "heart.fill" : "heart")
                     .font(.system(size: 11, weight: .bold))
-                Text(pin.isFavorite ? "Saved" : "Save")
+                Text(pin.isFavorite ? T("Saved") : T("Save"))
                     .font(.system(size: 11.5, weight: .bold))
             }
             .foregroundStyle(Color.white)
@@ -69,7 +69,7 @@ struct PinCard: View {
             .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
         }
         .buttonStyle(PressableStyle())
-        .help(pin.isFavorite ? "Remove from favorites" : "Save to favorites")
+        .help(pin.isFavorite ? T("Remove from favorites") : T("Save to favorites"))
     }
 
     private var metadataPill: some View {
@@ -100,7 +100,7 @@ struct PinCard: View {
                 Circle()
                     .fill(Theme.boardColor(pin.board))
                     .frame(width: 5.5, height: 5.5)
-                Text(pin.board)
+                Text(localizedBoard(pin.board))
                     .lineLimit(1)
                 Text("·")
                 Text(pin.pixelLabel)
@@ -118,31 +118,31 @@ struct PinCard: View {
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button("Open pin") { store.openDetail(pin) }
-        Button(pin.isFavorite ? "Remove from favorites" : "Add to favorites") {
+        Button(T("Open pin")) { store.openDetail(pin) }
+        Button(pin.isFavorite ? T("Remove from favorites") : T("Add to favorites")) {
             store.toggleFavorite(pin)
         }
         Divider()
-        Button("Copy agent snippet") { store.copyAgentSnippet(for: pin) }
-        Button("Copy image") { store.copyImage(pin) }
-        Menu("Move to board") {
+        Button(T("Copy agent snippet")) { store.copyAgentSnippet(for: pin) }
+        Button(T("Copy image")) { store.copyImage(pin) }
+        Menu(T("Move to board")) {
             ForEach(store.allBoardNames, id: \.self) { board in
                 Button {
                     store.movePin(pin.id, toBoard: board)
                 } label: {
                     if board == pin.board {
-                        Label(board, systemImage: "checkmark")
+                        Label(localizedBoard(board), systemImage: "checkmark")
                     } else {
-                        Text(board)
+                        Text(localizedBoard(board))
                     }
                 }
             }
         }
         Divider()
-        Button("Open original") { store.openOriginal(pin) }
-        Button("Reveal in Finder") { store.revealPin(pin) }
+        Button(T("Open original")) { store.openOriginal(pin) }
+        Button(T("Reveal in Finder")) { store.revealPin(pin) }
         if pin.sourceURL != nil {
-            Button("Open source page") { store.openSource(pin) }
+            Button(T("Open source page")) { store.openSource(pin) }
         }
     }
 }

@@ -61,7 +61,7 @@ final class LibraryStore: ObservableObject {
             self.pins = library.pins
         } catch {
             self.pins = []
-            self.startupError = "Canta couldn't read your library. New pins will start a fresh one. (\(error.localizedDescription))"
+            self.startupError = TF("Canta couldn't read your library. New pins will start a fresh one. (%@)", error.localizedDescription)
         }
     }
 
@@ -103,6 +103,7 @@ final class LibraryStore: ObservableObject {
                     pin.title,
                     pin.note,
                     pin.board,
+                    localizedBoard(pin.board),
                     pin.sourceLabel ?? "",
                     pin.tags.joined(separator: " "),
                     pin.kind.label
@@ -165,13 +166,13 @@ final class LibraryStore: ObservableObject {
     var pageTitle: String {
         switch section {
         case .all:
-            return selectedBoard ?? "All pins"
+            return selectedBoard.map(localizedBoard) ?? T("All pins")
         case .favorites:
-            return "Favorites"
+            return T("Favorites")
         case .recent:
-            return "Recent captures"
+            return T("Recent captures")
         case .agent:
-            return "Agent access"
+            return T("Agent access")
         }
     }
 
@@ -180,15 +181,15 @@ final class LibraryStore: ObservableObject {
         case .all:
             if let selectedBoard {
                 let count = boardSummaries.first(where: { $0.name == selectedBoard })?.count ?? 0
-                return "\(count) \(count == 1 ? "pin" : "pins") curated in this board"
+                return TF("%ld pins curated in this board", count)
             }
-            return "\(pins.count) pins · a small, searchable visual memory for building interfaces"
+            return TF("%ld pins · a small, searchable visual memory for building interfaces", pins.count)
         case .favorites:
-            return "\(favoriteCount) hand-picked references"
+            return TF("%ld hand-picked references", favoriteCount)
         case .recent:
-            return "\(recentCount) pins added in the last 30 days"
+            return TF("%ld pins added in the last 30 days", recentCount)
         case .agent:
-            return "Give your coding agent eyes for good design"
+            return T("Give your coding agent eyes for good design")
         }
     }
 
@@ -265,7 +266,7 @@ final class LibraryStore: ObservableObject {
     func toggleFavorite(_ pin: Pin) {
         updatePin(id: pin.id) { $0.isFavorite.toggle() }
         let favorite = pins.first(where: { $0.id == pin.id })?.isFavorite ?? false
-        showToast(favorite ? "Saved to favorites" : "Removed from favorites", icon: favorite ? "heart.fill" : "heart")
+        showToast(favorite ? T("Saved to favorites") : T("Removed from favorites"), icon: favorite ? "heart.fill" : "heart")
     }
 
     func addTag(_ rawTag: String, to pinID: UUID) {
@@ -297,7 +298,7 @@ final class LibraryStore: ObservableObject {
         pins.removeAll { $0.id == pin.id }
         if selectedPinID == pin.id { selectedPinID = nil }
         persist()
-        showToast("Pin deleted", icon: "trash")
+        showToast(T("Pin deleted"), icon: "trash")
     }
 
     // MARK: - Import
@@ -305,7 +306,7 @@ final class LibraryStore: ObservableObject {
     func addFiles(_ urls: [URL], sourceLabel: String = "Imported", preferredTitle: String? = nil, board explicitBoard: String? = nil) async {
         guard !urls.isEmpty else { return }
         guard !isImporting else {
-            showToast("Canta is still importing", icon: "hourglass")
+            showToast(T("Canta is still importing"), icon: "hourglass")
             return
         }
 
@@ -350,7 +351,7 @@ final class LibraryStore: ObservableObject {
         }
 
         guard !created.isEmpty else {
-            showToast(failure ?? "Couldn't add that image", icon: "exclamationmark.triangle")
+            showToast(failure ?? T("Couldn't add that image"), icon: "exclamationmark.triangle")
             return
         }
 
@@ -358,17 +359,20 @@ final class LibraryStore: ObservableObject {
         persist()
         revealFreshlyAdded(board: targetBoard)
 
-        let countLabel = "\(created.count) \(created.count == 1 ? "pin" : "pins")"
+        let localizedTargetBoard = localizedBoard(targetBoard)
         if let failure {
-            showToast("\(countLabel) added · \(failure)", icon: "exclamationmark.circle")
+            let countLabel = created.count == 1 ? TF("%ld pin", created.count) : TF("%ld pins", created.count)
+            showToast(TF("%@ added · %@", countLabel, failure), icon: "exclamationmark.circle")
+        } else if created.count == 1 {
+            showToast(TF("%ld pin added to %@", created.count, localizedTargetBoard), icon: "pin.fill")
         } else {
-            showToast("\(countLabel) added to \(targetBoard)", icon: "pin.fill")
+            showToast(TF("%ld pins added to %@", created.count, localizedTargetBoard), icon: "pin.fill")
         }
     }
 
     func addImageData(_ data: Data, preferredExtension: String? = nil, sourceLabel: String = "Clipboard", title: String? = nil, board: String? = nil) async {
         guard !isImporting else {
-            showToast("Canta is still importing", icon: "hourglass")
+            showToast(T("Canta is still importing"), icon: "hourglass")
             return
         }
         isImporting = true
@@ -382,7 +386,7 @@ final class LibraryStore: ObservableObject {
             }.value
             let pin = Pin(
                 id: id,
-                title: title ?? "Pasted screenshot · \(Self.captureStamp())",
+                title: title ?? TF("Pasted screenshot · %@", Self.captureStamp()),
                 image: processed.image,
                 thumbnail: processed.thumbnail,
                 width: processed.width,
@@ -397,7 +401,7 @@ final class LibraryStore: ObservableObject {
             pins.append(pin)
             persist()
             revealFreshlyAdded(board: targetBoard)
-            showToast("Screenshot added to \(targetBoard)", icon: "pin.fill")
+            showToast(TF("Screenshot added to %@", localizedBoard(targetBoard)), icon: "pin.fill")
         } catch {
             showToast(error.localizedDescription, icon: "exclamationmark.triangle")
         }
@@ -417,15 +421,15 @@ final class LibraryStore: ObservableObject {
         }
 
         if let png = pasteboard.data(forType: .png) {
-            await addImageData(png, preferredExtension: "png", sourceLabel: "Clipboard", title: "Pasted screenshot · \(Self.captureStamp())", board: board)
+            await addImageData(png, preferredExtension: "png", sourceLabel: "Clipboard", title: TF("Pasted screenshot · %@", Self.captureStamp()), board: board)
             return true
         }
         if let tiff = pasteboard.data(forType: .tiff), let png = ImageProcessor.pngData(fromTIFF: tiff) {
-            await addImageData(png, preferredExtension: "png", sourceLabel: "Clipboard", title: "Pasted screenshot · \(Self.captureStamp())")
+            await addImageData(png, preferredExtension: "png", sourceLabel: "Clipboard", title: TF("Pasted screenshot · %@", Self.captureStamp()))
             return true
         }
         if let jpeg = pasteboard.data(forType: NSPasteboard.PasteboardType("public.jpeg")) {
-            await addImageData(jpeg, preferredExtension: "jpg", sourceLabel: "Clipboard", title: "Pasted screenshot · \(Self.captureStamp())", board: board)
+            await addImageData(jpeg, preferredExtension: "jpg", sourceLabel: "Clipboard", title: TF("Pasted screenshot · %@", Self.captureStamp()), board: board)
             return true
         }
 
@@ -435,7 +439,7 @@ final class LibraryStore: ObservableObject {
 
     func captureScreenshot(board: String? = nil) async {
         guard !isImporting else {
-            showToast("Canta is still importing", icon: "hourglass")
+            showToast(T("Canta is still importing"), icon: "hourglass")
             return
         }
         let tempURL = FileManager.default.temporaryDirectory
@@ -464,7 +468,7 @@ final class LibraryStore: ObservableObject {
         await addFiles(
             [tempURL],
             sourceLabel: "Screen capture",
-            preferredTitle: "Screen capture · \(Self.captureStamp())",
+            preferredTitle: TF("Screen capture · %@", Self.captureStamp()),
             board: board
         )
         try? FileManager.default.removeItem(at: tempURL)
@@ -524,11 +528,11 @@ final class LibraryStore: ObservableObject {
     }
 
     func copyAgentSnippet(for pin: Pin) {
-        copyText(agentSnippet(for: pin), message: "Agent snippet copied", icon: "sparkles")
+        copyText(agentSnippet(for: pin), message: T("Agent snippet copied"), icon: "sparkles")
     }
 
     func copyAgentContext() {
-        copyText(agentContext(), message: "Agent context copied", icon: "sparkles")
+        copyText(agentContext(), message: T("Agent context copied"), icon: "sparkles")
     }
 
     func copyPinJSON(_ pin: Pin) {
@@ -550,26 +554,26 @@ final class LibraryStore: ObservableObject {
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
            let string = String(data: data, encoding: .utf8) {
-            copyText(string, message: "Pin JSON copied", icon: "curlybraces")
+            copyText(string, message: T("Pin JSON copied"), icon: "curlybraces")
         }
     }
 
-    func copyText(_ text: String, message: String = "Copied", icon: String = "doc.on.doc") {
+    func copyText(_ text: String, message: String? = nil, icon: String = "doc.on.doc") {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-        showToast(message, icon: icon)
+        showToast(message ?? T("Copied"), icon: icon)
     }
 
     func copyImage(_ pin: Pin) {
         guard let image = NSImage(contentsOf: thumbnailURL(for: pin)) else {
-            showToast("Couldn't load that image", icon: "exclamationmark.triangle")
+            showToast(T("Couldn't load that image"), icon: "exclamationmark.triangle")
             return
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects([image])
-        showToast("Image copied", icon: "photo.on.rectangle")
+        showToast(T("Image copied"), icon: "photo.on.rectangle")
     }
 
     func openOriginal(_ pin: Pin) {
@@ -656,10 +660,10 @@ final class LibraryStore: ObservableObject {
 
     var agentStatusLabel: String {
         switch agentStatus {
-        case .stopped: return agentAPIEnabled ? "API stopped" : "API off"
-        case .starting: return "API starting…"
-        case .running: return "Agent API live"
-        case .failed: return "API unavailable"
+        case .stopped: return T(agentAPIEnabled ? "API stopped" : "API off")
+        case .starting: return T("API starting…")
+        case .running: return T("Agent API live")
+        case .failed: return T("API unavailable")
         }
     }
 
@@ -695,7 +699,7 @@ final class LibraryStore: ObservableObject {
             let data = try CantaJSON.encoder.encode(library)
             try data.write(to: CantaPaths.libraryFile(root: root), options: .atomic)
         } catch {
-            showToast("Couldn't save the library", icon: "exclamationmark.triangle")
+            showToast(T("Couldn't save the library"), icon: "exclamationmark.triangle")
         }
     }
 
@@ -706,16 +710,14 @@ final class LibraryStore: ObservableObject {
             .trimmed
         let lower = cleaned.lowercased()
         if lower.contains("screenshot") || lower.contains("screen shot") || lower.contains("screencapture") || lower.contains("截屏") {
-            return "Screenshot · \(captureStamp())"
+            return TF("Screenshot · %@", captureStamp())
         }
-        if cleaned.count < 3 { return "Untitled capture" }
+        if cleaned.count < 3 { return T("Untitled capture") }
         return cleaned.prefix(1).uppercased() + cleaned.dropFirst()
     }
 
     private static func captureStamp() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, HH:mm"
-        return formatter.string(from: Date())
+        Date().cantaTime
     }
 
     private static func isLikelyImage(_ url: URL) -> Bool {

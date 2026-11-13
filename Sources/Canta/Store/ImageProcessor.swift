@@ -20,9 +20,9 @@ enum ImageProcessingError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreadable(let name): return "\(name) isn't a readable image."
-        case .unsupported(let name): return "\(name) uses an unsupported image format."
-        case .writeFailed(let message): return "Couldn't store the image: \(message)"
+        case .unreadable(let name): return TF("%@ isn't a readable image.", name)
+        case .unsupported(let name): return TF("%@ uses an unsupported image format.", name)
+        case .writeFailed(let message): return TF("Couldn't store the image: %@", message)
         }
     }
 }

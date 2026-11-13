@@ -25,7 +25,7 @@ struct EmptyStateView: View {
                 .padding(.bottom, 22)
             }
 
-            Text(mode == .emptyLibrary ? "Your library is waiting" : "No pins match")
+            Text(mode == .emptyLibrary ? T("Your library is waiting") : T("No pins match"))
                 .font(Theme.display(24, weight: .bold))
                 .tracking(-0.7)
                 .foregroundStyle(Theme.ink)
@@ -40,14 +40,14 @@ struct EmptyStateView: View {
 
             HStack(spacing: 9) {
                 if mode == .emptyLibrary {
-                    CantaButton(title: "Capture screenshot", icon: "viewfinder", variant: .primary) {
+                    CantaButton(title: T("Capture screenshot"), icon: "viewfinder", variant: .primary) {
                         store.capturePresented = true
                     }
-                    CantaButton(title: "Import images", icon: "square.and.arrow.down", variant: .secondary) {
+                    CantaButton(title: T("Import images"), icon: "square.and.arrow.down", variant: .secondary) {
                         ImportPanel.present(store: store)
                     }
                 } else {
-                    CantaButton(title: "Clear search & filters", icon: "arrow.counterclockwise", variant: .secondary) {
+                    CantaButton(title: T("Clear search & filters"), icon: "arrow.counterclockwise", variant: .secondary) {
                         withAnimation(.easeOut(duration: 0.2)) {
                             store.searchText = ""
                             store.filter = .all
@@ -62,10 +62,10 @@ struct EmptyStateView: View {
             if mode == .emptyLibrary {
                 HStack(spacing: 7) {
                     Image(systemName: "clipboard")
-                    Text("or press ⇧⌘V to pin the clipboard")
+                    Text(T("or press ⇧⌘V to pin the clipboard"))
                     Text("·")
                     Image(systemName: "viewfinder")
-                    Text("⇧⌘2 for a screen capture")
+                    Text(T("⇧⌘2 for a screen capture"))
                 }
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(Theme.inkTertiary.opacity(0.9))
@@ -79,9 +79,9 @@ struct EmptyStateView: View {
     private var subtitle: String {
         switch mode {
         case .emptyLibrary:
-            return "Pin the interfaces that make you stop scrolling.\nEvery capture keeps its pixels, palette, and context — ready for your agent."
+            return T("Pin the interfaces that make you stop scrolling.\nEvery capture keeps its pixels, palette, and context — ready for your agent.")
         case .noResults:
-            return "Try a different phrase, or loosen the filters.\nBoards and tags are searchable too."
+            return T("Try a different phrase, or loosen the filters.\nBoards and tags are searchable too.")
         }
     }
 }
@@ -129,7 +129,7 @@ struct EmptyArtwork: View {
             // small floating tag
             HStack(spacing: 5) {
                 Circle().fill(Theme.moss).frame(width: 5, height: 5)
-                Text("agent ready")
+                Text(T("agent ready"))
                     .font(Theme.mono(8.5, weight: .medium))
                     .foregroundStyle(Theme.inkSecondary)
             }
@@ -168,7 +168,7 @@ struct EmptyArtwork: View {
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 5) {
-                        Text("A quiet dashboard")
+                        Text(T("A quiet dashboard"))
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Theme.ink)
                         Spacer()

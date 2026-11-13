@@ -6,8 +6,8 @@ enum PinKind: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .screenshot: return "Screenshot"
-        case .image: return "Image"
+        case .screenshot: return T("Screenshot")
+        case .image: return T("Image")
         }
     }
 
@@ -114,7 +114,9 @@ struct Pin: Identifiable, Codable, Hashable {
     }
 
     var displayTypeLabel: String {
-        if let sourceLabel, !sourceLabel.isEmpty { return sourceLabel }
+        if let sourceLabel, !sourceLabel.isEmpty {
+            return sourceLabel == "Canta Seed" ? T("Canta Seed") : sourceLabel
+        }
         return kind.label
     }
 }
@@ -151,10 +153,10 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "All pins"
-        case .favorites: return "Favorites"
-        case .recent: return "Recent"
-        case .agent: return "Agent access"
+        case .all: return T("All pins")
+        case .favorites: return T("Favorites")
+        case .recent: return T("Recent")
+        case .agent: return T("Agent access")
         }
     }
 
@@ -177,9 +179,9 @@ enum GalleryFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "All"
-        case .screenshots: return "Screenshots"
-        case .favorites: return "Favorites"
+        case .all: return T("All")
+        case .screenshots: return T("Screenshots")
+        case .favorites: return T("Favorites")
         }
     }
 }
@@ -193,9 +195,9 @@ enum PinSort: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .recent: return "Recently added"
-        case .oldest: return "Oldest first"
-        case .title: return "A–Z"
+        case .recent: return T("Recently added")
+        case .oldest: return T("Oldest first")
+        case .title: return T("A–Z")
         }
     }
 }

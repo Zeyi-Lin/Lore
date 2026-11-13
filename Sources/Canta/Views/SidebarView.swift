@@ -12,7 +12,7 @@ struct SidebarView: View {
                 .padding(.top, 48)
 
             CantaButton(
-                title: "Capture",
+                title: T("Capture"),
                 icon: "plus",
                 variant: .primary,
                 shortcut: "⇧⌘N",
@@ -36,7 +36,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 17)
 
-            SectionLabel(text: "Boards", trailing: "\(store.boardSummaries.count)")
+            SectionLabel(text: T("Boards"), trailing: "\(store.boardSummaries.count)")
                 .padding(.horizontal, 22)
                 .padding(.bottom, 8)
 
@@ -46,7 +46,7 @@ struct SidebarView: View {
                         boardRow(board)
                     }
                     if store.boardSummaries.isEmpty {
-                        Text("Boards appear here as you pin.")
+                        Text(T("Boards appear here as you pin."))
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.inkTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,7 +84,7 @@ struct SidebarView: View {
                     .font(.system(size: 23, weight: .bold))
                     .tracking(-0.9)
                     .foregroundStyle(Theme.ink)
-                Text("VISUAL LIBRARY")
+                Text(T("VISUAL LIBRARY"))
                     .font(.system(size: 7.5, weight: .bold))
                     .tracking(1.7)
                     .foregroundStyle(Theme.inkTertiary)
@@ -134,7 +134,7 @@ struct SidebarView: View {
                 .frame(width: 22, height: 22)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                Text(board.name)
+                Text(localizedBoard(board.name))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(selected ? Theme.ink : Theme.inkSecondary)
                     .lineLimit(1)
@@ -166,7 +166,7 @@ struct SidebarView: View {
                     Circle()
                         .fill(agentDotColor)
                         .frame(width: 6, height: 6)
-                    Text("AGENT API")
+                    Text(T("Agent API").uppercased())
                         .font(.system(size: 8.5, weight: .bold))
                         .tracking(1.3)
                         .foregroundStyle(Theme.inkTertiary)
@@ -180,7 +180,7 @@ struct SidebarView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.ink)
 
-                Text(store.agentStatusDetail ?? "Metadata and image streams for your coding agent.")
+                Text(store.agentStatusDetail ?? T("Metadata and image streams for your coding agent."))
                     .font(.system(size: 10.5))
                     .foregroundStyle(Theme.inkTertiary)
                     .lineLimit(2)
@@ -225,10 +225,10 @@ struct SidebarView: View {
             .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Local library")
+                Text(T("Local library"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.ink)
-                Text("\(store.pins.count) pins · private")
+                Text(TF("%ld pins · private", store.pins.count))
                     .font(.system(size: 9.5))
                     .foregroundStyle(Theme.inkTertiary)
             }
@@ -243,7 +243,7 @@ struct SidebarView: View {
                     .background(Circle().fill(Theme.parchmentDeep))
             }
             .buttonStyle(.plain)
-            .help("Settings")
+            .help(T("Settings"))
         }
     }
 }

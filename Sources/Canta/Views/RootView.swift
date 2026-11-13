@@ -135,11 +135,11 @@ struct RootView: View {
                         .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                Text("Drop to pin")
+                Text(T("Drop to pin"))
                     .font(.system(size: 22, weight: .bold))
                     .tracking(-0.6)
                     .foregroundStyle(Theme.ink)
-                Text("Screenshots, images, or a pile of references")
+                Text(T("Screenshots, images, or a pile of references"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.inkTertiary)
             }

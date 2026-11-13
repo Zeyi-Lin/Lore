@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 
 MODE="${1:-gallery}"
 PIN_QUERY="${2:-Aurora}"
+LANG_OVERRIDE="${SCREENSHOT_LANG:-}"
 OUT="${3:-docs/screenshots/${MODE}.png}"
 HOME_DIR="${CANTA_SCREENSHOT_HOME:-$PWD/.build/screenshot-library}"
 APP="$PWD/dist/Canta.app"
@@ -55,6 +56,11 @@ fi
 defaults write studio.canta.library canta.debugHome -string "$HOME_DIR"
 defaults write studio.canta.library canta.debugShow -string "$MODE"
 defaults write studio.canta.library canta.debugPin -string "$PIN_QUERY"
+if [ -n "$LANG_OVERRIDE" ]; then
+  defaults write studio.canta.library canta.debugLanguage -string "$LANG_OVERRIDE"
+else
+  defaults delete studio.canta.library canta.debugLanguage >/dev/null 2>&1 || true
+fi
 
 open -n "$APP"
 sleep 7
@@ -86,6 +92,7 @@ screencapture -x -o -l "$WINDOW_ID" "$OUT"
 defaults delete studio.canta.library canta.debugShow >/dev/null 2>&1 || true
 defaults delete studio.canta.library canta.debugHome >/dev/null 2>&1 || true
 defaults delete studio.canta.library canta.debugPin >/dev/null 2>&1 || true
+defaults delete studio.canta.library canta.debugLanguage >/dev/null 2>&1 || true
 
 echo "Captured $OUT"
 

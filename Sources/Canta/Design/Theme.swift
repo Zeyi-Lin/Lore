@@ -85,19 +85,23 @@ extension String {
 extension Date {
     var cantaShort: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy"
+        formatter.locale = LanguageManager.shared.locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
         return formatter.string(from: self)
     }
 
     var cantaRelative: String {
         let formatter = RelativeDateTimeFormatter()
+        formatter.locale = LanguageManager.shared.locale
         formatter.unitsStyle = .short
         return formatter.localizedString(for: self, relativeTo: Date())
     }
 
     var cantaTime: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d · HH:mm"
+        formatter.locale = LanguageManager.shared.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMd HH:mm")
         return formatter.string(from: self)
     }
 }

@@ -49,7 +49,7 @@ struct PinDetailOverlay: View {
                     }
                     .buttonStyle(PressableStyle())
                     .offset(x: 13, y: -13)
-                    .help("Close")
+                    .help(T("Close"))
                 }
                 .compositingGroup()
                 .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
@@ -74,11 +74,11 @@ struct PinDetailOverlay: View {
             }
         }
         .onExitCommand { store.dismissDetail() }
-        .alert("Delete this pin?", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) { store.deletePin(pin) }
-            Button("Cancel", role: .cancel) { }
+        .alert(T("Delete this pin?"), isPresented: $showDeleteAlert) {
+            Button(T("Delete"), role: .destructive) { store.deletePin(pin) }
+            Button(T("Cancel"), role: .cancel) { }
         } message: {
-            Text("The original image and its metadata will be removed from Canta.")
+            Text(T("The original image and its metadata will be removed from Canta."))
         }
     }
 
@@ -127,7 +127,7 @@ struct PinDetailOverlay: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.up.right.square")
                                 .font(.system(size: 10, weight: .semibold))
-                            Text("Open original")
+                            Text(T("Open original"))
                                 .font(.system(size: 10.5, weight: .semibold))
                         }
                         .foregroundStyle(Theme.inkSecondary)
@@ -138,7 +138,7 @@ struct PinDetailOverlay: View {
                     }
                     .buttonStyle(PressableStyle())
                     Spacer()
-                    Text("\(pin.colors.count)-color palette")
+                    Text(TF("%ld-color palette", pin.colors.count))
                         .font(Theme.mono(9, weight: .medium))
                         .foregroundStyle(Theme.inkTertiary)
                 }
@@ -217,7 +217,7 @@ struct PinDetailOverlay: View {
             CircleActionButton(icon: "doc.on.doc", size: 35) {
                 store.copyAgentSnippet(for: pin)
             }
-            .help("Copy agent snippet")
+            .help(T("Copy agent snippet"))
 
             moreMenu
         }
@@ -231,7 +231,7 @@ struct PinDetailOverlay: View {
                 Circle()
                     .fill(Theme.boardColor(pin.board))
                     .frame(width: 6, height: 6)
-                Text(pin.board)
+                Text(localizedBoard(pin.board))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.inkSecondary)
                 Image(systemName: "chevron.down")
@@ -257,7 +257,7 @@ struct PinDetailOverlay: View {
                             Circle()
                                 .fill(Theme.boardColor(board))
                                 .frame(width: 6, height: 6)
-                            Text(board)
+                            Text(localizedBoard(board))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(Theme.ink)
                             Spacer()
@@ -282,7 +282,7 @@ struct PinDetailOverlay: View {
                     showNewBoardField = true
                     showBoardMenu = false
                 } label: {
-                    Label("New board…", systemImage: "plus")
+                    Label(T("New board…"), systemImage: "plus")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.ink)
                         .padding(.horizontal, 10)
@@ -299,19 +299,19 @@ struct PinDetailOverlay: View {
 
     private var moreMenu: some View {
         Menu {
-            Button("Copy image") { store.copyImage(pin) }
-            Button("Copy pin JSON") { store.copyPinJSON(pin) }
-            Button("Copy image URL") {
-                store.copyText(store.apiImageURL(for: pin), message: "Image URL copied", icon: "link")
+            Button(T("Copy image")) { store.copyImage(pin) }
+            Button(T("Copy pin JSON")) { store.copyPinJSON(pin) }
+            Button(T("Copy image URL")) {
+                store.copyText(store.apiImageURL(for: pin), message: T("Image URL copied"), icon: "link")
             }
             Divider()
-            Button("Open original") { store.openOriginal(pin) }
+            Button(T("Open original")) { store.openOriginal(pin) }
             if pin.sourceURL != nil {
-                Button("Open source page") { store.openSource(pin) }
+                Button(T("Open source page")) { store.openSource(pin) }
             }
-            Button("Reveal in Finder") { store.revealPin(pin) }
+            Button(T("Reveal in Finder")) { store.revealPin(pin) }
             Divider()
-            Button("Delete pin", role: .destructive) { showDeleteAlert = true }
+            Button(T("Delete pin"), role: .destructive) { showDeleteAlert = true }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 13, weight: .bold))
@@ -324,12 +324,12 @@ struct PinDetailOverlay: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
-        .help("More actions")
+        .help(T("More actions"))
     }
 
     private var titleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Untitled pin", text: titleBinding, axis: .vertical)
+            TextField(T("Untitled pin"), text: titleBinding, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 26, weight: .bold))
                 .tracking(-0.9)
@@ -337,7 +337,7 @@ struct PinDetailOverlay: View {
                 .lineLimit(1...3)
 
             HStack(spacing: 7) {
-                if let sourceLabel = pin.sourceLabel, !sourceLabel.isEmpty {
+                if let sourceLabel = localizedSourceLabel(pin.sourceLabel) {
                     Image(systemName: "link")
                         .font(.system(size: 9, weight: .semibold))
                     if let sourceURL = pin.sourceURL, let url = URL(string: sourceURL) {
@@ -352,20 +352,20 @@ struct PinDetailOverlay: View {
                     }
                     Text("·")
                 }
-                Text("Captured \(pin.createdAt.cantaShort)")
+                Text(TF("Captured %@", pin.createdAt.cantaShort))
             }
             .font(.system(size: 10.5, weight: .medium))
             .foregroundStyle(Theme.inkTertiary)
 
             if showNewBoardField {
                 HStack(spacing: 6) {
-                    TextField("New board name", text: $newBoardName)
+                    TextField(T("New board name"), text: $newBoardName)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11.5))
                         .padding(.horizontal, 10)
                         .frame(height: 29)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.parchment))
-                    Button("Move") {
+                    Button(T("Move")) {
                         let name = newBoardName.trimmed
                         guard !name.isEmpty else { return }
                         store.movePin(pin.id, toBoard: name)
@@ -390,8 +390,8 @@ struct PinDetailOverlay: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: "Design note")
-            TextField("What makes this worth copying? Layout, type, color…", text: noteBinding, axis: .vertical)
+            SectionLabel(text: T("Design note"))
+            TextField(T("What makes this worth copying? Layout, type, color…"), text: noteBinding, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.inkSecondary)
@@ -412,7 +412,7 @@ struct PinDetailOverlay: View {
 
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Tags", trailing: "\(pin.tags.count)")
+            SectionLabel(text: T("Tags"), trailing: "\(pin.tags.count)")
             FlowLayout(spacing: 7, lineSpacing: 7) {
                 ForEach(pin.tags, id: \.self) { tag in
                     TagChip(tag: tag, onRemove: {
@@ -423,7 +423,7 @@ struct PinDetailOverlay: View {
                     Image(systemName: "plus")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(Theme.inkTertiary)
-                    TextField("tag", text: $tagEntry)
+                    TextField(T("tag"), text: $tagEntry)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11))
                         .frame(width: 55)
@@ -442,11 +442,11 @@ struct PinDetailOverlay: View {
 
     private var paletteSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Palette")
+            SectionLabel(text: T("Palette"))
             HStack(spacing: 8) {
                 ForEach(Array(pin.colors.prefix(5).enumerated()), id: \.offset) { _, hex in
                     Button {
-                        store.copyText(hex, message: "\(hex) copied", icon: "paintpalette")
+                        store.copyText(hex, message: TF("%@ copied", hex), icon: "paintpalette")
                     } label: {
                         VStack(spacing: 5) {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -463,7 +463,7 @@ struct PinDetailOverlay: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.plain)
-                    .help("Copy \(hex)")
+                    .help(TF("Copy %@", hex))
                 }
             }
         }
@@ -481,10 +481,10 @@ struct PinDetailOverlay: View {
                 .frame(width: 28, height: 28)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Agent-ready")
+                    Text(T("Agent-ready"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.ink)
-                    Text("Metadata + image stream, one fetch away.")
+                    Text(T("Metadata + image stream, one fetch away."))
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.inkTertiary)
                 }
@@ -492,7 +492,7 @@ struct PinDetailOverlay: View {
             }
 
             Button {
-                store.copyText(store.apiImageURL(for: pin), message: "Image URL copied", icon: "link")
+                store.copyText(store.apiImageURL(for: pin), message: T("Image URL copied"), icon: "link")
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "link")
@@ -516,13 +516,13 @@ struct PinDetailOverlay: View {
             .buttonStyle(.plain)
 
             HStack(spacing: 7) {
-                SmallPillButton(title: "Copy snippet", icon: "doc.on.doc") {
+                SmallPillButton(title: T("Copy snippet"), icon: "doc.on.doc") {
                     store.copyAgentSnippet(for: pin)
                 }
-                SmallPillButton(title: "Copy JSON", icon: "curlybraces") {
+                SmallPillButton(title: T("Copy JSON"), icon: "curlybraces") {
                     store.copyPinJSON(pin)
                 }
-                SmallPillButton(title: "Copy image", icon: "photo.on.rectangle") {
+                SmallPillButton(title: T("Copy image"), icon: "photo.on.rectangle") {
                     store.copyImage(pin)
                 }
             }
@@ -540,15 +540,15 @@ struct PinDetailOverlay: View {
 
     private var metadataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Details")
+            SectionLabel(text: T("Details"))
             HStack(alignment: .top, spacing: 0) {
-                detailStat(label: "PIXELS", value: pin.pixelLabel)
+                detailStat(label: T("PIXELS"), value: pin.pixelLabel)
                 detailDivider
-                detailStat(label: "FILE", value: pin.byteLabel)
+                detailStat(label: T("FILE"), value: pin.byteLabel)
                 detailDivider
-                detailStat(label: "FORMAT", value: (pin.image as NSString).pathExtension.uppercased())
+                detailStat(label: T("FORMAT"), value: (pin.image as NSString).pathExtension.uppercased())
                 detailDivider
-                detailStat(label: "CAPTURED", value: pin.createdAt.cantaShort)
+                detailStat(label: T("CAPTURED"), value: pin.createdAt.cantaShort)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 12)
@@ -585,7 +585,7 @@ struct PinDetailOverlay: View {
             Button {
                 store.openOriginal(pin)
             } label: {
-                Label("Open original", systemImage: "arrow.up.right.square")
+                Label(T("Open original"), systemImage: "arrow.up.right.square")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.inkSecondary)
             }
@@ -594,7 +594,7 @@ struct PinDetailOverlay: View {
             Button {
                 store.revealPin(pin)
             } label: {
-                Label("Reveal", systemImage: "folder")
+                Label(T("Reveal"), systemImage: "folder")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.inkSecondary)
             }
@@ -605,7 +605,7 @@ struct PinDetailOverlay: View {
             Button(role: .destructive) {
                 showDeleteAlert = true
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(T("Delete"), systemImage: "trash")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.red)
             }

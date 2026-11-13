@@ -91,25 +91,25 @@ struct LibraryView: View {
     }
 
     private var kicker: String {
-        if !store.searchText.trimmed.isEmpty { return "SEARCHING YOUR LIBRARY" }
-        if let board = store.selectedBoard { return "BOARD · \(board.uppercased())" }
+        if !store.searchText.trimmed.isEmpty { return T("SEARCHING YOUR LIBRARY") }
+        if let board = store.selectedBoard { return TF("BOARD · %@", localizedBoard(board).uppercased()) }
         switch store.section {
-        case .all: return "YOUR VISUAL LIBRARY"
-        case .favorites: return "SAVED FOR LATER"
-        case .recent: return "RECENTLY PINNED"
-        case .agent: return "AGENT ACCESS"
+        case .all: return T("YOUR VISUAL LIBRARY")
+        case .favorites: return T("SAVED FOR LATER")
+        case .recent: return T("RECENTLY PINNED")
+        case .agent: return T("AGENT ACCESS")
         }
     }
 
     private var filterBar: some View {
         HStack(spacing: 8) {
-            FilterChip(title: "All", count: store.pins.count, isSelected: store.filter == .all) {
+            FilterChip(title: T("All"), count: store.pins.count, isSelected: store.filter == .all) {
                 withAnimation(.easeOut(duration: 0.18)) { store.filter = .all }
             }
-            FilterChip(title: "Screenshots", count: store.screenshotCount, isSelected: store.filter == .screenshots) {
+            FilterChip(title: T("Screenshots"), count: store.screenshotCount, isSelected: store.filter == .screenshots) {
                 withAnimation(.easeOut(duration: 0.18)) { store.filter = .screenshots }
             }
-            FilterChip(title: "Favorites", count: store.favoriteCount, isSelected: store.filter == .favorites) {
+            FilterChip(title: T("Favorites"), count: store.favoriteCount, isSelected: store.filter == .favorites) {
                 withAnimation(.easeOut(duration: 0.18)) { store.filter = .favorites }
             }
 
@@ -124,7 +124,7 @@ struct LibraryView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.boardColor(board)).frame(width: 6, height: 6)
-                        Text(board)
+                        Text(localizedBoard(board))
                             .font(.system(size: 11.5, weight: .semibold))
                         Image(systemName: "xmark")
                             .font(.system(size: 8, weight: .bold))
@@ -137,9 +137,9 @@ struct LibraryView: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("Clear board filter")
+                .help(T("Clear board filter"))
             } else {
-                Text("\(store.filteredPins.count) shown")
+                Text(TF("%ld shown", store.filteredPins.count))
                     .font(Theme.mono(10.5, weight: .medium))
                     .foregroundStyle(Theme.inkTertiary)
                     .padding(.leading, 2)

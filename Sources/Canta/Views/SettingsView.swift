@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LibraryStore
+    @ObservedObject private var language = LanguageManager.shared
     @State private var portField = ""
 
     var body: some View {
@@ -9,7 +10,33 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
 
-                settingsGroup(title: "AGENT API", icon: "sparkles") {
+                settingsGroup(title: T("LANGUAGE"), icon: "globe") {
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(T("App language"))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                            Text(T("Follows your macOS language unless changed."))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Theme.inkTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 12)
+                        Picker("", selection: Binding(
+                            get: { language.selection },
+                            set: { language.select($0) }
+                        )) {
+                            ForEach(AppLanguage.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 280)
+                    }
+                }
+
+                settingsGroup(title: T("AGENT API"), icon: "sparkles") {
                     VStack(spacing: 14) {
                         HStack(spacing: 8) {
                             Circle().fill(statusColor).frame(width: 7, height: 7)
@@ -28,7 +55,7 @@ struct SettingsView: View {
                         }
 
                         HStack(spacing: 8) {
-                            Text("Port")
+                            Text(T("PORT"))
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(Theme.inkSecondary)
                             TextField("4242", text: $portField)
@@ -37,48 +64,48 @@ struct SettingsView: View {
                                 .padding(.horizontal, 8)
                                 .frame(width: 74, height: 27)
                                 .background(RoundedRectangle(cornerRadius: 7).fill(Theme.parchment))
-                            Button("Apply") {
+                            Button(T("Apply")) {
                                 if let value = UInt16(portField), value >= 1024 {
                                     store.setAgentPort(value)
-                                    store.showToast("Agent API restarted on :\(value)", icon: "arrow.triangle.2.circlepath")
+                                    store.showToast(TF("Agent API restarted on :%ld", Int(value)), icon: "arrow.triangle.2.circlepath")
                                 } else {
                                     portField = "\(store.agentPort)"
-                                    store.showToast("Port must be 1024–65535", icon: "exclamationmark.triangle")
+                                    store.showToast(T("Port must be 1024–65535"), icon: "exclamationmark.triangle")
                                 }
                             }
                             .buttonStyle(.plain)
                             .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(Theme.red)
                             Spacer()
-                            Button("Restart") { store.restartAgentServer() }
+                            Button(T("Restart")) { store.restartAgentServer() }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(Theme.inkSecondary)
                         }
 
                         HStack(spacing: 7) {
-                            SmallPillButton(title: "Open docs", icon: "book") { store.openAgentDocs() }
-                            SmallPillButton(title: "Copy endpoint", icon: "doc.on.doc") {
-                                store.copyText(store.agentBaseURL, message: "Endpoint copied", icon: "link")
+                            SmallPillButton(title: T("Open docs"), icon: "book") { store.openAgentDocs() }
+                            SmallPillButton(title: T("Copy endpoint"), icon: "doc.on.doc") {
+                                store.copyText(store.agentBaseURL, message: T("Endpoint copied"), icon: "link")
                             }
                             Spacer()
                         }
 
-                        Text("Serves the library on 127.0.0.1 only. Read-only, no authentication required for local agents.")
+                        Text(T("Serves the library on 127.0.0.1 only. Read-only, no authentication required for local agents."))
                             .font(.system(size: 9.5))
                             .foregroundStyle(Theme.inkTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
 
-                settingsGroup(title: "CAPTURE", icon: "pin") {
+                settingsGroup(title: T("CAPTURE"), icon: "pin") {
                     VStack(spacing: 13) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Default board")
+                                Text(T("Default board"))
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Theme.ink)
-                                Text("New pins land here unless you pick another board.")
+                                Text(T("New pins land here unless you pick another board."))
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(Theme.inkTertiary)
                             }
@@ -89,16 +116,16 @@ struct SettingsView: View {
                                         store.defaultBoard = name
                                     } label: {
                                         if store.defaultBoard == name {
-                                            Label(name, systemImage: "checkmark")
+                                            Label(localizedBoard(name), systemImage: "checkmark")
                                         } else {
-                                            Text(name)
+                                            Text(localizedBoard(name))
                                         }
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 6) {
                                     Circle().fill(Theme.boardColor(store.defaultBoard)).frame(width: 6, height: 6)
-                                    Text(store.defaultBoard)
+                                    Text(localizedBoard(store.defaultBoard))
                                         .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(Theme.inkSecondary)
                                     Image(systemName: "chevron.down")
@@ -120,7 +147,7 @@ struct SettingsView: View {
 
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Library location")
+                                Text(T("Library location"))
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Theme.ink)
                                 Text(store.dataFolderPath)
@@ -130,7 +157,7 @@ struct SettingsView: View {
                                     .truncationMode(.middle)
                             }
                             Spacer()
-                            Button("Reveal") { store.openDataFolder() }
+                            Button(T("Reveal")) { store.openDataFolder() }
                                 .buttonStyle(.plain)
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(Theme.inkSecondary)
@@ -138,19 +165,19 @@ struct SettingsView: View {
                     }
                 }
 
-                settingsGroup(title: "ABOUT", icon: "info.circle") {
+                settingsGroup(title: T("ABOUT"), icon: "info.circle") {
                     HStack(spacing: 12) {
                         CantaMark(size: 38)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Canta 1.0")
+                            Text(T("Canta 1.0"))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(Theme.ink)
-                            Text("A quiet visual library for humans and their agents.")
+                            Text(T("A quiet visual library for humans and their agents."))
                                 .font(.system(size: 9.5))
                                 .foregroundStyle(Theme.inkTertiary)
                         }
                         Spacer()
-                        Text("Made for macOS")
+                        Text(T("Made for macOS"))
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Theme.inkTertiary)
                     }
@@ -166,11 +193,11 @@ struct SettingsView: View {
     private var header: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Settings")
+                Text(T("Settings"))
                     .font(.system(size: 28, weight: .bold))
                     .tracking(-1)
                     .foregroundStyle(Theme.ink)
-                Text("Keep Canta quiet, local, and ready for your agent.")
+                Text(T("Keep Canta quiet, local, and ready for your agent."))
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.inkTertiary)
             }

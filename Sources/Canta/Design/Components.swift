@@ -284,7 +284,7 @@ struct LibraryImage: View {
                 VStack(spacing: 8) {
                     Image(systemName: "photo.badge.exclamationmark")
                         .font(.system(size: 22, weight: .light))
-                    Text("Image unavailable")
+                    Text(T("Image unavailable"))
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(Theme.inkTertiary)

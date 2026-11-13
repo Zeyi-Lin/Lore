@@ -17,12 +17,12 @@ struct TopBarView: View {
             CircleActionButton(icon: "sparkles", size: 38) {
                 store.copyAgentContext()
             }
-            .help("Copy filtered pins as agent context")
+            .help(T("Copy filtered pins as agent context"))
 
             CircleActionButton(icon: "plus", filled: true, size: 38) {
                 store.capturePresented = true
             }
-            .help("Capture a new pin")
+            .help(T("Capture a new pin"))
         }
         .padding(.horizontal, 30)
         .padding(.top, 19)
@@ -38,7 +38,7 @@ struct TopBarView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(searchFocused ? Theme.ink : Theme.inkTertiary)
 
-            TextField("Search pins, tags, boards…", text: $store.searchText)
+            TextField(T("Search pins, tags, boards…"), text: $store.searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(Theme.ink)
@@ -110,7 +110,7 @@ struct TopBarView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help("Open Agent access")
+        .help(T("Open Agent access"))
         .onAppear {
             withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {
                 statusPulse = true
@@ -129,10 +129,10 @@ struct TopBarView: View {
 
     private var statusTitle: String {
         switch store.agentStatus {
-        case .running: return "API live"
-        case .starting: return "Starting"
-        case .failed: return "Offline"
-        case .stopped: return "API off"
+        case .running: return T("API live")
+        case .starting: return T("Starting")
+        case .failed: return T("Offline")
+        case .stopped: return T("API off")
         }
     }
 }

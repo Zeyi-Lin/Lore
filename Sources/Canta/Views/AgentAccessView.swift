@@ -34,18 +34,18 @@ struct AgentAccessView: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 7) {
                 Circle().fill(Theme.red).frame(width: 5, height: 5)
-                Text("AGENT ACCESS")
+                Text(T("AGENT ACCESS"))
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1.6)
                     .foregroundStyle(Theme.inkTertiary)
             }
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Give your agent eyes.")
+                    Text(T("Give your agent eyes."))
                         .font(.system(size: 35, weight: .bold))
                         .tracking(-1.35)
                         .foregroundStyle(Theme.ink)
-                    Text("Every pin is a queryable JSON record with a direct image stream, served on loopback.")
+                    Text(T("Every pin is a queryable JSON record with a direct image stream, served on loopback."))
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.inkTertiary)
                 }
@@ -99,26 +99,26 @@ struct AgentAccessView: View {
                     HStack(spacing: 7) {
                         Image(systemName: "terminal")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("LOCALHOST · READ ONLY")
+                        Text(T("LOCALHOST · READ ONLY"))
                             .font(Theme.mono(8.5, weight: .semibold))
                             .tracking(1.2)
                     }
                     .foregroundStyle(Color.white.opacity(0.55))
 
-                    Text("Your library, readable\nby your coding agent.")
+                    Text(T("Your library, readable\nby your coding agent."))
                         .font(.system(size: 27, weight: .bold))
                         .tracking(-0.9)
                         .foregroundStyle(Color.white)
                         .lineSpacing(2)
 
-                    Text("Point Claude Code, Codex, or Cursor at the docs endpoint.\nIt gets structured metadata and exact image URLs — no exports, no screenshots of screenshots.")
+                    Text(T("Point Claude Code, Codex, or Cursor at the docs endpoint.\nIt gets structured metadata and exact image URLs — no exports, no screenshots of screenshots."))
                         .font(.system(size: 11.5))
                         .foregroundStyle(Color.white.opacity(0.65))
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
-                        CantaButton(title: "Open API docs", icon: "book", variant: .primary) {
+                        CantaButton(title: T("Open API docs"), icon: "book", variant: .primary) {
                             store.openAgentDocs()
                         }
                         heroGhostButton
@@ -140,12 +140,12 @@ struct AgentAccessView: View {
 
     private var heroGhostButton: some View {
         Button {
-            store.copyText(store.agentBaseURL, message: "Endpoint copied", icon: "link")
+            store.copyText(store.agentBaseURL, message: T("Endpoint copied"), icon: "link")
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 11, weight: .semibold))
-                Text("Copy endpoint")
+                Text(T("Copy endpoint"))
                     .font(.system(size: 12.5, weight: .semibold))
             }
             .foregroundStyle(Color.white.opacity(0.9))
@@ -220,17 +220,17 @@ struct AgentAccessView: View {
     }
 
     private var quickstartCard: some View {
-        AgentPanel(title: "QUICKSTART", icon: "bolt") {
+        AgentPanel(title: T("QUICKSTART"), icon: "bolt") {
             VStack(alignment: .leading, spacing: 11) {
-                Text("Fetch the whole design context in one request.")
+                Text(T("Fetch the whole design context in one request."))
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.inkTertiary)
                 codeBlock("curl -s \(store.agentBaseURL)/api/v1/context", id: "quickstart")
                 HStack(spacing: 7) {
-                    SmallPillButton(title: "Copy command", icon: "doc.on.doc") {
-                        store.copyText("curl -s \(store.agentBaseURL)/api/v1/context", message: "Command copied", icon: "terminal")
+                    SmallPillButton(title: T("Copy command"), icon: "doc.on.doc") {
+                        store.copyText("curl -s \(store.agentBaseURL)/api/v1/context", message: T("Command copied"), icon: "terminal")
                     }
-                    SmallPillButton(title: "Open context", icon: "arrow.up.right") {
+                    SmallPillButton(title: T("Open context"), icon: "arrow.up.right") {
                         store.openAgentContext()
                     }
                 }
@@ -239,17 +239,17 @@ struct AgentAccessView: View {
     }
 
     private var promptCard: some View {
-        AgentPanel(title: "AGENT PROMPT", icon: "sparkles") {
+        AgentPanel(title: T("AGENT PROMPT"), icon: "sparkles") {
             VStack(alignment: .leading, spacing: 11) {
-                Text("Paste this into your coding agent to establish the reference loop.")
+                Text(T("Paste this into your coding agent to establish the reference loop."))
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.inkTertiary)
                 codeBlock("Read \(store.agentBaseURL)/api/v1/context and use the Canta references as art direction. For each component, match the palette and spacing language, not the code.", id: "prompt")
                 HStack(spacing: 7) {
-                    SmallPillButton(title: "Copy prompt", icon: "doc.on.doc") {
-                        store.copyText(promptText, message: "Prompt copied", icon: "sparkles")
+                    SmallPillButton(title: T("Copy prompt"), icon: "doc.on.doc") {
+                        store.copyText(promptText, message: T("Prompt copied"), icon: "sparkles")
                     }
-                    SmallPillButton(title: "Open llms.txt", icon: "doc.text") {
+                    SmallPillButton(title: T("Open llms.txt"), icon: "doc.text") {
                         store.openAgentManifest()
                     }
                 }
@@ -258,20 +258,20 @@ struct AgentAccessView: View {
     }
 
     private var endpointsCard: some View {
-        AgentPanel(title: "API SURFACE", icon: "point.3.connected.trianglepath.dotted") {
+        AgentPanel(title: T("API SURFACE"), icon: "point.3.connected.trianglepath.dotted") {
             VStack(spacing: 0) {
-                endpointRow("GET", "/api/v1/library", "Everything in one payload")
-                endpointRow("GET", "/api/v1/pins", "Filter by q, tag, board, favorite")
-                endpointRow("GET", "/api/v1/pins/{id}", "A single enriched pin")
-                endpointRow("GET", "/api/v1/pins/{id}/image", "Original or thumbnail stream")
-                endpointRow("GET", "/api/v1/context", "Markdown design context")
-                endpointRow("GET", "/docs", "Human + agent documentation")
+                endpointRow("GET", "/api/v1/library", T("Everything in one payload"))
+                endpointRow("GET", "/api/v1/pins", T("Filter by q, tag, board, favorite"))
+                endpointRow("GET", "/api/v1/pins/{id}", T("A single enriched pin"))
+                endpointRow("GET", "/api/v1/pins/{id}/image", T("Original or thumbnail stream"))
+                endpointRow("GET", "/api/v1/context", T("Markdown design context"))
+                endpointRow("GET", "/docs", T("Human + agent documentation"))
             }
         }
     }
 
     private var localCard: some View {
-        AgentPanel(title: "THE SERVER", icon: "server.rack") {
+        AgentPanel(title: T("THE SERVER"), icon: "server.rack") {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
                     Circle().fill(statusColor).frame(width: 7, height: 7)
@@ -292,7 +292,7 @@ struct AgentAccessView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Text("PORT")
+                    Text(T("PORT"))
                         .font(.system(size: 8, weight: .bold))
                         .tracking(1.1)
                         .foregroundStyle(Theme.inkTertiary)
@@ -302,12 +302,12 @@ struct AgentAccessView: View {
                         .padding(.horizontal, 8)
                         .frame(width: 70, height: 28)
                         .background(RoundedRectangle(cornerRadius: 7).fill(Theme.parchment))
-                    Button("Apply") {
+                    Button(T("Apply")) {
                         if let value = UInt16(portField), value >= 1024 {
                             store.setAgentPort(value)
-                            store.showToast("Agent API restarted on :\(value)", icon: "arrow.triangle.2.circlepath")
+                            store.showToast(TF("Agent API restarted on :%ld", Int(value)), icon: "arrow.triangle.2.circlepath")
                         } else {
-                            store.showToast("Port must be 1024–65535", icon: "exclamationmark.triangle")
+                            store.showToast(T("Port must be 1024–65535"), icon: "exclamationmark.triangle")
                             portField = "\(store.agentPort)"
                         }
                     }
@@ -326,23 +326,23 @@ struct AgentAccessView: View {
                 }
 
                 HStack(spacing: 7) {
-                    Button("Restart") { store.restartAgentServer() }
+                    Button(T("Restart")) { store.restartAgentServer() }
                         .buttonStyle(.plain)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                     Text("·").foregroundStyle(Theme.inkTertiary)
-                    Button("Data folder") { store.openDataFolder() }
+                    Button(T("Data folder")) { store.openDataFolder() }
                         .buttonStyle(.plain)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                     Text("·").foregroundStyle(Theme.inkTertiary)
-                    Button("llms.txt") { store.openAgentManifest() }
+                    Button(T("llms.txt")) { store.openAgentManifest() }
                         .buttonStyle(.plain)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                 }
 
-                Text("Bound to loopback only. Images and metadata never leave this Mac.")
+                Text(T("Bound to loopback only. Images and metadata never leave this Mac."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(Theme.inkTertiary)
                     .lineSpacing(1.5)
@@ -378,7 +378,7 @@ struct AgentAccessView: View {
 
     private func codeBlock(_ text: String, id: String) -> some View {
         Button {
-            store.copyText(text, message: "Copied", icon: "doc.on.doc")
+            store.copyText(text, message: T("Copied"), icon: "doc.on.doc")
             copiedBlock = id
         } label: {
             HStack(alignment: .top, spacing: 8) {
@@ -401,7 +401,7 @@ struct AgentAccessView: View {
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .help("Copy")
+        .help(T("Copy"))
     }
 
     private var promptText: String {

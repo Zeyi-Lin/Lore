@@ -59,18 +59,18 @@ struct CaptureSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
                 Circle().fill(Theme.red).frame(width: 5, height: 5)
-                Text("QUICK CAPTURE")
+                Text(T("QUICK CAPTURE"))
                     .font(.system(size: 8.5, weight: .bold))
                     .tracking(1.7)
                     .foregroundStyle(Theme.inkTertiary)
             }
 
-            Text("Pin something worth referencing.")
+            Text(T("Pin something worth referencing."))
                 .font(.system(size: 26, weight: .bold))
                 .tracking(-1)
                 .foregroundStyle(Theme.ink)
 
-            Text("Screenshots in, structure out. Canta reads pixels, palette, and dimensions for you.")
+            Text(T("Screenshots in, structure out. Canta reads pixels, palette, and dimensions for you."))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.inkTertiary)
                 .lineSpacing(2)
@@ -96,11 +96,11 @@ struct CaptureSheet: View {
                     .shadow(color: Theme.red.opacity(0.3), radius: 5, y: 2)
             }
 
-            Text(dropTargeted ? "Release to pin" : "Drop screenshots here")
+            Text(dropTargeted ? T("Release to pin") : T("Drop screenshots here"))
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(Theme.ink)
 
-            Text("or paste with ⇧⌘V · PNG, JPEG, HEIC, TIFF")
+            Text(T("or paste with ⇧⌘V · PNG, JPEG, HEIC, TIFF"))
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.inkTertiary)
         }
@@ -128,17 +128,17 @@ struct CaptureSheet: View {
 
     private var actions: some View {
         HStack(spacing: 9) {
-            CantaButton(title: "Take screenshot", icon: "viewfinder", variant: .primary, shortcut: "⇧⌘2") {
+            CantaButton(title: T("Take screenshot"), icon: "viewfinder", variant: .primary, shortcut: "⇧⌘2") {
                 close()
                 Task { await store.captureScreenshot(board: board) }
             }
 
-            CantaButton(title: "Choose images", icon: "square.and.arrow.down", variant: .secondary) {
+            CantaButton(title: T("Choose images"), icon: "square.and.arrow.down", variant: .secondary) {
                 close()
                 ImportPanel.present(store: store, board: board)
             }
 
-            CantaButton(title: "Paste", icon: "doc.on.clipboard", variant: .ghost, shortcut: "⇧⌘V") {
+            CantaButton(title: T("Paste"), icon: "doc.on.clipboard", variant: .ghost, shortcut: "⇧⌘V") {
                 close()
                 Task { await store.pasteFromClipboard(board: board) }
             }
@@ -150,7 +150,7 @@ struct CaptureSheet: View {
     private var footer: some View {
         HStack(spacing: 10) {
             HStack(spacing: 6) {
-                Text("ADD TO")
+                Text(T("ADD TO"))
                     .font(.system(size: 8, weight: .bold))
                     .tracking(1.2)
                     .foregroundStyle(Theme.inkTertiary)
@@ -160,16 +160,16 @@ struct CaptureSheet: View {
                             board = name
                         } label: {
                             if board == name {
-                                Label(name, systemImage: "checkmark")
+                                Label(localizedBoard(name), systemImage: "checkmark")
                             } else {
-                                Label(name, systemImage: "circle.fill")
+                                Label(localizedBoard(name), systemImage: "circle.fill")
                             }
                         }
                     }
                 } label: {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.boardColor(board)).frame(width: 6, height: 6)
-                        Text(board)
+                        Text(localizedBoard(board))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Theme.inkSecondary)
                         Image(systemName: "chevron.down")
@@ -192,11 +192,11 @@ struct CaptureSheet: View {
             HStack(spacing: 5) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 8, weight: .semibold))
-                Text("Local only")
+                Text(T("Local only"))
                     .font(.system(size: 9.5, weight: .medium))
             }
             .foregroundStyle(Theme.inkTertiary)
-            .help("Images are stored on this Mac and never uploaded.")
+            .help(T("Images are stored on this Mac and never uploaded."))
         }
     }
 
