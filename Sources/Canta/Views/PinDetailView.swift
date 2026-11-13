@@ -1,0 +1,676 @@
+import SwiftUI
+
+struct PinDetailOverlay: View {
+    let pin: Pin
+
+    @EnvironmentObject private var store: LibraryStore
+    @State private var showDeleteAlert = false
+    @State private var tagEntry = ""
+    @State private var showNewBoardField = false
+    @State private var newBoardName = ""
+    @State private var showBoardMenu = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = min(max(geo.size.width - 150, 800), 1140)
+            let height = min(max(geo.size.height - 92, 540), 790)
+
+            ZStack {
+                Color.black.opacity(0.42)
+                    .background(.ultraThinMaterial)
+                    .ignoresSafeArea()
+                    .onTapGesture { store.dismissDetail() }
+
+                HStack(spacing: 0) {
+                    imagePane
+                        .frame(width: width * 0.575)
+                    metaPane
+                        .frame(width: width * 0.425)
+                }
+                .frame(width: width, height: height)
+                .background(Theme.paper)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.34), radius: 48, x: 0, y: 26)
+                .overlay(alignment: .topTrailing) {
+                    Button {
+                        store.dismissDetail()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                            .frame(width: 35, height: 35)
+                            .background(Circle().fill(Theme.paper))
+                            .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .offset(x: 13, y: -13)
+                    .help("Close")
+                }
+                .compositingGroup()
+                .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
+
+                if store.filteredPins.count > 1 {
+                    HStack {
+                        navButton(icon: "chevron.left", offset: -1)
+                            .padding(.leading, 22)
+                        Spacer()
+                        navButton(icon: "chevron.right", offset: 1)
+                            .padding(.trailing, 22)
+                    }
+                    .frame(width: geo.size.width)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.975)))
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSApp.keyWindow?.makeFirstResponder(nil)
+            }
+        }
+        .onExitCommand { store.dismissDetail() }
+        .alert("Delete this pin?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) { store.deletePin(pin) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("The original image and its metadata will be removed from Canta.")
+        }
+    }
+
+    // MARK: - Image side
+
+    private var imagePane: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(hex: 0xEFEAE2), Color(hex: 0xE7E1D7)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [Color.white.opacity(0.5), Color.clear],
+                center: .topLeading,
+                startRadius: 10,
+                endRadius: 430
+            )
+
+            GeometryReader { proxy in
+                let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 54, height: proxy.size.height - 54))
+                LibraryImage(path: store.originalURL(for: pin).path, contentMode: .fit)
+                    .frame(width: fitted.width, height: fitted.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            }
+            .padding(27)
+
+            VStack {
+                HStack {
+                    detailChip(icon: pin.kind.icon, text: pin.kind.label)
+                    Spacer()
+                    detailChip(icon: "rectangle.dashed", text: pin.pixelLabel)
+                }
+                Spacer()
+                HStack {
+                    Button {
+                        store.openOriginal(pin)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Open original")
+                                .font(.system(size: 10.5, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.inkSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(Capsule().fill(Theme.paper.opacity(0.88)))
+                        .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+                    }
+                    .buttonStyle(PressableStyle())
+                    Spacer()
+                    Text("\(pin.colors.count)-color palette")
+                        .font(Theme.mono(9, weight: .medium))
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+            }
+            .padding(18)
+        }
+        .clipped()
+    }
+
+    private func fittedImageSize(in available: CGSize) -> CGSize {
+        guard available.width > 1, available.height > 1 else { return available }
+        let ratio = max(pin.aspectRatio, 0.3)
+        var width = available.width
+        var height = width / ratio
+        if height > available.height {
+            height = available.height
+            width = height * ratio
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    private func detailChip(icon: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(text)
+                .font(Theme.mono(9.5, weight: .medium))
+        }
+        .foregroundStyle(Theme.inkSecondary)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(Capsule().fill(Theme.paper.opacity(0.85)))
+        .overlay(Capsule().strokeBorder(Theme.hairline.opacity(0.75), lineWidth: 1))
+    }
+
+    // MARK: - Metadata side
+
+    private var metaPane: some View {
+        VStack(spacing: 0) {
+            actionRow
+                .padding(.horizontal, 26)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
+
+            Hairline()
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 21) {
+                    titleSection
+                    noteSection
+                    tagsSection
+                    paletteSection
+                    agentSection
+                    metadataSection
+                    footerActions
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 20)
+                .padding(.bottom, 26)
+            }
+        }
+        .background(Theme.paper)
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            boardMenu
+
+            Spacer()
+
+            CircleActionButton(icon: pin.isFavorite ? "heart.fill" : "heart", size: 35) {
+                store.toggleFavorite(pin)
+            }
+            .help(pin.isFavorite ? "Remove from favorites" : "Add to favorites")
+
+            CircleActionButton(icon: "doc.on.doc", size: 35) {
+                store.copyAgentSnippet(for: pin)
+            }
+            .help("Copy agent snippet")
+
+            moreMenu
+        }
+    }
+
+    private var boardMenu: some View {
+        Button {
+            showBoardMenu.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Theme.boardColor(pin.board))
+                    .frame(width: 6, height: 6)
+                Text(pin.board)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.inkSecondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundStyle(Theme.inkTertiary)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 31)
+            .background(Capsule().fill(Theme.parchment))
+            .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .popover(isPresented: $showBoardMenu, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(store.allBoardNames, id: \.self) { board in
+                    Button {
+                        store.movePin(pin.id, toBoard: board)
+                        showBoardMenu = false
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Theme.boardColor(board))
+                                .frame(width: 6, height: 6)
+                            Text(board)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Theme.ink)
+                            Spacer()
+                            if board.caseInsensitiveCompare(pin.board) == .orderedSame {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Theme.red)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .contentShape(Rectangle())
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(board.caseInsensitiveCompare(pin.board) == .orderedSame ? Theme.parchment : Color.clear)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Divider()
+                Button {
+                    showNewBoardField = true
+                    showBoardMenu = false
+                } label: {
+                    Label("New board…", systemImage: "plus")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(6)
+            .frame(width: 210)
+        }
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button("Copy image") { store.copyImage(pin) }
+            Button("Copy pin JSON") { store.copyPinJSON(pin) }
+            Button("Copy image URL") {
+                store.copyText(store.apiImageURL(for: pin), message: "Image URL copied", icon: "link")
+            }
+            Divider()
+            Button("Open original") { store.openOriginal(pin) }
+            if pin.sourceURL != nil {
+                Button("Open source page") { store.openSource(pin) }
+            }
+            Button("Reveal in Finder") { store.revealPin(pin) }
+            Divider()
+            Button("Delete pin", role: .destructive) { showDeleteAlert = true }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 35, height: 35)
+                .background(Circle().fill(Theme.paper))
+                .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .focusable(false)
+        .fixedSize()
+        .help("More actions")
+    }
+
+    private var titleSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("Untitled pin", text: titleBinding, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 26, weight: .bold))
+                .tracking(-0.9)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1...3)
+
+            HStack(spacing: 7) {
+                if let sourceLabel = pin.sourceLabel, !sourceLabel.isEmpty {
+                    Image(systemName: "link")
+                        .font(.system(size: 9, weight: .semibold))
+                    if let sourceURL = pin.sourceURL, let url = URL(string: sourceURL) {
+                        Button {
+                            NSWorkspace.shared.open(url)
+                        } label: {
+                            Text(sourceLabel).underline()
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(sourceLabel)
+                    }
+                    Text("·")
+                }
+                Text("Captured \(pin.createdAt.cantaShort)")
+            }
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(Theme.inkTertiary)
+
+            if showNewBoardField {
+                HStack(spacing: 6) {
+                    TextField("New board name", text: $newBoardName)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11.5))
+                        .padding(.horizontal, 10)
+                        .frame(height: 29)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.parchment))
+                    Button("Move") {
+                        let name = newBoardName.trimmed
+                        guard !name.isEmpty else { return }
+                        store.movePin(pin.id, toBoard: name)
+                        newBoardName = ""
+                        showNewBoardField = false
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.red)
+                    Button {
+                        showNewBoardField = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.inkTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "Design note")
+            TextField("What makes this worth copying? Layout, type, color…", text: noteBinding, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.inkSecondary)
+                .lineSpacing(3)
+                .lineLimit(2...6)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Theme.parchment)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Theme.hairline.opacity(0.8), lineWidth: 1)
+                )
+        }
+    }
+
+    private var tagsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Tags", trailing: "\(pin.tags.count)")
+            FlowLayout(spacing: 7, lineSpacing: 7) {
+                ForEach(pin.tags, id: \.self) { tag in
+                    TagChip(tag: tag, onRemove: {
+                        store.removeTag(tag, from: pin.id)
+                    })
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Theme.inkTertiary)
+                    TextField("tag", text: $tagEntry)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .frame(width: 55)
+                        .onSubmit {
+                            store.addTag(tagEntry, to: pin.id)
+                            tagEntry = ""
+                        }
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 27)
+                .background(Capsule().fill(Theme.paper))
+                .overlay(Capsule().strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+            }
+        }
+    }
+
+    private var paletteSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Palette")
+            HStack(spacing: 8) {
+                ForEach(Array(pin.colors.prefix(5).enumerated()), id: \.offset) { _, hex in
+                    Button {
+                        store.copyText(hex, message: "\(hex) copied", icon: "paintpalette")
+                    } label: {
+                        VStack(spacing: 5) {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(hexString: hex) ?? Theme.parchmentDeep)
+                                .frame(height: 27)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+                                )
+                            Text(hex.uppercased())
+                                .font(Theme.mono(7.8, weight: .medium))
+                                .foregroundStyle(Theme.inkTertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy \(hex)")
+                }
+            }
+        }
+    }
+
+    private var agentSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 9) {
+                ZStack {
+                    Circle().fill(Theme.redWash)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.red)
+                }
+                .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Agent-ready")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text("Metadata + image stream, one fetch away.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+                Spacer()
+            }
+
+            Button {
+                store.copyText(store.apiImageURL(for: pin), message: "Image URL copied", icon: "link")
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "link")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(store.apiImageURL(for: pin))
+                        .font(Theme.mono(9, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 6)
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+                .foregroundStyle(Theme.inkSecondary)
+                .padding(.horizontal, 10)
+                .frame(height: 31)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.paper))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline, lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 7) {
+                SmallPillButton(title: "Copy snippet", icon: "doc.on.doc") {
+                    store.copyAgentSnippet(for: pin)
+                }
+                SmallPillButton(title: "Copy JSON", icon: "curlybraces") {
+                    store.copyPinJSON(pin)
+                }
+                SmallPillButton(title: "Copy image", icon: "photo.on.rectangle") {
+                    store.copyImage(pin)
+                }
+            }
+        }
+        .padding(13)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(Theme.parchment)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
+        )
+    }
+
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Details")
+            HStack(alignment: .top, spacing: 0) {
+                detailStat(label: "PIXELS", value: pin.pixelLabel)
+                detailDivider
+                detailStat(label: "FILE", value: pin.byteLabel)
+                detailDivider
+                detailStat(label: "FORMAT", value: (pin.image as NSString).pathExtension.uppercased())
+                detailDivider
+                detailStat(label: "CAPTURED", value: pin.createdAt.cantaShort)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.parchment.opacity(0.55))
+            )
+        }
+    }
+
+    private func detailStat(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 7.5, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(Theme.inkTertiary)
+            Text(value)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Theme.inkSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var detailDivider: some View {
+        Rectangle()
+            .fill(Theme.hairline)
+            .frame(width: 1, height: 24)
+            .padding(.horizontal, 8)
+    }
+
+    private var footerActions: some View {
+        HStack(spacing: 14) {
+            Button {
+                store.openOriginal(pin)
+            } label: {
+                Label("Open original", systemImage: "arrow.up.right.square")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.inkSecondary)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                store.revealPin(pin)
+            } label: {
+                Label("Reveal", systemImage: "folder")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.inkSecondary)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button(role: .destructive) {
+                showDeleteAlert = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.red)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 2)
+    }
+
+    private func navButton(icon: String, offset: Int) -> some View {
+        Button {
+            store.showAdjacentPin(offset: offset)
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(Color.black.opacity(0.34)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 1))
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    private var titleBinding: Binding<String> {
+        Binding(
+            get: { store.selectedPin?.title ?? pin.title },
+            set: { value in
+                store.updatePin(id: pin.id) { $0.title = value }
+            }
+        )
+    }
+
+    private var noteBinding: Binding<String> {
+        Binding(
+            get: { store.selectedPin?.note ?? pin.note },
+            set: { value in
+                store.updatePin(id: pin.id) { $0.note = value }
+            }
+        )
+    }
+}
+
+struct SmallPillButton: View {
+    var title: String
+    var icon: String
+    var action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(Theme.inkSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(Capsule().fill(hovering ? Theme.parchmentDeep : Theme.paper))
+            .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}

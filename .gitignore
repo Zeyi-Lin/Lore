@@ -1,0 +1,10 @@
+.build/
+.DS_Store
+Canta.app/
+dist/
+artifacts/
+.seedwork/
+.seedtest/
+.testdata/
+.autoseed/
+*.xcuserstate
