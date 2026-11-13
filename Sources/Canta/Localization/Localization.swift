@@ -144,6 +144,8 @@ final class LanguageManager: ObservableObject {
         "Prompt copied": "提示词已复制",
         "Copy": "复制",
         "Images are stored on this Mac and never uploaded.": "图片仅保存在这台 Mac 上，不会上传。",
+        "Add references to Canta": "为 Canta 添加参考",
+        "Pin": "收录",
         "llms.txt": "llms.txt",
         "%ld pins · a small, searchable visual memory for building interfaces": "%ld 个灵感 · 一个小而可检索的视觉记忆，帮你构建界面",
         "%ld pins curated in this board": "%ld 个灵感 · 精心收藏于此画板",

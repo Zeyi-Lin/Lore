@@ -487,8 +487,8 @@ enum DropReceiver {
 enum ImportPanel {
     static func present(store: LibraryStore, board: String? = nil) {
         let panel = NSOpenPanel()
-        panel.title = "Add references to Canta"
-        panel.prompt = "Pin"
+        panel.title = T("Add references to Canta")
+        panel.prompt = T("Pin")
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif, .webP, .bmp]
