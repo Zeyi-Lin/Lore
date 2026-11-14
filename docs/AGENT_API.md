@@ -49,6 +49,12 @@ curl -s -X POST --data-binary @shot.png \
   -H "Content-Type: image/png" \
   "http://127.0.0.1:4242/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" | jq
 
+# Animated GIF: original keeps its frames; animated/frameCount are derived
+curl -s -X POST --data-binary @loading.gif \
+  -H "Content-Type: image/gif" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
+  | jq '{id, animated, frameCount, imageURL}'
+
 # JSON base64 form (data URI prefixes are accepted)
 B64=$(base64 -i shot.png)
 curl -s -X POST "http://127.0.0.1:4242/api/v1/pins" \
@@ -126,6 +132,8 @@ Returns the whole library in one response:
   "stats": { "pins": 12, "boards": 4, "tags": 18, "favorites": 2, "images": 12 },
   "boards": [ { "name": "Web dashboards", "count": 5 } ],
   "tags": [ { "name": "dashboard", "count": 7 } ],
+  "colorFamilies": [ { "name": "blue", "count": 4 }, { "name": "multicolor", "count": 2 } ],
+  "colorTones": [ { "name": "deep", "count": 3 }, { "name": "muted", "count": 5 } ],
   "pins": [ ...EnrichedPin objects... ]
 }
 ```
@@ -140,7 +148,7 @@ Stats semantics:
 | `favorites` | Pins with `favorite: true` |
 | `images` | Pins that reference an image file |
 
-`boards` and `tags` are sorted by count descending, then name ascending.
+`boards`, `tags`, `colorFamilies`, and `colorTones` are sorted by count descending, then name ascending. Colour-family counts are multi-membership: a teal-and-yellow pin counts in `teal`, `yellow`, and — when three or more families are present — `multicolor`.
 
 ### GET /api/v1/pins
 
@@ -160,9 +168,11 @@ Query parameters:
 
 | Parameter | Type | Default | Behavior |
 | --- | --- | --- | --- |
-| `q` | string | — | Case-insensitive substring search across title, note, board, source label, kind, tags, and colours |
+| `q` | string | — | Case-insensitive substring search across title, note, board, source label, kind, tags, colours, colour families, tone, and `gif` |
 | `tag` | string | — | Case-insensitive exact match against the pin's tags |
 | `board` | string | — | Case-insensitive exact match against the pin's board |
+| `color` | enum | — | Match a detected hue family. A pin may match several families. Values: `neutral`, `red`, `orange`, `yellow`, `green`, `teal`, `blue`, `violet`, `pink`, `brown`, `multicolor`. Synonyms such as `cyan`, `purple`, and `grey` are accepted. `multicolor` matches pins with three or more named hues. |
+| `tone` | enum | — | Match the auto-detected tonal character: `light`, `pastel`, `vivid`, `muted`, `deep`. Synonyms such as `dark` and `soft` are accepted. |
 | `favorite` | boolean | — | `true` / `false` (also accepts `1`, `0`, `yes`, `no`) |
 | `kind` | string | — | Case-insensitive exact match against `kind` (for example `screenshot`) |
 | `sort` | enum | `recent` | `recent` (createdAt descending), `oldest` (createdAt ascending), `title` (title ascending, case-insensitive) |
@@ -182,9 +192,13 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?favorite=true&limit=10&offset=10"
 
 # Full-text search
 curl -s "http://127.0.0.1:4242/api/v1/pins?q=onboarding"
+
+# Colour-family and tone filters
+curl -s "http://127.0.0.1:4242/api/v1/pins?color=teal&tone=deep"
+curl -s "http://127.0.0.1:4242/api/v1/pins?color=multicolor"
 ```
 
-Invalid values (non-integer `limit`, out-of-range `limit`, negative `offset`, unknown `sort`, non-boolean `favorite`) return `400 invalid_parameter` rather than silently falling back.
+Invalid values (non-integer `limit`, out-of-range `limit`, negative `offset`, unknown `sort`, non-boolean `favorite`, unknown `color` or `tone`) return `400 invalid_parameter` rather than silently falling back.
 
 ### POST /api/v1/pins
 
@@ -254,7 +268,7 @@ Processing and response:
 
 ### PATCH /api/v1/pins/{id}
 
-Partially updates one pin's metadata. Send `Content-Type: application/json` with at least one editable field; fields not named in the body are left unchanged, and `null` clears nullable fields. The response is `200` with the updated `EnrichedPin` — the same shape as `GET /api/v1/pins/{id}`. `updatedAt` is bumped; `id`, `image`, `thumbnail`, `width`, `height`, `fileSize`, `colors`, and `createdAt` are preserved. `library.json` is rewritten atomically and the pin is immediately visible in every read endpoint.
+Partially updates one pin's metadata. Send `Content-Type: application/json` with at least one editable field; fields not named in the body are left unchanged, and `null` clears nullable fields. The response is `200` with the updated `EnrichedPin` — the same shape as `GET /api/v1/pins/{id}`. `updatedAt` is bumped; `id`, `image`, `thumbnail`, `width`, `height`, `fileSize`, `colors`, `colorFamilies`, `colorTone`, `animated`, `frameCount`, and `createdAt` are preserved (image analysis is derived, never agent-editable). `library.json` is rewritten atomically and the pin is immediately visible in every read endpoint.
 
 Request example:
 
@@ -368,6 +382,8 @@ Query parameters:
 | --- | --- | --- | --- |
 | `board` | string | — | Only pins on this board (case-insensitive exact) |
 | `tag` | string | — | Only pins carrying this tag (case-insensitive exact) |
+| `color` | enum | — | Only pins whose detected families include this value (`multicolor` for three or more hues) |
+| `tone` | enum | — | Only pins with this tonal character |
 | `limit` | integer | `20` | Maximum pins included, `1…100` |
 
 Example output (trimmed):
@@ -389,6 +405,7 @@ Example output (trimmed):
 - **Tags:** `dashboard`, `analytics`, `dark`
 - **Dimensions:** 1440 × 900 · 412 KB
 - **Palette:** `#0E1117`, `#E60023`
+- **Color family:** blue / violet · deep
 - **Source:** Dribbble — <https://dribbble.com/...>
 - **Image:** <http://127.0.0.1:4242/api/v1/pins/6f1c.../image?variant=original>
 - **Thumbnail:** <http://127.0.0.1:4242/api/v1/pins/6f1c.../image?variant=thumb>
@@ -428,12 +445,17 @@ A pin contains every field Lora persists plus two absolute URLs. Responses **nev
 | `sourceURL` | string \| null | Original inspiration URL |
 | `sourceLabel` | string \| null | Human label for the source, for example `Dribbble` |
 | `colors` | string[] | Dominant palette as `#RRGGBB` values |
+| `colorFamily` | string | Leading auto-detected hue family |
+| `colorFamilies` | string[] | Every meaningful hue family, ordered by coverage; multi-membership (teal + yellow) |
+| `colorTone` | string | Auto-detected tonal character: `light`, `pastel`, `vivid`, `muted`, or `deep` |
+| `animated` | boolean | `true` when the original image has multiple frames (for example a GIF) |
+| `frameCount` | integer | Frame count of the original image; `1` for still images |
 | `favorite` | boolean | Whether the pin is marked as a favorite |
-| `kind` | string | Pin kind, for example `screenshot` |
+| `kind` | string | Pin kind, for example `screenshot`; animated GIF uploads default to `image` when `kind` is omitted |
 | `imageURL` | string \| null | Absolute loopback URL for the original image |
 | `thumbnailURL` | string \| null | Absolute loopback URL for the thumbnail; `null` when the pin has no thumbnail |
 
-`imageURL` and `thumbnailURL` are built from the port the server actually bound, so they remain correct on custom ports and ephemeral test ports.
+`imageURL` and `thumbnailURL` are built from the port the server actually bound, so they remain correct on custom ports and ephemeral test ports. For animated GIFs, `imageURL` streams the animated original; `thumbnailURL` streams a static first-frame JPEG.
 
 ---
 
@@ -490,12 +512,14 @@ It serves the user's pinned UI screenshots as JSON metadata plus image streams
 and can add new pins from images you capture.
 
 - Health:   GET /health
-- Context:  GET /api/v1/context?board=&tag=   (markdown, paste into your prompt)
-- Pins:     GET /api/v1/pins?q=&tag=&board=&favorite=&kind=&sort=&limit=&offset=
+- Context:  GET /api/v1/context?board=&tag=&color=&tone=   (markdown, paste into your prompt)
+- Pins:     GET /api/v1/pins?q=&tag=&board=&color=&tone=&favorite=&kind=&sort=&limit=&offset=
+- Color:    color ∈ neutral, red, orange, yellow, green, teal, blue, violet, pink, brown, multicolor
+- Tone:     tone ∈ light, pastel, vivid, muted, deep
 - Pin:      GET /api/v1/pins/{id}
 - Image:    GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:  GET /api/v1/library
-- Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB)
+- Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB; GIF frames are preserved)
 - Update:   PATCH /api/v1/pins/{id}   (partial metadata: title, note, board, tags, source, favorite, kind; null clears)
 - Board naming: add captures on Product/Screen boards (e.g. Linear/Settings); Lora groups them under Product in the sidebar.
 - Docs:     GET /docs            OpenAPI: GET /openapi.json    Index: GET /llms.txt
@@ -511,6 +535,7 @@ API; do not invent URLs or guess pin IDs.
 - *"Query Lora's design context for the board Web dashboards, choose the two most relevant references, and build the analytics overview page in SwiftUI. Match spacing, type scale, and palette."*
 - *"Use Lora to find pins matching 'onboarding'. Read each pin's imageURL and design note, then implement the empty-state screen so it belongs to the same product family."*
 - *"List Lora pins tagged editorial. Read their colors and thumbnails, and propose a consistent four-colour palette with hex values and usage notes."*
+- *"Find Lora references with the colour family `teal` and the tone `deep`, inspect their palettes and imageURLs, and propose a dark teal design direction."*
 - *"Before restyling the settings screen, pull Lora pins on the board Mobile flows and summarize the common navigation patterns."*
 - *"Capture the current Figma frame and add it to Lora with POST /api/v1/pins, tagged 'checkout' on the Mobile flows board, then use its imageURL as the reference for the implementation."*
 - *"Capture these five settings screenshots, add them to Lora on the board `Linear/Settings` with the tag `settings`, then pull the board context and restyle our settings page to match."*
@@ -526,6 +551,14 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?limit=20&sort=recent" \
 # All palettes, flattened and de-duplicated
 curl -s http://127.0.0.1:4242/api/v1/library \
   | jq '[.pins[].colors[]] | unique'
+
+# Colour-family facets
+curl -s http://127.0.0.1:4242/api/v1/library \
+  | jq '.colorFamilies'
+
+# Blue references, newest first
+curl -s "http://127.0.0.1:4242/api/v1/pins?color=blue&limit=20" \
+  | jq '.pins[] | {title, colorFamilies, colorTone, imageURL}'
 
 # Total pins per board
 curl -s http://127.0.0.1:4242/api/v1/boards | jq '.boards[] | "\(.name): \(.count)"'

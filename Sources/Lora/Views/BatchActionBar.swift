@@ -59,6 +59,7 @@ struct BatchActionBar: View {
                             .padding(.horizontal, 10)
                             .frame(height: 31)
                             .contentShape(Rectangle())
+                            .menuRowHover()
                         }
                         .buttonStyle(PointerPlainButtonStyle())
                     }

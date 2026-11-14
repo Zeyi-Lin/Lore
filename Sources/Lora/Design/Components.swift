@@ -222,6 +222,42 @@ struct FilterChip: View {
     }
 }
 
+// MARK: - Menu row hover
+
+/// Hover + selected surface for rows inside custom popover menus. Native
+/// `Menu`s get this for free; the app's own board/sort/filter popovers need it
+/// explicitly so every menu responds to the pointer.
+private struct MenuRowHoverModifier: ViewModifier {
+    var isSelected: Bool
+    var cornerRadius: CGFloat
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(isSelected ? Theme.parchmentDeep : Color.clear)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(hovering
+                              ? (isSelected ? Color.black.opacity(0.035) : Theme.parchmentDeep.opacity(0.55))
+                              : Color.clear)
+                }
+            }
+            .onHover { inside in
+                guard hovering != inside else { return }
+                withAnimation(.easeOut(duration: 0.12)) { hovering = inside }
+            }
+    }
+}
+
+extension View {
+    /// Apply after `contentShape` so the whole menu row is the hover target.
+    func menuRowHover(isSelected: Bool = false, cornerRadius: CGFloat = 7) -> some View {
+        modifier(MenuRowHoverModifier(isSelected: isSelected, cornerRadius: cornerRadius))
+    }
+}
+
 // MARK: - Section label
 
 struct SectionLabel: View {
@@ -434,6 +470,7 @@ struct TagChip: View {
     var onTap: (() -> Void)?
 
     @State private var hovering = false
+    @State private var removeHovering = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -445,11 +482,14 @@ struct TagChip: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.inkTertiary)
+                        .foregroundStyle(removeHovering ? Theme.red : Theme.inkTertiary)
                         .frame(width: 14, height: 14)
-                        .background(Circle().fill(Theme.ink.opacity(0.055)))
+                        .background(Circle().fill(removeHovering ? Theme.redWash : Theme.ink.opacity(0.055)))
                 }
                 .buttonStyle(PointerPlainButtonStyle())
+                .onHover { removeHovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: removeHovering)
+                .help(T("Remove tag"))
             }
         }
         .foregroundStyle(Theme.inkSecondary)
@@ -548,4 +588,66 @@ enum ImportPanel {
 
 extension Notification.Name {
     static let loraFocusSearch = Notification.Name("lora.focusSearch")
+    /// Posted when a mouse click lands outside the focused text control. Views
+    /// holding a `@FocusState` mirror it so their focus styling clears even
+    /// when AppKit resigns the field editor directly.
+    static let loraResignTextFocus = Notification.Name("lora.resignTextFocus")
+}
+
+// MARK: - Click outside text fields
+
+/// Watches mouse-downs for the host window. A click outside the focused text
+/// control resigns the field editor and posts `loraResignTextFocus`, so note,
+/// tag, title, and search editors all blur exactly once.
+private enum TextFocusDismissal {
+    static func resignIfClickOutside(_ event: NSEvent) {
+        guard let window = event.window, let responder = window.firstResponder else { return }
+
+        let controlFrame: NSRect
+        if let textView = responder as? NSTextView {
+            // The field editor covers the editable text; use the enclosing text
+            // field when possible so the control's padding still counts as
+            // inside.
+            if let field = textView.superview as? NSTextField {
+                controlFrame = field.convert(field.bounds, to: nil)
+            } else {
+                controlFrame = textView.convert(textView.bounds, to: nil)
+            }
+        } else if let textField = responder as? NSTextField {
+            controlFrame = textField.convert(textField.bounds, to: nil)
+        } else {
+            return
+        }
+
+        guard !controlFrame.contains(event.locationInWindow) else { return }
+        window.makeFirstResponder(nil)
+        NotificationCenter.default.post(name: .loraResignTextFocus, object: nil)
+    }
+}
+
+private struct TextFocusDismissalModifier: ViewModifier {
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                guard monitor == nil else { return }
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+                    TextFocusDismissal.resignIfClickOutside(event)
+                    return event
+                }
+            }
+            .onDisappear {
+                if let monitor {
+                    NSEvent.removeMonitor(monitor)
+                    self.monitor = nil
+                }
+            }
+    }
+}
+
+extension View {
+    func dismissTextFocusOnClickOutside() -> some View {
+        modifier(TextFocusDismissalModifier())
+    }
 }

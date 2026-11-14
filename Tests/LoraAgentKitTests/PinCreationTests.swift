@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import ImageIO
 @testable import LoraAgentKit
 
 @Suite(.serialized)
@@ -17,6 +18,39 @@ final class PinCreationTests: RunningServerSuite {
 
     private func fileCount(in directory: URL) -> Int {
         (try? FileManager.default.contentsOfDirectory(atPath: directory.path).count) ?? 0
+    }
+
+    // MARK: - Animated GIF
+
+    @Test func animatedGIFUploadPreservesFramesAndMetadata() throws {
+        let gif = Fixture.makeAnimatedGIF()
+        let result = try client.postRaw(
+            "/api/v1/pins?title=Loading%20loop&board=Mobile%20flows",
+            body: gif,
+            contentType: "image/gif"
+        )
+        #expect(result.status == 201, "expected 201, got \(result.status): \(result.text.prefix(400))")
+        let pin = try result.jsonObject()
+        let pinID = try #require(pin["id"] as? String)
+        #expect(pin["animated"] as? Bool == true)
+        #expect(pin["frameCount"] as? Int == 2)
+        #expect(pin["kind"] as? String == "image")
+        #expect((pin["image"] as? String)?.hasSuffix(".gif") == true)
+        #expect((pin["thumbnail"] as? String)?.hasSuffix(".jpg") == true)
+
+        let original = try client.get("/api/v1/pins/\(pinID)/image")
+        #expect(original.status == 200)
+        #expect(original.header("content-type") == "image/gif")
+        #expect(original.body == gif)
+        let frameCount = CGImageSourceGetCount(try #require(CGImageSourceCreateWithData(original.body as CFData, nil)))
+        #expect(frameCount == 2)
+
+        let thumbnail = try client.get("/api/v1/pins/\(pinID)/image?variant=thumb")
+        #expect(thumbnail.header("content-type") == "image/jpeg")
+
+        let search = try expectJSON(try client.get("/api/v1/pins?q=gif"))
+        let matches = try pinsFromList(search)
+        #expect(matches.compactMap { $0["id"] as? String } == [pinID])
     }
 
     // MARK: - JSON form
@@ -56,6 +90,12 @@ final class PinCreationTests: RunningServerSuite {
         #expect(!colors.isEmpty)
         #expect(colors.count <= 5)
         #expect(colors.allSatisfy { $0.count == 7 && $0.hasPrefix("#") })
+        let colorFamilies = try #require(pin["colorFamilies"] as? [String])
+        #expect(colorFamilies.contains("red"))
+        #expect(colorFamilies.contains("green"))
+        #expect(colorFamilies.contains("blue"))
+        #expect(pin["colorFamily"] as? String == colorFamilies.first)
+        #expect(pin["colorTone"] as? String == "vivid")
         let createdAt = try #require(pin["createdAt"] as? String)
         #expect(Timestamp.date(from: createdAt) != nil)
 

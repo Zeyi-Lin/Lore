@@ -79,6 +79,7 @@ struct RootView: View {
         }
         .tint(Theme.red)
         .focusEffectDisabled()
+        .dismissTextFocusOnClickOutside()
         .background(WindowConfigurator().frame(width: 0, height: 0))
         .background(DetailPrewarm())
         .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $dropTargeted) { providers in

@@ -56,26 +56,28 @@ enum OpenAPISpec {
         paths["/api/v1/library"] = pathItem(operation(
             token: "getLibrary",
             summary: "Full enriched library",
-            description: "Returns every pin as an EnrichedPin together with aggregate stats, boards, and tags. The library file is decoded fresh for every request.",
+            description: "Returns every pin as an EnrichedPin together with aggregate stats, boards, tags, colour-family facets, and tone facets. The library file is decoded fresh for every request.",
             tags: ["Library"],
             responses: responses(primary: ["200": jsonResponse(description: "The complete enriched library.", schema: ref("Library"))], errors: [500: "library_unavailable or library_corrupt when library.json is missing or invalid."])
         ))
         paths["/api/v1/pins"] = pathItem(operation(
             token: "listPins",
             summary: "List and filter pins",
-            description: "Returns a filtered, sorted page of enriched pins. Search matches text fields; tag and board match case-insensitively; favorite and kind filter exact values.",
+            description: "Returns a filtered, sorted page of enriched pins. Search matches text fields and colour families; tag, board, colour, tone, favorite, and kind filter exact values.",
             tags: ["Library"],
             parameters: [
-                queryParameter("q", description: "Case-insensitive text search across title, note, board, source label, kind, tags, and colours.", schema: ["type": "string"], example: "dashboard"),
+                queryParameter("q", description: "Case-insensitive text search across title, note, board, source label, kind, tags, colours, colour families, and tone.", schema: ["type": "string"], example: "dashboard"),
                 queryParameter("tag", description: "Only pins carrying this tag (case-insensitive).", schema: ["type": "string"], example: "dark"),
                 queryParameter("board", description: "Only pins on this board (case-insensitive). Board names may nest with a slash: Linear/Settings is a child of the Linear group in the app.", schema: ["type": "string"], example: "Web dashboards"),
+                queryParameter("color", description: "Only pins whose detected colour families include this value. A pin may belong to several families; multicolor matches pins with three or more named hues. Common synonyms (cyan, purple, grey) are accepted.", schema: ["type": "string", "enum": LoraColorFamily.allCases.map(\.rawValue)], example: "blue"),
+                queryParameter("tone", description: "Only pins with this tonal character.", schema: ["type": "string", "enum": LoraColorTone.allCases.map(\.rawValue)], example: "deep"),
                 queryParameter("favorite", description: "Filter by favorite state.", schema: ["type": "boolean"]),
                 queryParameter("kind", description: "Only pins of this kind.", schema: ["type": "string"], example: "screenshot"),
                 queryParameter("sort", description: "Sort order. Defaults to recent.", schema: ["type": "string", "enum": ["recent", "oldest", "title"]], example: "recent"),
                 queryParameter("limit", description: "Maximum number of pins to return (1-200). Defaults to 50.", schema: ["type": "integer", "minimum": 1, "maximum": 200], example: 20),
                 queryParameter("offset", description: "Number of matching pins to skip. Defaults to 0.", schema: ["type": "integer", "minimum": 0], example: 0)
             ],
-            responses: responses(primary: ["200": jsonResponse(description: "A page of enriched pins.", schema: ref("PinListResponse"))], errors: [400: "invalid_parameter when a query value is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
+            responses: responses(primary: ["200": jsonResponse(description: "A page of enriched pins.", schema: ref("PinListResponse"))], errors: [400: "invalid_parameter when a query value (including color or tone) is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
         ), post: createPinOperation())
         paths["/api/v1/pins/{id}"] = pathItem(
             operation(
@@ -123,20 +125,22 @@ enum OpenAPISpec {
         paths["/api/v1/context"] = pathItem(operation(
             token: "getContext",
             summary: "Agent design context",
-            description: "Returns markdown design context containing curated pin metadata and absolute image URLs, ready to paste into a coding agent prompt. Use board and/or tag to narrow the selection. When nothing matches, the document lists the available boards and tags.",
+            description: "Returns markdown design context containing curated pin metadata and absolute image URLs, ready to paste into a coding agent prompt. Use board, tag, color, and/or tone to narrow the selection. When nothing matches, the document lists the available boards, tags, and colour facets.",
             tags: ["Library"],
             parameters: [
                 queryParameter("board", description: "Only include pins on this board (the full name, e.g. Linear/Settings).", schema: ["type": "string"], example: "Web dashboards"),
                 queryParameter("tag", description: "Only include pins carrying this tag.", schema: ["type": "string"], example: "dashboard"),
+                queryParameter("color", description: "Only include pins in this colour family (synonyms accepted; multicolor means three or more hues).", schema: ["type": "string", "enum": LoraColorFamily.allCases.map(\.rawValue)], example: "blue"),
+                queryParameter("tone", description: "Only include pins with this tonal character.", schema: ["type": "string", "enum": LoraColorTone.allCases.map(\.rawValue)], example: "muted"),
                 queryParameter("limit", description: "Maximum number of pins to include (1-100). Defaults to 20.", schema: ["type": "integer", "minimum": 1, "maximum": 100], example: 20)
             ],
-            responses: responses(primary: ["200": textResponse(description: "Markdown design context.", mediaType: "text/markdown")], errors: [400: "invalid_parameter when limit is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
+            responses: responses(primary: ["200": textResponse(description: "Markdown design context.", mediaType: "text/markdown")], errors: [400: "invalid_parameter when limit, color, or tone is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
         ))
 
         let info: [String: Any] = [
             "title": "Lora Agent API",
             "version": LoraAgentAPI.version,
-            "description": "Loopback-only HTTP API for the Lora visual design library. Lora serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. Read endpoints are read-only; POST /api/v1/pins adds pins and PATCH /api/v1/pins/{id} updates pin metadata (title, note, board, tags, source, favorite, kind) when metadata edits are enabled in Lora Settings. The library is re-read on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
+            "description": "Loopback-only HTTP API for the Lora visual design library. Lora serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. Pins carry an automatic colour taxonomy: multi-valued hue families plus a tonal character, filterable with color and tone. Read endpoints are read-only; POST /api/v1/pins adds pins and PATCH /api/v1/pins/{id} updates pin metadata (title, note, board, tags, source, favorite, kind) when metadata edits are enabled in Lora Settings. The library is re-read on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
         ]
         let server: [String: Any] = [
             "url": baseURL,
@@ -167,7 +171,7 @@ enum OpenAPISpec {
             queryParameter("tags", description: "Comma-separated tags; trimmed, lower-cased, and de-duplicated.", schema: ["type": "string"], example: "mobile,checkout"),
             queryParameter("sourceURL", description: "Optional source URL for the inspiration.", schema: ["type": "string"]),
             queryParameter("sourceLabel", description: "Optional source label. Defaults to Agent API.", schema: ["type": "string"], example: "Claude Code"),
-            queryParameter("kind", description: "Pin kind. Defaults to screenshot.", schema: ["type": "string"], example: "screenshot"),
+            queryParameter("kind", description: "Pin kind. Defaults to screenshot, or image for animated GIFs.", schema: ["type": "string"], example: "screenshot"),
             queryParameter("favorite", description: "Whether the new pin is a favorite.", schema: ["type": "boolean"])
         ]
         let requestBody: [String: Any] = [
@@ -379,6 +383,21 @@ enum OpenAPISpec {
         let nullableString: [String: Any] = ["type": ["string", "null"]]
         let stringArray: [String: Any] = ["type": "array", "items": ["type": "string"]]
         let integer: [String: Any] = ["type": "integer"]
+        let colorFamily: [String: Any] = [
+            "type": "string",
+            "enum": LoraColorFamily.allCases.filter { $0 != .multicolor }.map(\.rawValue),
+            "description": "Hue family."
+        ]
+        let colorFamilies: [String: Any] = [
+            "type": "array",
+            "items": colorFamily,
+            "description": "Detected hue families ordered by coverage. Multi-membership: a teal-and-yellow pin lists both."
+        ]
+        let colorTone: [String: Any] = [
+            "type": "string",
+            "enum": LoraColorTone.allCases.map(\.rawValue),
+            "description": "Tonal character inferred from lightness and accent chroma."
+        ]
 
         let errorDetail: [String: Any] = [
             "type": "object",
@@ -447,6 +466,11 @@ enum OpenAPISpec {
                 "sourceURL": nullableString,
                 "sourceLabel": nullableString,
                 "colors": stringArray,
+                "colorFamily": colorFamily,
+                "colorFamilies": colorFamilies,
+                "colorTone": colorTone,
+                "animated": ["type": "boolean", "description": "True when the original image has multiple frames (for example a GIF)."],
+                "frameCount": ["type": "integer", "minimum": 1, "description": "Frame count of the original image; 1 for still images."],
                 "favorite": ["type": "boolean"],
                 "kind": ["type": "string"],
                 "imageURL": ["type": ["string", "null"], "description": "Absolute loopback URL for the original image."],
@@ -455,7 +479,8 @@ enum OpenAPISpec {
             "required": [
                 "id", "title", "note", "image", "thumbnail", "width", "height", "fileSize",
                 "createdAt", "updatedAt", "tags", "board", "sourceURL", "sourceLabel",
-                "colors", "favorite", "kind", "imageURL", "thumbnailURL"
+                "colors", "colorFamily", "colorFamilies", "colorTone", "animated", "frameCount",
+                "favorite", "kind", "imageURL", "thumbnailURL"
             ]
         ]
         let createPinRequest: [String: Any] = [
@@ -511,9 +536,11 @@ enum OpenAPISpec {
                 "stats": ref("Stats"),
                 "boards": ["type": "array", "items": ref("NamedCount")],
                 "tags": ["type": "array", "items": ref("NamedCount")],
+                "colorFamilies": ["type": "array", "items": ref("NamedCount"), "description": "Hue-family facets with multi-membership counts (includes multicolor)."],
+                "colorTones": ["type": "array", "items": ref("NamedCount")],
                 "pins": ["type": "array", "items": ref("EnrichedPin")]
             ],
-            "required": ["app", "version", "generatedAt", "stats", "boards", "tags", "pins"]
+            "required": ["app", "version", "generatedAt", "stats", "boards", "tags", "colorFamilies", "colorTones", "pins"]
         ]
         let boards: [String: Any] = [
             "type": "object",

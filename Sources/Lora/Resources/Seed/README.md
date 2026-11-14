@@ -44,6 +44,7 @@ Boards: 5 Web dashboards, 4 Mobile flows, 2 Landing pages, 1 Editorial. Three pi
 - `tags` (3–5), `board` (one of `Web dashboards`, `Mobile flows`, `Landing pages`, `Editorial`)
 - `sourceURL` (null for seed pins), `sourceLabel` ("Lora Seed")
 - `colors` — four palette swatches sampled from the image itself (background, signature accents, ink)
+- `colorFamilies`, `colorTone` — optional auto-detected colour taxonomy; omitted here and analysed from each image on first launch
 - `favorite` (bool), `kind` ("screenshot")
 
 `Images/`, `Thumbnails/` and `seed.json` are copied into the app bundle through

@@ -141,7 +141,11 @@ final class LibraryIngestor {
             sourceLabel: sourceLabel,
             colors: pin.colors,
             favorite: patch.favorite ?? pin.favorite,
-            kind: patch.kind ?? pin.kind
+            kind: patch.kind ?? pin.kind,
+            colorFamilies: pin.colorFamilies,
+            colorTone: pin.colorTone,
+            isAnimated: pin.isAnimated,
+            frameCount: pin.frameCount
         )
     }
 
@@ -190,7 +194,11 @@ final class LibraryIngestor {
             sourceLabel: Self.normalizedText(request.sourceLabel) ?? "Agent API",
             colors: processed.colors,
             favorite: request.favorite ?? false,
-            kind: Self.normalizedText(request.kind) ?? "screenshot"
+            kind: Self.normalizedText(request.kind) ?? (processed.isAnimated ? "image" : "screenshot"),
+            colorFamilies: processed.colorFamilies,
+            colorTone: processed.colorTone,
+            isAnimated: processed.isAnimated,
+            frameCount: processed.frameCount
         )
 
         do {

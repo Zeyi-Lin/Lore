@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LoraAgentKit
 
 struct PinDetailOverlay: View {
     let pin: Pin
@@ -15,8 +16,13 @@ struct PinDetailOverlay: View {
     @State private var detailStage = 0
     @State private var isEditingTitle = false
     @State private var isEditingNote = false
+    @State private var boardMenuHovering = false
+    @State private var moreMenuHovering = false
+    @State private var noteHovering = false
+    @State private var tagHovering = false
     @FocusState private var titleFieldFocused: Bool
     @FocusState private var noteFieldFocused: Bool
+    @FocusState private var tagFieldFocused: Bool
 
     var body: some View {
         GeometryReader { geo in
@@ -72,11 +78,23 @@ struct PinDetailOverlay: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .loraResignTextFocus)) { _ in
+            titleFieldFocused = false
+            noteFieldFocused = false
+            tagFieldFocused = false
+            isEditingTitle = false
+            isEditingNote = false
+        }
         .onChange(of: pin.id) { _, _ in
             titleFieldFocused = false
             noteFieldFocused = false
+            tagFieldFocused = false
             isEditingTitle = false
             isEditingNote = false
+            tagEntry = ""
+            noteHovering = false
+            tagHovering = false
+            boardMenuHovering = false
             store.prefetchNeighbors(around: pin)
         }
         .onDisappear {
@@ -161,6 +179,10 @@ struct PinDetailOverlay: View {
                     isEditingNote = false
                     return nil
                 }
+                if tagFieldFocused {
+                    tagFieldFocused = false
+                    return nil
+                }
             }
             if let responder = NSApp.keyWindow?.firstResponder,
                responder is NSTextView || responder is NSTextField {
@@ -210,7 +232,7 @@ struct PinDetailOverlay: View {
 
             VStack {
                 HStack {
-                    detailChip(icon: pin.kind.icon, text: pin.kind.label)
+                    detailChip(icon: pin.mediaIcon, text: pin.mediaLabel)
                     Spacer()
                     detailChip(icon: "rectangle.dashed", text: pin.pixelLabel)
                 }
@@ -249,13 +271,25 @@ struct PinDetailOverlay: View {
         Color.clear
             .aspectRatio(max(pin.aspectRatio, 0.05), contentMode: .fit)
             .overlay {
-                LibraryImage(
-                    paths: store.detailImageCandidates(for: pin),
-                    maxPixel: ImageLoader.detailMaxPixel,
-                    placeholderPaths: store.cardImageCandidates(for: pin),
-                    placeholderMaxPixel: 640,
-                    contentMode: .fill
-                )
+                if pin.isGIF {
+                    ZStack {
+                        LibraryImage(
+                            paths: store.cardImageCandidates(for: pin),
+                            maxPixel: 640,
+                            contentMode: .fill
+                        )
+                        AnimatedGIFView(paths: store.largeImageCandidates(for: pin))
+                            .allowsHitTesting(false)
+                    }
+                } else {
+                    LibraryImage(
+                        paths: store.detailImageCandidates(for: pin),
+                        maxPixel: ImageLoader.detailMaxPixel,
+                        placeholderPaths: store.cardImageCandidates(for: pin),
+                        placeholderMaxPixel: 640,
+                        contentMode: .fill
+                    )
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: metrics.imageCornerRadius, style: .continuous))
             .overlay(
@@ -413,12 +447,14 @@ struct PinDetailOverlay: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 31)
-            .background(Capsule().fill(Theme.parchment))
+            .background(Capsule().fill(boardMenuHovering ? Theme.parchmentDeep : Theme.parchment))
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
+        .onHover { boardMenuHovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: boardMenuHovering)
         .popover(isPresented: $showBoardMenu, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(store.allBoardNames, id: \.self) { board in
@@ -443,10 +479,7 @@ struct PinDetailOverlay: View {
                         .padding(.horizontal, 10)
                         .frame(height: 30)
                         .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(board.caseInsensitiveCompare(pin.board) == .orderedSame ? Theme.parchment : Color.clear)
-                        )
+                        .menuRowHover(isSelected: board.caseInsensitiveCompare(pin.board) == .orderedSame)
                     }
                     .buttonStyle(PointerPlainButtonStyle())
                 }
@@ -462,6 +495,7 @@ struct PinDetailOverlay: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: 30)
                         .contentShape(Rectangle())
+                        .menuRowHover()
                 }
                 .buttonStyle(PointerPlainButtonStyle())
             }
@@ -490,7 +524,7 @@ struct PinDetailOverlay: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Theme.ink)
                 .frame(width: 35, height: 35)
-                .background(Circle().fill(Theme.paper))
+                .background(Circle().fill(moreMenuHovering ? Theme.parchmentDeep : Theme.paper))
                 .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
@@ -498,6 +532,8 @@ struct PinDetailOverlay: View {
         .focusable(false)
         .fixedSize()
         .pointerCursor()
+        .onHover { moreMenuHovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: moreMenuHovering)
         .help(T("More actions"))
     }
 
@@ -594,7 +630,13 @@ struct PinDetailOverlay: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: T("Design note"))
+            SectionLabel(
+                text: T("Design note"),
+                trailing: isEditingNote
+                    ? "\(noteBinding.wrappedValue.count)"
+                    : (noteHovering ? T("Edit") : nil)
+            )
+
             Group {
                 if isEditingNote {
                     TextField(T("What makes this worth copying? Layout, type, color…"), text: noteBinding, axis: .vertical)
@@ -619,57 +661,229 @@ struct PinDetailOverlay: View {
                         .contentShape(Rectangle())
                         .onTapGesture { isEditingNote = true }
                         .help(T("Click to edit"))
+                        .pointerCursor()
                 }
             }
             .font(.system(size: 12))
             .lineSpacing(3)
-            .lineLimit(2...6)
+            .lineLimit(2...8)
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Theme.parchment)
+                    .fill(isEditingNote || noteHovering ? Theme.paper : Theme.parchment)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Theme.hairline.opacity(0.8), lineWidth: 1)
+                    .strokeBorder(
+                        isEditingNote
+                            ? Theme.ink.opacity(0.24)
+                            : (noteHovering ? Theme.ink.opacity(0.14) : Theme.hairline.opacity(0.8)),
+                        lineWidth: isEditingNote ? 1.4 : 1
+                    )
             )
+            .shadow(
+                color: .black.opacity(noteHovering && !isEditingNote ? 0.05 : 0),
+                radius: 8,
+                y: 3
+            )
+            .onHover { inside in
+                guard noteHovering != inside else { return }
+                withAnimation(.easeOut(duration: 0.16)) { noteHovering = inside }
+            }
+            .animation(.easeOut(duration: 0.16), value: isEditingNote)
+
+            if isEditingNote {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(T("Auto-saved · Esc to finish"))
+                        .font(.system(size: 9.5, weight: .medium))
+                    Spacer()
+                    Button {
+                        noteFieldFocused = false
+                        isEditingNote = false
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8.5, weight: .bold))
+                            Text(T("Done"))
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
+                        .background(Capsule().fill(Theme.ink))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(PointerPlainButtonStyle())
+                    .help(T("Finish editing"))
+                }
+                .foregroundStyle(Theme.inkTertiary)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: isEditingNote)
     }
 
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel(text: T("Tags"), trailing: "\(pin.tags.count)")
+
             FlowLayout(spacing: 7, lineSpacing: 7) {
                 ForEach(pin.tags, id: \.self) { tag in
                     TagChip(tag: tag, onRemove: {
-                        store.removeTag(tag, from: pin.id)
-                    })
-                }
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.inkTertiary)
-                    TextField(T("tag"), text: $tagEntry)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11))
-                        .frame(width: 55)
-                        .onSubmit {
-                            store.addTag(tagEntry, to: pin.id)
-                            tagEntry = ""
+                        withAnimation(.snappy(duration: 0.2)) {
+                            store.removeTag(tag, from: pin.id)
                         }
+                    })
+                    .transition(.scale(scale: 0.86).combined(with: .opacity))
                 }
-                .padding(.horizontal, 9)
-                .frame(height: 27)
-                .background(Capsule().fill(Theme.paper))
-                .overlay(Capsule().strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+
+                tagEntryField
+            }
+            .animation(.snappy(duration: 0.22), value: pin.tags)
+
+            if tagFieldFocused, !tagSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(T("Suggested tags"))
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.9)
+                        .foregroundStyle(Theme.inkTertiary)
+
+                    FlowLayout(spacing: 6, lineSpacing: 6) {
+                        ForEach(tagSuggestions, id: \.self) { suggestion in
+                            TagSuggestionChip(tag: suggestion) {
+                                addTag(suggestion)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .animation(.easeOut(duration: 0.18), value: tagFieldFocused)
+    }
+
+    private var tagEntryField: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "plus")
+                .font(.system(size: 8, weight: .bold))
+                .scaleEffect(tagFieldFocused ? 1.18 : 1)
+                .foregroundStyle(tagFieldFocused ? Theme.inkSecondary : Theme.inkTertiary)
+
+            TextField(T("Add tag"), text: $tagEntry)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .frame(width: 68)
+                .focused($tagFieldFocused)
+                .onSubmit { commitTagEntry() }
+
+            if !tagEntry.isEmpty {
+                Text("↵")
+                    .font(Theme.mono(8.5, weight: .medium))
+                    .foregroundStyle(Theme.inkTertiary)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 27)
+        .background(
+            Capsule().fill(
+                tagFieldFocused
+                    ? Theme.parchmentDeep
+                    : (tagHovering ? Theme.parchmentDeep.opacity(0.55) : Theme.paper)
+            )
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                tagFieldFocused ? Theme.ink.opacity(0.28) : Theme.hairline,
+                style: StrokeStyle(
+                    lineWidth: tagFieldFocused ? 1.2 : 1,
+                    dash: tagFieldFocused ? [] : [3, 3]
+                )
+            )
+        )
+        .contentShape(Capsule())
+        .onHover { tagHovering = $0 }
+        .onTapGesture { tagFieldFocused = true }
+        .shadow(color: .black.opacity(tagFieldFocused ? 0.04 : 0), radius: 5, y: 1)
+        .animation(.easeOut(duration: 0.14), value: tagFieldFocused)
+        .animation(.easeOut(duration: 0.14), value: tagHovering)
+        .help(T("Press ↵ to add"))
+    }
+
+    private var tagSuggestions: [String] {
+        let query = tagEntry.trimmed.lowercased()
+        let existing = Set(pin.tags.map { $0.lowercased() })
+        return store.allTags
+            .map { $0.name }
+            .filter { !existing.contains($0.lowercased()) }
+            .filter { query.isEmpty || $0.lowercased().contains(query) }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    private func commitTagEntry() {
+        let parts = tagEntry.split(whereSeparator: { $0 == "," || $0 == "，" || $0 == " " })
+        guard !parts.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            for part in parts {
+                store.addTag(String(part), to: pin.id)
+            }
+        }
+        tagEntry = ""
+        tagFieldFocused = true
+    }
+
+    private func addTag(_ tag: String) {
+        withAnimation(.snappy(duration: 0.2)) {
+            store.addTag(tag, to: pin.id)
+        }
+        tagEntry = ""
+        tagFieldFocused = true
     }
 
     private var paletteSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: T("Palette"))
+        let profile = pin.colorProfile
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                SectionLabel(text: T("Palette"))
+                HStack(spacing: 3) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 7.5, weight: .semibold))
+                    Text(T("Auto-detected"))
+                        .font(.system(size: 8.5, weight: .medium))
+                }
+                .foregroundStyle(Theme.inkTertiary)
+                .help(T("Detected from the image's OKLCH hue, chroma, and lightness."))
+            }
+
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(profile.families, id: \.self) { family in
+                    colorFamilyPill(family, isPrimary: family == profile.family)
+                }
+                if profile.isMulticolor {
+                    colorFamilyPill(.multicolor, isPrimary: false)
+                }
+                Button {
+                    store.applyColorFilter(tone: profile.tone)
+                    store.dismissDetail()
+                } label: {
+                    Text(profile.tone.localizedTitle)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Theme.inkSecondary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 25)
+                        .background(Capsule().fill(Theme.parchment))
+                        .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PointerPlainButtonStyle())
+                .help(T("Show pins with this tone"))
+            }
+
             HStack(spacing: 8) {
                 ForEach(Array(pin.colors.prefix(5).enumerated()), id: \.offset) { _, hex in
                     Button {
@@ -694,6 +908,29 @@ struct PinDetailOverlay: View {
                 }
             }
         }
+    }
+
+    private func colorFamilyPill(_ family: LoraColorFamily, isPrimary: Bool) -> some View {
+        Button {
+            store.applyColorFilter(family: family)
+            store.dismissDetail()
+        } label: {
+            HStack(spacing: 5) {
+                ColorFamilySwatch(family: family, size: 8)
+                Text(family.localizedTitle)
+                    .font(.system(size: 10.5, weight: .semibold))
+            }
+            .foregroundStyle(isPrimary ? Color.white : Theme.inkSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 25)
+            .background(Capsule().fill(isPrimary ? Theme.ink : Theme.parchment))
+            .overlay(
+                Capsule().strokeBorder(isPrimary ? Color.clear : Theme.hairline, lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PointerPlainButtonStyle())
+        .help(T("Show pins in this color family"))
     }
 
     private var agentSection: some View {
@@ -966,5 +1203,35 @@ struct SmallPillButton: View {
         }
         .buttonStyle(PointerPlainButtonStyle())
         .onHover { hovering = $0 }
+    }
+}
+/// One-tap reuse of a tag already present elsewhere in the library. Kept
+/// separate from `TagChip` so it can show the add affordance and hover state.
+private struct TagSuggestionChip: View {
+    let tag: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.system(size: 7.5, weight: .bold))
+                Text("#\(tag)")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(hovering ? Theme.ink : Theme.inkSecondary)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(Capsule().fill(hovering ? Theme.parchmentDeep : Theme.paper))
+            .overlay(Capsule().strokeBorder(hovering ? Theme.ink.opacity(0.14) : Theme.hairline, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PointerPlainButtonStyle())
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .help(TF("Add #%@", tag))
     }
 }

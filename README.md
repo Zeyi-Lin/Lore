@@ -20,6 +20,8 @@ Lora 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinterest
 - **快速收录**：拖入文件、粘贴剪贴板（⇧⌘V），或截取屏幕区域（⇧⌘2）。
 - **属于参考的 Pinterest**：平衡的瀑布流画廊，悬停收藏、画板、搜索、最近添加与收藏夹。
 - **有用的元数据**：可编辑标题、设计笔记、标签、画板、来源、尺寸、文件大小、主色板与时间。
+- **GIF 动图**：导入、拖拽、粘贴或 Agent 上传 GIF 时保留原动画；宫格悬停播放，详情与大图模式持续播放，卡片带 GIF 标识。原图会附带 `animated` 与 `frameCount` 元数据供 Agent 使用。
+- **自动色系**：每张灵感都会自动分析出「色相家族 + 色调」——色相可多值（蓝、青、绿、黄、红、紫、粉、棕、中性、多彩），色调分为明亮、柔和、高饱和、低饱和、深色。图库筛选栏可按色系与色调快速检索，Agent 也能用 `color` / `tone` 过滤；旧图会在后台自动补算。
 - **默认对 Agent 友好**：本地 API 提供增强 JSON、原图/缩略图流、Markdown 设计上下文、OpenAPI 3.1、`llms.txt`，以及应用内文档页；Agent 也可以反向写入图片。
 - **可回写元数据**：Agent 还能通过 `PATCH /api/v1/pins/{id}` 修改标题、笔记、画板、标签、收藏等元数据；设置里可以关闭这项能力。
 - **层级画板**：画板名用 `/` 分组，例如 `Linear/Settings` 会在侧栏归入可折叠的 `Linear` 组；Agent 收录截图时以产品名为前缀，归档更整齐。
@@ -63,7 +65,7 @@ Lora 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinterest
 
 ![快速收录](docs/screenshots/capture.png)
 
-也可以把文件拖到窗口任意位置。Lora 会自动读取像素尺寸、文件大小和最多五色调色板；标题由文件名生成，可在灵感详情中修改。
+也可以把文件拖到窗口任意位置。Lora 会自动读取像素尺寸、文件大小和最多五色调色板（GIF 还会保留动画与帧数），并分析出可检索的色系与色调；标题由文件名生成，可在灵感详情中修改。
 
 > 区域截图使用 macOS 自带的 `screencapture -i`。首次使用时系统可能请求屏幕录制权限。
 
@@ -77,6 +79,14 @@ curl -s http://127.0.0.1:4242/api/v1/library | jq
 
 # 筛选灵感
 curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true" | jq
+
+# 上传 GIF 动图
+curl -s -X POST --data-binary @loading.gif \
+  -H "Content-Type: image/gif" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" | jq
+
+# 按色系与色调筛选（color=teal&tone=deep，或 color=multicolor）
+curl -s "http://127.0.0.1:4242/api/v1/pins?color=teal&tone=deep" | jq
 
 # 获取可直接粘贴给 Agent 的 Markdown 设计上下文
 curl -s http://127.0.0.1:4242/api/v1/context

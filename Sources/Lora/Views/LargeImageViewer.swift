@@ -318,7 +318,17 @@ struct LargeImageViewer: View {
         let cornerRadius = 10 / max(canvas.zoom, 0.5)
         let borderWidth = 1 / max(canvas.zoom, 1)
 
-        return LibraryImage(paths: store.largeImageCandidates(for: pin), maxPixel: 0, contentMode: .fit)
+        return Group {
+            if pin.isGIF {
+                ZStack {
+                    LibraryImage(paths: store.cardImageCandidates(for: pin), maxPixel: 640, contentMode: .fit)
+                    AnimatedGIFView(paths: store.largeImageCandidates(for: pin))
+                        .allowsHitTesting(false)
+                }
+            } else {
+                LibraryImage(paths: store.largeImageCandidates(for: pin), maxPixel: 0, contentMode: .fit)
+            }
+        }
             .frame(width: base.width, height: base.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(

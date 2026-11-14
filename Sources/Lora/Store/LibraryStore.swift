@@ -15,6 +15,8 @@ final class LibraryStore {
     private(set) var searchQuery: String = ""
     var filter: GalleryFilter = .all
     var sort: PinSort = .recent
+    var colorFamilyFilter: LoraColorFamily?
+    var toneFilter: LoraColorTone?
     var selectedPinID: UUID?
     var isSelectingPins = false
     var selectedPinIDs: Set<UUID> = []
@@ -132,6 +134,8 @@ final class LibraryStore {
             filterRaw: filter.rawValue,
             sortRaw: sort.rawValue,
             needle: searchQuery,
+            colorRaw: colorFamilyFilter?.rawValue,
+            toneRaw: toneFilter?.rawValue,
             languageRaw: LanguageManager.shared.resolved.rawValue,
             revision: revision
         )
@@ -206,6 +210,50 @@ final class LibraryStore {
         return projection.allTags()
     }
 
+    /// Multi-membership hue counts. A teal-and-yellow reference counts in both,
+    /// and `multicolor` counts pins with three or more named hues.
+    var colorFamilyCounts: [LoraColorFamily: Int] {
+        _ = revision
+        return snapshot.colorFamilyCounts
+    }
+
+    var toneCounts: [LoraColorTone: Int] {
+        _ = revision
+        return snapshot.toneCounts
+    }
+
+    var hasColorFilter: Bool {
+        colorFamilyFilter != nil || toneFilter != nil
+    }
+
+    func colorFamilyCount(_ family: LoraColorFamily) -> Int {
+        colorFamilyCounts[family] ?? 0
+    }
+
+    func toneCount(_ tone: LoraColorTone) -> Int {
+        toneCounts[tone] ?? 0
+    }
+
+    /// Clicking a family in the gallery filter toggles it; `nil` clears.
+    func setColorFamilyFilter(_ family: LoraColorFamily?) {
+        colorFamilyFilter = family
+    }
+
+    func setToneFilter(_ tone: LoraColorTone?) {
+        toneFilter = tone
+    }
+
+    func clearColorFilters() {
+        colorFamilyFilter = nil
+        toneFilter = nil
+    }
+
+    /// Used by the detail view's colour chips to jump straight into a facet.
+    func applyColorFilter(family: LoraColorFamily? = nil, tone: LoraColorTone? = nil) {
+        if let family { colorFamilyFilter = family }
+        if let tone { toneFilter = tone }
+    }
+
     var pageTitle: String {
         switch section {
         case .all:
@@ -237,7 +285,7 @@ final class LibraryStore {
     }
 
     var currentListIdentity: String {
-        "\(section.rawValue)|\(selectedBoard ?? "")|\(filter.rawValue)|\(sort.rawValue)|\(searchQuery)"
+        "\(section.rawValue)|\(selectedBoard ?? "")|\(filter.rawValue)|\(sort.rawValue)|\(colorFamilyFilter?.rawValue ?? "")|\(toneFilter?.rawValue ?? "")|\(searchQuery)"
     }
 
     var dataFolderPath: String { root.path }
@@ -445,6 +493,10 @@ final class LibraryStore {
                     _ = ImageProcessor.writeCardThumbnail(sourcePath: source.path, root: root, id: pin.id)
                 }
             }
+            // Older agents write no colour or animation analysis; classify
+            // those pins in the background without blocking the reload.
+            backfillColorProfiles(added)
+            backfillAnimationMetadata(added)
         }
         if announceNewPins, !added.isEmpty {
             let message = added.count == 1
@@ -756,7 +808,11 @@ final class LibraryStore {
                     sourceLabel: sourceLabel,
                     colors: processed.colors,
                     isFavorite: false,
-                    kind: processed.kind
+                    kind: processed.kind,
+                    colorFamilies: processed.colorFamilies,
+                    colorTone: processed.colorTone,
+                    isAnimated: processed.isAnimated,
+                    frameCount: processed.frameCount
                 )
                 created.append(pin)
             } catch {
@@ -811,13 +867,22 @@ final class LibraryStore {
                 board: targetBoard,
                 sourceLabel: sourceLabel,
                 colors: processed.colors,
-                kind: .screenshot
+                kind: processed.kind,
+                colorFamilies: processed.colorFamilies,
+                colorTone: processed.colorTone,
+                isAnimated: processed.isAnimated,
+                frameCount: processed.frameCount
             )
             pins.append(pin)
             refreshSnapshot()
             persist(debounce: 0.05)
             revealFreshlyAdded(board: targetBoard)
-            showToast(TF("Screenshot added to %@", localizedBoard(targetBoard)), icon: "pin.fill")
+            showToast(
+                processed.isAnimated
+                    ? TF("GIF added to %@", localizedBoard(targetBoard))
+                    : TF("Screenshot added to %@", localizedBoard(targetBoard)),
+                icon: processed.isAnimated ? "play.rectangle.fill" : "pin.fill"
+            )
         } catch {
             showToast(error.localizedDescription, icon: "exclamationmark.triangle")
         }
@@ -832,6 +897,22 @@ final class LibraryStore {
             let imageURLs = urls.filter { Self.isLikelyImage($0) }
             if !imageURLs.isEmpty {
                 await addFiles(imageURLs, sourceLabel: "Clipboard", board: board)
+                return true
+            }
+        }
+
+        // Prefer GIF bytes before PNG/TIFF: browsers expose a static PNG
+        // representation too, and copying from the wrong one would drop the
+        // animation. Both the classic and modern pasteboard identifiers exist.
+        for type in Self.gifPasteboardTypes {
+            if let gif = pasteboard.data(forType: type) {
+                await addImageData(
+                    gif,
+                    preferredExtension: "gif",
+                    sourceLabel: "Clipboard",
+                    title: TF("Pasted GIF · %@", Self.captureStamp()),
+                    board: board
+                )
                 return true
             }
         }
@@ -895,6 +976,8 @@ final class LibraryStore {
             section = .all
             selectedBoard = board
             filter = .all
+            colorFamilyFilter = nil
+            toneFilter = nil
             clearSearch()
         }
     }
@@ -963,7 +1046,16 @@ final class LibraryStore {
         lines.append("- Board: \(pin.board)")
         if !pin.tags.isEmpty { lines.append("- Tags: " + pin.tags.map { "#\($0)" }.joined(separator: " ")) }
         lines.append("- Pixels: \(pin.pixelLabel)")
+        if pin.isGIF {
+            lines.append(pin.frameCount > 1
+                ? "- Format: GIF · \(pin.frameCount) frames"
+                : "- Format: GIF")
+        }
         if !pin.colors.isEmpty { lines.append("- Palette: " + pin.colors.joined(separator: ", ")) }
+        let profile = pin.colorProfile
+        var colorLine = "- Color: " + profile.families.map(\.rawValue).joined(separator: " / ") + " · \(profile.tone.rawValue)"
+        if profile.isMulticolor { colorLine += " · multicolor" }
+        lines.append(colorLine)
         if !pin.note.isEmpty { lines.append("- Design note: \(pin.note)") }
         lines.append("- Captured: \(pin.createdAt.loraTime)")
         return lines.joined(separator: "\n")
@@ -990,6 +1082,7 @@ final class LibraryStore {
     }
 
     func copyPinJSON(_ pin: Pin) {
+        let profile = pin.colorProfile
         let payload: [String: Any] = [
             "id": pin.id.uuidString,
             "title": pin.title,
@@ -1000,6 +1093,11 @@ final class LibraryStore {
             "width": pin.width,
             "height": pin.height,
             "colors": pin.colors,
+            "animated": pin.isAnimated,
+            "frameCount": pin.frameCount,
+            "colorFamily": profile.family.rawValue,
+            "colorFamilies": profile.families.map(\.rawValue),
+            "colorTone": profile.tone.rawValue,
             "favorite": pin.isFavorite,
             "image": pin.image,
             "imageURL": apiImageURL(for: pin),
@@ -1217,6 +1315,68 @@ final class LibraryStore {
         Task.detached(priority: .utility) {
             await CardThumbnailBackfill.run(root: root, pins: pins)
         }
+        backfillColorProfiles(pins)
+        backfillAnimationMetadata(pins)
+    }
+
+    /// Image-level colour analysis for pins that predate the taxonomy. The UI
+    /// already works from the palette fallback; this upgrades the stored value
+    /// once per pin and persists it, so the Agent API and filters agree.
+    func backfillColorProfiles(_ candidates: [Pin]) {
+        guard !candidates.isEmpty else { return }
+        let root = self.root
+        Task.detached(priority: .utility) { [weak self] in
+            let profiles = await ColorProfileBackfill.run(root: root, pins: candidates)
+            guard !profiles.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                self?.applyColorProfiles(profiles)
+            }
+        }
+    }
+
+    /// Corrects `animated`/`frameCount` for GIFs written before the app could
+    /// play them. Like colour analysis this is derived data: `updatedAt` is not
+    /// touched, and only pins still missing a frame count are updated.
+    func backfillAnimationMetadata(_ candidates: [Pin]) {
+        guard candidates.contains(where: { $0.isGIF && $0.frameCount <= 1 }) else { return }
+        let root = self.root
+        Task.detached(priority: .utility) { [weak self] in
+            let detected = await AnimationMetadataBackfill.run(root: root, pins: candidates)
+            guard !detected.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                self?.applyAnimationMetadata(detected)
+            }
+        }
+    }
+
+    private func applyAnimationMetadata(_ detected: [UUID: LoraImageAnimation]) {
+        var changed = 0
+        for index in pins.indices {
+            guard let animation = detected[pins[index].id],
+                  pins[index].frameCount <= 1,
+                  animation.isAnimated else { continue }
+            pins[index].isAnimated = true
+            pins[index].frameCount = animation.frameCount
+            changed += 1
+        }
+        guard changed > 0 else { return }
+        refreshSnapshot()
+        persist(debounce: 0.6)
+    }
+
+    private func applyColorProfiles(_ profiles: [UUID: LoraColorProfile]) {
+        var changed = 0
+        for index in pins.indices {
+            guard let profile = profiles[pins[index].id] else { continue }
+            let needsFamilies = pins[index].colorFamilies?.isEmpty ?? true
+            guard needsFamilies || pins[index].colorTone == nil else { continue }
+            pins[index].colorFamilies = profile.families
+            pins[index].colorTone = profile.tone
+            changed += 1
+        }
+        guard changed > 0 else { return }
+        refreshSnapshot()
+        persist(debounce: 0.6)
     }
 
     /// Warm a single detail image when the pointer rests on a card, so the
@@ -1261,6 +1421,11 @@ final class LibraryStore {
     private static func captureStamp() -> String {
         Date().loraTime
     }
+
+    private static let gifPasteboardTypes: [NSPasteboard.PasteboardType] = [
+        NSPasteboard.PasteboardType("com.compuserve.gif"),
+        NSPasteboard.PasteboardType("public.gif")
+    ]
 
     private static func isLikelyImage(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()

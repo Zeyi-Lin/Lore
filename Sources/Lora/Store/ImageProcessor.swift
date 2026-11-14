@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import ImageIO
 import UniformTypeIdentifiers
+import LoraAgentKit
 
 struct ProcessedImage: Sendable {
     var image: String
@@ -10,6 +11,10 @@ struct ProcessedImage: Sendable {
     var height: Int
     var fileSize: Int
     var colors: [String]
+    var colorFamilies: [LoraColorFamily]
+    var colorTone: LoraColorTone
+    var isAnimated: Bool
+    var frameCount: Int
     var kind: PinKind
 }
 
@@ -114,6 +119,9 @@ enum ImageProcessor {
         }
 
         let colors = paletteSource.map(extractPalette(from:)) ?? []
+        let profile = paletteSource.map { LoraColorAnalyzer.classify(image: $0) }
+            ?? LoraColorAnalyzer.classify(palette: colors)
+        let animation = LoraImageAnalyzer.animation(source: source)
         return ProcessedImage(
             image: relativeImage,
             thumbnail: relativeThumbnail,
@@ -121,7 +129,11 @@ enum ImageProcessor {
             height: height,
             fileSize: fileSize,
             colors: colors.isEmpty ? ["#E60023", "#171412", "#FAF8F5"] : colors,
-            kind: kind
+            colorFamilies: profile.families,
+            colorTone: profile.tone,
+            isAnimated: animation.isAnimated,
+            frameCount: animation.frameCount,
+            kind: animation.isAnimated ? .image : kind
         )
     }
 

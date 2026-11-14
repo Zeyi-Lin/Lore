@@ -75,6 +75,13 @@ struct PinCard: View, Equatable {
             .overlay {
                 LibraryImage(paths: model.imageCandidates, maxPixel: 640, contentMode: .fill)
             }
+            .overlay {
+                if model.isGIF, hovering, !isSelecting {
+                    AnimatedGIFView(paths: model.animatedPaths)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
@@ -97,6 +104,12 @@ struct PinCard: View, Equatable {
                     .opacity(isSelecting ? 0 : (hovering ? 1 : 0))
                     .scaleEffect(hovering ? 1 : 0.9, anchor: .topTrailing)
                     .allowsHitTesting(!isSelecting)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if model.isGIF {
+                    gifBadge
+                        .padding(10)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 metadataPill
@@ -145,6 +158,23 @@ struct PinCard: View, Equatable {
         }
         .buttonStyle(PressableStyle())
         .help(model.isFavorite ? T("Remove from favorites") : T("Save to favorites"))
+    }
+
+    private var gifBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 7, weight: .bold))
+            Text(T("GIF"))
+                .font(.system(size: 9, weight: .bold))
+                .tracking(0.4)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 7)
+        .frame(height: 21)
+        .background(Capsule().fill(Color.black.opacity(0.56)))
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+        .allowsHitTesting(false)
     }
 
     private var metadataPill: some View {

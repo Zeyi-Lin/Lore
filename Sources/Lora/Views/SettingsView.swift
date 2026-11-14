@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(LibraryStore.self) private var store
     @ObservedObject private var language = LanguageManager.shared
     @State private var portField = ""
+    @State private var boardMenuHovering = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -158,7 +159,7 @@ struct SettingsView: View {
                                 }
                                 .padding(.horizontal, 9)
                                 .frame(height: 28)
-                                .background(Capsule().fill(Theme.parchment))
+                                .background(Capsule().fill(boardMenuHovering ? Theme.parchmentDeep : Theme.parchment))
                                 .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
                             }
                             .menuStyle(.borderlessButton)
@@ -166,6 +167,8 @@ struct SettingsView: View {
                             .focusable(false)
                             .fixedSize()
                             .pointerCursor()
+                            .onHover { boardMenuHovering = $0 }
+                            .animation(.easeOut(duration: 0.14), value: boardMenuHovering)
                         }
 
                         Hairline()

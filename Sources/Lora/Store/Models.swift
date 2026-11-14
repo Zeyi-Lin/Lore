@@ -1,4 +1,5 @@
 import Foundation
+import LoraAgentKit
 
 enum PinKind: String, Codable, CaseIterable {
     case screenshot
@@ -37,10 +38,19 @@ struct Pin: Identifiable, Codable, Hashable {
     var colors: [String]
     var isFavorite: Bool
     var kind: PinKind
+    /// Auto-detected hue families, ordered by coverage. Nil means the pin
+    /// predates colour analysis; `colorProfile` falls back to the palette.
+    var colorFamilies: [LoraColorFamily]?
+    var colorTone: LoraColorTone?
+    /// True when the original image has multiple frames (a GIF today).
+    var isAnimated: Bool
+    var frameCount: Int
 
     enum CodingKeys: String, CodingKey {
         case id, title, note, image, thumbnail, width, height, fileSize, createdAt, updatedAt
         case tags, board, sourceURL, sourceLabel, colors, kind
+        case colorFamilies, colorTone, frameCount
+        case isAnimated = "animated"
         case isFavorite = "favorite"
     }
 
@@ -61,7 +71,11 @@ struct Pin: Identifiable, Codable, Hashable {
         sourceLabel: String? = nil,
         colors: [String] = [],
         isFavorite: Bool = false,
-        kind: PinKind = .screenshot
+        kind: PinKind = .screenshot,
+        colorFamilies: [LoraColorFamily]? = nil,
+        colorTone: LoraColorTone? = nil,
+        isAnimated: Bool = false,
+        frameCount: Int = 1
     ) {
         self.id = id
         self.title = title
@@ -80,6 +94,10 @@ struct Pin: Identifiable, Codable, Hashable {
         self.colors = colors
         self.isFavorite = isFavorite
         self.kind = kind
+        self.colorFamilies = colorFamilies
+        self.colorTone = colorTone
+        self.isAnimated = isAnimated
+        self.frameCount = max(frameCount, 1)
     }
 
     init(from decoder: Decoder) throws {
@@ -101,13 +119,56 @@ struct Pin: Identifiable, Codable, Hashable {
         colors = try container.decodeIfPresent([String].self, forKey: .colors) ?? []
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         kind = try container.decodeIfPresent(PinKind.self, forKey: .kind) ?? .screenshot
+        colorFamilies = try container.decodeIfPresent([String].self, forKey: .colorFamilies)?
+            .compactMap(LoraColorFamily.parse)
+            .filter { $0 != .multicolor }
+        colorTone = try container.decodeIfPresent(String.self, forKey: .colorTone)
+            .flatMap(LoraColorTone.parse)
+        isAnimated = try container.decodeIfPresent(Bool.self, forKey: .isAnimated) ?? false
+        frameCount = max(try container.decodeIfPresent(Int.self, forKey: .frameCount) ?? 1, 1)
     }
 
     var aspectRatio: CGFloat {
         CGFloat(width) / CGFloat(max(height, 1))
     }
 
+    /// Stored image analysis, or a palette-derived estimate for pins created
+    /// before colour families existed. The real image-based value lands via
+    /// `ColorProfileBackfill` shortly after launch.
+    var colorProfile: LoraColorProfile {
+        if let colorFamilies, !colorFamilies.isEmpty {
+            // Backfilled pins pay no palette work on the read path. A missing
+            // tone (older Agent write) still falls back to the palette.
+            return LoraColorProfile(
+                families: colorFamilies,
+                tone: colorTone ?? LoraColorAnalyzer.classify(palette: colors).tone
+            )
+        }
+        let analyzed = LoraColorAnalyzer.classify(palette: colors)
+        guard let colorTone else { return analyzed }
+        return LoraColorProfile(
+            families: analyzed.families,
+            tone: colorTone,
+            neutralShare: analyzed.neutralShare,
+            accentChroma: analyzed.accentChroma,
+            confidence: analyzed.confidence
+        )
+    }
+
     var pixelLabel: String { "\(width) × \(height)" }
+
+    var isGIF: Bool {
+        (image as NSString).pathExtension.caseInsensitiveCompare("gif") == .orderedSame
+    }
+
+    /// Icon/label for the image type badge. GIFs win over screenshot/image so
+    /// animated references are recognisable at a glance.
+    var mediaIcon: String { isGIF ? "play.rectangle.fill" : kind.icon }
+
+    var mediaLabel: String {
+        guard isGIF else { return kind.label }
+        return frameCount > 1 ? TF("GIF · %ld frames", frameCount) : T("GIF")
+    }
 
     var byteLabel: String {
         ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)

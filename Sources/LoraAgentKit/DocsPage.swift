@@ -194,7 +194,7 @@ footer strong { color: var(--ink); }
       </article>
       <article class="card">
         <h3><span class="step">2</span>Browse recent pins</h3>
-        <p>Filter with <span class="inline-code">q</span>, <span class="inline-code">tag</span>, <span class="inline-code">board</span>, <span class="inline-code">favorite</span>, or <span class="inline-code">kind</span>; paginate with <span class="inline-code">limit</span> and <span class="inline-code">offset</span>.</p>
+        <p>Filter with <span class="inline-code">q</span>, <span class="inline-code">tag</span>, <span class="inline-code">board</span>, <span class="inline-code">color</span>, <span class="inline-code">tone</span>, <span class="inline-code">favorite</span>, or <span class="inline-code">kind</span>; paginate with <span class="inline-code">limit</span> and <span class="inline-code">offset</span>.</p>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-pins">Copy</button></div>
           <pre id="snip-pins"><code>curl -s "\(baseURL)/api/v1/pins?limit=5&sort=recent" | jq '.pins[] | {title, board, imageURL}'</code></pre>
@@ -202,7 +202,7 @@ footer strong { color: var(--ink); }
       </article>
       <article class="card">
         <h3><span class="step">3</span>Grab design context</h3>
-        <p>Returns ready-to-paste markdown: curated metadata, palettes, and absolute image URLs for the pins that match a board or tag.</p>
+        <p>Returns ready-to-paste markdown: curated metadata, palettes, colour families, and absolute image URLs for the pins that match a board, tag, colour family, or tone.</p>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">curl</span><button class="copy" type="button" data-copy="snip-context">Copy</button></div>
           <pre id="snip-context"><code>curl -s "\(baseURL)/api/v1/context?board=Web%20dashboards"</code></pre>
@@ -270,7 +270,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/boards</code></td><td><code>application/json</code></td><td>Board names with pin counts. A <code>/</code> in a name nests it under a group in the app — <code>Linear/Settings</code> folds into <code>Linear</code>.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/tags</code></td><td><code>application/json</code></td><td>Tag names with pin counts.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/stats</code></td><td><code>application/json</code></td><td>Library counters: pins, boards, tags, favorites, images.</td></tr>
-          <tr><td><span class="method">GET</span></td><td><code>/api/v1/context</code></td><td><code>text/markdown</code></td><td>Paste-ready design context with absolute image URLs. <span class="inline-code">board=</span>, <span class="inline-code">tag=</span>, optional <span class="inline-code">limit=</span>.</td></tr>
+          <tr><td><span class="method">GET</span></td><td><code>/api/v1/context</code></td><td><code>text/markdown</code></td><td>Paste-ready design context with absolute image URLs. <span class="inline-code">board=</span>, <span class="inline-code">tag=</span>, <span class="inline-code">color=</span>, <span class="inline-code">tone=</span>, optional <span class="inline-code">limit=</span>.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/docs</code></td><td><code>text/html</code></td><td>This page — fully offline, no CDNs.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/openapi.json</code></td><td><code>application/json</code></td><td>OpenAPI 3.1 description of every endpoint and schema.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/llms.txt</code></td><td><code>text/plain</code></td><td>llms.txt index with absolute links, for agents that discover services by URL.</td></tr>
@@ -290,6 +290,12 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-filter">Copy</button></div>
           <pre id="ex-filter"><code>curl -s "\(baseURL)/api/v1/pins?board=Web%20dashboards&tag=dark&sort=recent&limit=10" \\
   | jq '.pins[] | {id, title, colors, imageURL}'</code></pre>
+        </div>
+        <h3 style="margin-top:22px">Find references by colour</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-color">Copy</button></div>
+          <pre id="ex-color"><code>curl -s "\(baseURL)/api/v1/pins?color=teal&amp;tone=deep&amp;limit=20" \\
+  | jq '.pins[] | {title, colorFamilies, colorTone, imageURL}'</code></pre>
         </div>
         <h3 style="margin-top:22px">Read the full library as one file</h3>
         <div class="snippet">
@@ -324,6 +330,11 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \\
       "board": "Web dashboards",
       "tags": ["dashboard", "dark"],
       "colors": ["#0E1117", "#E60023"],
+      "colorFamily": "blue",
+      "colorFamilies": ["blue", "violet"],
+      "colorTone": "deep",
+      "animated": false,
+      "frameCount": 1,
       "imageURL": "\(baseURL)/api/v1/pins/6f1c.../image?variant=original",
       "thumbnailURL": "\(baseURL)/api/v1/pins/6f1c.../image?variant=thumb"
     }
@@ -340,6 +351,14 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \\
   -H "Content-Type: image/png" \\
   "\(baseURL)/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" \\
   | jq '{id, title, board, imageURL, thumbnailURL}'</code></pre>
+        </div>
+        <h3 style="margin-top:22px">Add an animated GIF</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-create-gif">Copy</button></div>
+          <pre id="ex-create-gif"><code>curl -s -X POST --data-binary @loading.gif \
+  -H "Content-Type: image/gif" \
+  "\(baseURL)/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
+  | jq '{id, animated, frameCount, imageURL}'</code></pre>
         </div>
         <h3 style="margin-top:22px">Add a pin from JSON base64</h3>
         <div class="snippet">
@@ -389,6 +408,11 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><code>board</code></td><td><code>string</code></td><td>Board the pin belongs to. Use <code>Product/Screen</code> to nest under a product group, e.g. <code>Linear/Settings</code>.</td></tr>
           <tr><td><code>sourceURL</code>, <code>sourceLabel</code></td><td><code>string | null</code></td><td>Original inspiration URL and label, when known.</td></tr>
           <tr><td><code>colors</code></td><td><code>string[]</code></td><td>Dominant palette as <code>#RRGGBB</code> strings (up to 5).</td></tr>
+          <tr><td><code>colorFamily</code></td><td><code>string</code></td><td>Leading hue family: <code>neutral</code>, <code>red</code>, <code>orange</code>, <code>yellow</code>, <code>green</code>, <code>teal</code>, <code>blue</code>, <code>violet</code>, <code>pink</code>, or <code>brown</code>.</td></tr>
+          <tr><td><code>colorFamilies</code></td><td><code>string[]</code></td><td>Every meaningful detected family, ordered by coverage. A teal-and-yellow pin lists both.</td></tr>
+          <tr><td><code>colorTone</code></td><td><code>string</code></td><td>Auto-detected tonal character: <code>light</code>, <code>pastel</code>, <code>vivid</code>, <code>muted</code>, or <code>deep</code>.</td></tr>
+          <tr><td><code>animated</code></td><td><code>boolean</code></td><td>True when the original image has multiple frames, such as an animated GIF.</td></tr>
+          <tr><td><code>frameCount</code></td><td><code>integer</code></td><td>Frame count of the original; <code>1</code> for still images.</td></tr>
           <tr><td><code>favorite</code></td><td><code>boolean</code></td><td>Whether the pin is marked as a favorite.</td></tr>
           <tr><td><code>kind</code></td><td><code>string</code></td><td>Pin kind, e.g. <code>screenshot</code>.</td></tr>
         </tbody>
@@ -411,8 +435,10 @@ Lora runs a local HTTP API at \(baseURL) that serves the user's
 pinned UI screenshots. Use it before writing UI code.
 
 - Health:      GET /health
-- Context:     GET /api/v1/context?board=&amp;tag=   (markdown, paste into your prompt)
-- Pins:        GET /api/v1/pins?q=&amp;tag=&amp;board=&amp;favorite=&amp;kind=&amp;sort=&amp;limit=&amp;offset=
+- Context:     GET /api/v1/context?board=&amp;tag=&amp;color=&amp;tone=   (markdown, paste into your prompt)
+- Pins:        GET /api/v1/pins?q=&amp;tag=&amp;board=&amp;color=&amp;tone=&amp;favorite=&amp;kind=&amp;sort=&amp;limit=&amp;offset=
+- Color:       color ∈ neutral, red, orange, yellow, green, teal, blue, violet, pink, brown, multicolor
+- Tone:        tone ∈ light, pastel, vivid, muted, deep
 - Pin:         GET /api/v1/pins/{id}
 - Image:       GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:     GET /api/v1/library

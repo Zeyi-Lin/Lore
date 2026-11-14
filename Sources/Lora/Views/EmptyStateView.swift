@@ -52,6 +52,7 @@ struct EmptyStateView: View {
                             store.clearSearch()
                             store.filter = .all
                             store.selectedBoard = nil
+                            store.clearColorFilters()
                             store.section = .all
                         }
                     }
@@ -81,7 +82,7 @@ struct EmptyStateView: View {
         case .emptyLibrary:
             return T("Pin the interfaces that make you stop scrolling.\nEvery capture keeps its pixels, palette, and context — ready for your agent.")
         case .noResults:
-            return T("Try a different phrase, or loosen the filters.\nBoards and tags are searchable too.")
+            return T("Try a different phrase, or loosen the filters.\nBoards, tags, and colors are searchable too.")
         }
     }
 }

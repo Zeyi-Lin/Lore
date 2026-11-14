@@ -10,6 +10,10 @@ struct ProcessedImage {
     let width: Int
     let height: Int
     let colors: [String]
+    let colorFamilies: [LoraColorFamily]
+    let colorTone: LoraColorTone
+    let isAnimated: Bool
+    let frameCount: Int
     let thumbnailJPEG: Data
 }
 
@@ -40,12 +44,18 @@ enum ImageIngestProcessor {
         guard let jpeg = encodeJPEG(thumbnail) else {
             throw PinIngestError.invalidImageData("The uploaded image could not be encoded as a JPEG thumbnail.")
         }
+        let profile = LoraColorAnalyzer.classify(image: thumbnail)
+        let animation = LoraImageAnalyzer.animation(source: source)
         return ProcessedImage(
             originalData: data,
             fileExtension: fileExtension,
             width: image.width,
             height: image.height,
             colors: palette(from: thumbnail),
+            colorFamilies: profile.families,
+            colorTone: profile.tone,
+            isAnimated: animation.isAnimated,
+            frameCount: animation.frameCount,
             thumbnailJPEG: jpeg
         )
     }

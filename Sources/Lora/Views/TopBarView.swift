@@ -5,6 +5,7 @@ struct TopBarView: View {
     @Environment(LibraryStore.self) private var store
     @FocusState private var searchFocused: Bool
     @State private var statusPulse = false
+    @State private var statusHovering = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -38,6 +39,9 @@ struct TopBarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .loraFocusSearch)) { _ in
             searchFocused = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .loraResignTextFocus)) { _ in
+            searchFocused = false
+        }
     }
 
     private var searchTextBinding: Binding<String> {
@@ -55,7 +59,7 @@ struct TopBarView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(searchFocused ? Theme.ink : Theme.inkTertiary)
 
-            TextField(T("Search pins, tags, boards…"), text: searchTextBinding)
+            TextField(T("Search pins, tags, boards, colors…"), text: searchTextBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(Theme.ink)
@@ -73,6 +77,7 @@ struct TopBarView: View {
             } else {
                 Button {
                     store.clearSearch()
+                    searchFocused = true
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))
@@ -121,12 +126,14 @@ struct TopBarView: View {
             }
             .padding(.horizontal, 11)
             .frame(height: 32)
-            .background(Capsule().fill(Theme.parchment))
+            .background(Capsule().fill(statusHovering ? Theme.parchmentDeep : Theme.parchment))
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(PointerPlainButtonStyle())
         .focusable(false)
+        .onHover { statusHovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: statusHovering)
         .help(T("Open Agent access"))
         .onAppear {
             withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {

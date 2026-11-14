@@ -73,11 +73,20 @@ struct LoraPinRecord: Codable {
     let colors: [String]
     let favorite: Bool
     let kind: String
+    /// Hue families detected from the image, ordered by coverage.
+    let colorFamilies: [LoraColorFamily]
+    /// Tonal character detected from the image, when it has been analysed.
+    let colorTone: LoraColorTone?
+    /// True when the original image is a multi-frame GIF (or another animated
+    /// container); `frameCount` is 1 for still images.
+    let isAnimated: Bool
+    let frameCount: Int
 
     enum CodingKeys: String, CodingKey {
         case id, title, note, image, thumbnail, width, height, fileSize
         case createdAt, updatedAt, tags, board, sourceURL, sourceLabel, colors
-        case favorite, kind
+        case favorite, kind, colorFamilies, colorTone, frameCount
+        case isAnimated = "animated"
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +113,10 @@ struct LoraPinRecord: Codable {
         colors = Self.stringArray(container, .colors)
         favorite = (try? container.decode(Bool.self, forKey: .favorite)) ?? false
         kind = Self.string(container, .kind, default: "screenshot")
+        colorFamilies = Self.colorFamilies(container, .colorFamilies)
+        colorTone = Self.colorTone(container, .colorTone)
+        isAnimated = (try? container.decode(Bool.self, forKey: .isAnimated)) ?? false
+        frameCount = max(Self.integer(container, .frameCount), 1)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -125,6 +138,10 @@ struct LoraPinRecord: Codable {
         try container.encode(colors, forKey: .colors)
         try container.encode(favorite, forKey: .favorite)
         try container.encode(kind, forKey: .kind)
+        try container.encode(colorFamilies.map(\.rawValue), forKey: .colorFamilies)
+        try container.encodeIfPresent(colorTone?.rawValue, forKey: .colorTone)
+        try container.encode(isAnimated, forKey: .isAnimated)
+        try container.encode(frameCount, forKey: .frameCount)
     }
 
     init(
@@ -144,7 +161,11 @@ struct LoraPinRecord: Codable {
         sourceLabel: String?,
         colors: [String],
         favorite: Bool,
-        kind: String
+        kind: String,
+        colorFamilies: [LoraColorFamily] = [],
+        colorTone: LoraColorTone? = nil,
+        isAnimated: Bool = false,
+        frameCount: Int = 1
     ) {
         self.id = id
         self.title = title
@@ -163,6 +184,21 @@ struct LoraPinRecord: Codable {
         self.colors = colors
         self.favorite = favorite
         self.kind = kind
+        self.colorFamilies = colorFamilies
+        self.colorTone = colorTone
+        self.isAnimated = isAnimated
+        self.frameCount = max(frameCount, 1)
+    }
+
+    /// Stored analysis when available; palette-based analysis for libraries
+    /// written before colour families existed. The fallback keeps every read
+    /// surface (UI, API filters, context documents) consistent.
+    var resolvedColorProfile: LoraColorProfile {
+        guard !colorFamilies.isEmpty else {
+            return LoraColorAnalyzer.classify(palette: colors)
+        }
+        let tone = colorTone ?? LoraColorAnalyzer.classify(palette: colors).tone
+        return LoraColorProfile(families: colorFamilies, tone: tone)
     }
 
     private static func string(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys, default defaultValue: String = "") -> String {
@@ -181,6 +217,16 @@ struct LoraPinRecord: Codable {
 
     private static func stringArray(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> [String] {
         (try? container.decode([String].self, forKey: key)) ?? []
+    }
+
+    private static func colorFamilies(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> [LoraColorFamily] {
+        guard let raw = try? container.decode([String].self, forKey: key) else { return [] }
+        return raw.compactMap(LoraColorFamily.parse).filter { $0 != .multicolor }
+    }
+
+    private static func colorTone(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> LoraColorTone? {
+        guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+        return LoraColorTone.parse(raw)
     }
 
     var createdDate: Date? {
@@ -202,7 +248,8 @@ struct LoraPinRecord: Codable {
     }
 
     func enriched(baseURL: String) -> EnrichedPin {
-        EnrichedPin(
+        let profile = resolvedColorProfile
+        return EnrichedPin(
             id: id,
             title: title,
             note: note,
@@ -220,6 +267,11 @@ struct LoraPinRecord: Codable {
             colors: colors,
             favorite: favorite,
             kind: kind,
+            colorFamily: profile.family.rawValue,
+            colorFamilies: profile.families.map(\.rawValue),
+            colorTone: profile.tone.rawValue,
+            isAnimated: isAnimated,
+            frameCount: frameCount,
             imageURL: originalImageURL(baseURL: baseURL),
             thumbnailURL: thumbnailImageURL(baseURL: baseURL)
         )
@@ -246,13 +298,20 @@ struct EnrichedPin: Encodable {
     let colors: [String]
     let favorite: Bool
     let kind: String
+    let colorFamily: String
+    let colorFamilies: [String]
+    let colorTone: String
+    let isAnimated: Bool
+    let frameCount: Int
     let imageURL: String?
     let thumbnailURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, note, image, thumbnail, width, height, fileSize
         case createdAt, updatedAt, tags, board, sourceURL, sourceLabel, colors
-        case favorite, kind, imageURL, thumbnailURL
+        case favorite, kind, colorFamily, colorFamilies, colorTone, frameCount
+        case isAnimated = "animated"
+        case imageURL, thumbnailURL
     }
 
     func encode(to encoder: Encoder) throws {
@@ -274,6 +333,11 @@ struct EnrichedPin: Encodable {
         try container.encode(colors, forKey: .colors)
         try container.encode(favorite, forKey: .favorite)
         try container.encode(kind, forKey: .kind)
+        try container.encode(colorFamily, forKey: .colorFamily)
+        try container.encode(colorFamilies, forKey: .colorFamilies)
+        try container.encode(colorTone, forKey: .colorTone)
+        try container.encode(isAnimated, forKey: .isAnimated)
+        try container.encode(frameCount, forKey: .frameCount)
         try container.encode(imageURL, forKey: .imageURL)
         try container.encode(thumbnailURL, forKey: .thumbnailURL)
     }
@@ -318,6 +382,8 @@ struct LibraryResponse: Encodable {
     let stats: LibraryStats
     let boards: [NamedCount]
     let tags: [NamedCount]
+    let colorFamilies: [NamedCount]
+    let colorTones: [NamedCount]
     let pins: [EnrichedPin]
 }
 
@@ -351,6 +417,8 @@ struct PinQuery {
     var board: String?
     var favorite: Bool?
     var kind: String?
+    var color: LoraColorFamily?
+    var tone: LoraColorTone?
     var sort: PinSort = .recent
     var limit: Int = 50
     var offset: Int = 0
@@ -484,6 +552,30 @@ final class LibraryStore {
         countValues(pins.flatMap { $0.tags })
     }
 
+    /// Counts are multi-membership: a teal-and-yellow pin contributes to both
+    /// families, and to `multicolor` when it has three or more hues.
+    static func colorFamilyCounts(for pins: [LoraPinRecord]) -> [NamedCount] {
+        var counts: [String: Int] = [:]
+        for pin in pins {
+            let profile = pin.resolvedColorProfile
+            for family in profile.families {
+                counts[family.rawValue, default: 0] += 1
+            }
+            if profile.isMulticolor {
+                counts[LoraColorFamily.multicolor.rawValue, default: 0] += 1
+            }
+        }
+        return sortedCounts(counts)
+    }
+
+    static func colorToneCounts(for pins: [LoraPinRecord]) -> [NamedCount] {
+        var counts: [String: Int] = [:]
+        for pin in pins {
+            counts[pin.resolvedColorProfile.tone.rawValue, default: 0] += 1
+        }
+        return sortedCounts(counts)
+    }
+
     func searchPins(matching query: PinQuery) throws -> [LoraPinRecord] {
         Self.searchPins(in: try loadLibrary().pins, matching: query)
     }
@@ -495,16 +587,24 @@ final class LibraryStore {
         let kind = query.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         let filtered = allPins.filter { pin in
+            let profile = pin.resolvedColorProfile
             if let search, !search.isEmpty {
-                let haystack = [
+                var searchParts = [
                     pin.title,
                     pin.note,
                     pin.board,
                     pin.sourceLabel ?? "",
                     pin.kind,
                     pin.tags.joined(separator: " "),
-                    pin.colors.joined(separator: " ")
-                ].joined(separator: " ").lowercased()
+                    pin.colors.joined(separator: " "),
+                    profile.tone.rawValue
+                ]
+                searchParts.append(contentsOf: profile.families.map(\.rawValue))
+                if profile.isMulticolor { searchParts.append(LoraColorFamily.multicolor.rawValue) }
+                if pin.isAnimated || pin.image.lowercased().hasSuffix(".gif") {
+                    searchParts.append("gif animated")
+                }
+                let haystack = searchParts.joined(separator: " ").lowercased()
                 if !haystack.contains(search) { return false }
             }
             if let tag, !tag.isEmpty {
@@ -517,6 +617,8 @@ final class LibraryStore {
             if let kind, !kind.isEmpty {
                 if pin.kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != kind { return false }
             }
+            if let color = query.color, !profile.matches(family: color) { return false }
+            if let tone = query.tone, profile.tone != tone { return false }
             return true
         }
         return Self.sorted(filtered, by: query.sort)
@@ -650,6 +752,14 @@ final class LibraryStore {
             if lhs.count != rhs.count { return lhs.count > rhs.count }
             return lhs.name.lowercased() < rhs.name.lowercased()
         }
+    }
+
+    private static func sortedCounts(_ counts: [String: Int]) -> [NamedCount] {
+        counts.map { NamedCount(name: $0.key, count: $0.value) }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.name.lowercased() < rhs.name.lowercased()
+            }
     }
 
     private static func describe(_ error: DecodingError) -> String {

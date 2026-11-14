@@ -48,6 +48,16 @@ final class AgentAPITests: RunningServerSuite {
         #expect(tags.count == 9)
         #expect(tags.allSatisfy { ($0["count"] as? Int) == 1 })
 
+        let colorFamilies = try #require(library["colorFamilies"] as? [[String: Any]])
+        #expect(colorFamilies.count == 7)
+        #expect(colorFamilies.first?["name"] as? String == "neutral")
+        #expect(colorFamilies.first?["count"] as? Int == 2)
+
+        let colorTones = try #require(library["colorTones"] as? [[String: Any]])
+        #expect(colorTones.count == 3)
+        #expect(colorTones.first?["name"] as? String == "deep")
+        #expect(colorTones.first?["count"] as? Int == 2)
+
         let pins = try #require(library["pins"] as? [[String: Any]])
         #expect(pins.count == 4)
 
@@ -58,6 +68,11 @@ final class AgentAPITests: RunningServerSuite {
         #expect(aurora["favorite"] as? Bool == true)
         #expect(aurora["tags"] as? [String] == ["dashboard", "analytics", "dark"])
         #expect(aurora["colors"] as? [String] == ["#0E1117", "#E60023", "#F5F5F7"])
+        #expect(aurora["colorFamily"] as? String == "blue")
+        #expect(aurora["colorFamilies"] as? [String] == ["blue", "violet"])
+        #expect(aurora["colorTone"] as? String == "deep")
+        #expect(aurora["animated"] as? Bool == false)
+        #expect(aurora["frameCount"] as? Int == 1)
         #expect(aurora["image"] as? String == "Images/aurora.png")
         #expect(aurora["thumbnail"] as? String == "Thumbnails/aurora.jpg")
         #expect(aurora["width"] as? Int == 1440)
@@ -130,6 +145,51 @@ final class AgentAPITests: RunningServerSuite {
         try assertPins("?tag=landing&favorite=false", total: 1, ids: [Fixture.zephyrID])
         try assertPins("?q=noema&board=Editorial", total: 1, ids: [Fixture.noemaID])
         try assertPins("?q=does-not-exist", total: 0, ids: [])
+    }
+
+    @Test func colorFamilyAndToneFilters() throws {
+        try assertPins("?color=blue", total: 1, ids: [Fixture.auroraID])
+        try assertPins("?color=Violet", total: 1, ids: [Fixture.auroraID])
+        try assertPins("?color=purple", total: 1, ids: [Fixture.auroraID])
+        try assertPins("?color=grey", total: 2, ids: nil)
+        try assertPins("?color=multicolor", total: 1, ids: [Fixture.noemaID])
+        try assertPins("?tone=deep", total: 2, ids: nil)
+        try assertPins("?tone=light", total: 1, ids: [Fixture.ledgerID])
+        try assertPins("?color=neutral&tone=deep", total: 1, ids: [Fixture.zephyrID])
+        try assertPins("?q=blue", total: 1, ids: [Fixture.auroraID])
+        try assertPins("?q=pastel", total: 1, ids: [Fixture.noemaID])
+        try assertPins("?color=teal", total: 0, ids: [])
+    }
+
+    @Test func colorFallbackForPinsWrittenBeforeAnalysis() throws {
+        var fallback = PinFixture(id: Fixture.ledgerID, title: "Legacy pin")
+        fallback.image = "Images/ledger.png"
+        fallback.board = "Mobile flows"
+        fallback.colors = ["#2563EB", "#FFFFFF"]
+        try scenario.writeLibrary([fallback.json()])
+
+        let pin = try expectJSON(try client.get("/api/v1/pins/\(Fixture.ledgerID)"))
+        #expect(pin["colorFamily"] as? String == "blue")
+        #expect(pin["colorFamilies"] as? [String] == ["blue"])
+        #expect(pin["colorTone"] as? String == "vivid")
+        try assertPins("?color=blue", total: 1, ids: [Fixture.ledgerID])
+    }
+
+    @Test func invalidColorParametersReturn400() throws {
+        for query in ["?color=octarine", "?tone=loud"] {
+            try expectError(try client.get("/api/v1/pins" + query), status: 400, code: "invalid_parameter", query)
+            try expectError(try client.get("/api/v1/context" + query), status: 400, code: "invalid_parameter", query)
+        }
+    }
+
+    @Test func colorAppearsInContextMarkdown() throws {
+        let context = try client.get("/api/v1/context?color=blue")
+        #expect(context.status == 200)
+        #expect(context.header("content-type")?.contains("text/markdown") == true)
+        #expect(context.text.contains("**Color family:** blue / violet · deep"))
+        #expect(context.text.contains("Aurora analytics overview"))
+        #expect(!context.text.contains("Ledger onboarding"))
+        #expect(context.text.contains("color = \"blue\""))
     }
 
     @Test func pinSorting() throws {
@@ -210,6 +270,9 @@ final class AgentAPITests: RunningServerSuite {
         #expect(pin["id"] as? String == Fixture.auroraID)
         #expect(pin["imageURL"] as? String == "\(baseURL)/api/v1/pins/\(Fixture.auroraID)/image?variant=original")
         #expect(pin["note"] as? String == "Dark analytics dashboard with magenta highlights and dense KPI cards.")
+        #expect(pin["colorFamily"] as? String == "blue")
+        #expect(pin["colorFamilies"] as? [String] == ["blue", "violet"])
+        #expect(pin["colorTone"] as? String == "deep")
 
         try expectError(try client.get("/api/v1/pins/not-a-real-pin"), status: 404, code: "pin_not_found")
         try expectError(try client.get("/api/v1/pins/00000000-0000-4000-8000-000000000000"), status: 404, code: "pin_not_found")

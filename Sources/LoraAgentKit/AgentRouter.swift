@@ -216,6 +216,8 @@ struct AgentRouter {
                 stats: LibraryStats(pins: library.pins),
                 boards: LibraryStore.boardCounts(for: library.pins),
                 tags: LibraryStore.tagCounts(for: library.pins),
+                colorFamilies: LibraryStore.colorFamilyCounts(for: library.pins),
+                colorTones: LibraryStore.colorToneCounts(for: library.pins),
                 pins: library.pins.map { $0.enriched(baseURL: baseURL) }
             ))
 
@@ -282,11 +284,33 @@ struct AgentRouter {
         case .context:
             let board = stringParameter(request, "board")
             let tag = stringParameter(request, "tag")
+            let rawColor = stringParameter(request, "color")
+            let rawTone = stringParameter(request, "tone")
+            let color: LoraColorFamily?
+            if let rawColor {
+                guard let parsed = LoraColorFamily.parse(rawColor) else {
+                    throw APIError(status: 400, code: "invalid_parameter", message: "\"color\" must be one of: \(LoraColorFamily.allCases.map(\.rawValue).joined(separator: ", ")).")
+                }
+                color = parsed
+            } else {
+                color = nil
+            }
+            let tone: LoraColorTone?
+            if let rawTone {
+                guard let parsed = LoraColorTone.parse(rawTone) else {
+                    throw APIError(status: 400, code: "invalid_parameter", message: "\"tone\" must be one of: \(LoraColorTone.allCases.map(\.rawValue).joined(separator: ", ")).")
+                }
+                tone = parsed
+            } else {
+                tone = nil
+            }
             let limit = try integerParameter(request, name: "limit", range: 1...100, defaultValue: 20)
             let library = try store.loadLibrary()
             var query = PinQuery()
             query.board = board
             query.tag = tag
+            query.color = color
+            query.tone = tone
             query.sort = .recent
             let matches = LibraryStore.searchPins(in: library.pins, matching: query)
             let selected = Array(matches.prefix(limit))
@@ -296,7 +320,9 @@ struct AgentRouter {
                 totalMatches: matches.count,
                 baseURL: baseURL,
                 board: board,
-                tag: tag
+                tag: tag,
+                color: color,
+                tone: tone
             )
             return .markdown(markdown)
         }
@@ -552,6 +578,18 @@ struct AgentRouter {
         query.board = stringParameter(request, "board")
         query.kind = stringParameter(request, "kind")
         query.favorite = try booleanParameter(request, name: "favorite")
+        if let rawColor = stringParameter(request, "color") {
+            guard let color = LoraColorFamily.parse(rawColor) else {
+                throw APIError(status: 400, code: "invalid_parameter", message: "\"color\" must be one of: \(LoraColorFamily.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            query.color = color
+        }
+        if let rawTone = stringParameter(request, "tone") {
+            guard let tone = LoraColorTone.parse(rawTone) else {
+                throw APIError(status: 400, code: "invalid_parameter", message: "\"tone\" must be one of: \(LoraColorTone.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            query.tone = tone
+        }
         if let rawSort = stringParameter(request, "sort") {
             guard let sort = PinSort(rawValue: rawSort.lowercased()) else {
                 throw APIError(status: 400, code: "invalid_parameter", message: "\"sort\" must be one of: recent, oldest, title.")
@@ -606,7 +644,9 @@ enum ContextMarkdown {
         totalMatches: Int,
         baseURL: String,
         board: String?,
-        tag: String?
+        tag: String?,
+        color: LoraColorFamily? = nil,
+        tone: LoraColorTone? = nil
     ) -> String {
         var lines: [String] = []
         lines.append("# Lora design context")
@@ -618,6 +658,8 @@ enum ContextMarkdown {
         var filters: [String] = []
         if let board { filters.append("board = \"\(escapeInline(board))\"") }
         if let tag { filters.append("tag = \"\(escapeInline(tag))\"") }
+        if let color { filters.append("color = \"\(color.rawValue)\"") }
+        if let tone { filters.append("tone = \"\(tone.rawValue)\"") }
         if !filters.isEmpty {
             lines.append("- Filter: " + filters.joined(separator: ", "))
         }
@@ -632,6 +674,8 @@ enum ContextMarkdown {
             lines.append("Available boards: " + LibraryStore.boardCounts(for: allPins).map { "\($0.name) (\($0.count))" }.joined(separator: ", "))
             lines.append("")
             lines.append("Available tags: " + LibraryStore.tagCounts(for: allPins).prefix(30).map { $0.name }.joined(separator: ", "))
+            lines.append("Available colour families: " + LibraryStore.colorFamilyCounts(for: allPins).map { "\($0.name) (\($0.count))" }.joined(separator: ", "))
+            lines.append("Available tones: " + LibraryStore.colorToneCounts(for: allPins).map { $0.name }.joined(separator: ", "))
             lines.append("")
             lines.append("Try again without filters: \(baseURL)/api/v1/context")
             return lines.joined(separator: "\n")
@@ -648,7 +692,14 @@ enum ContextMarkdown {
                 if pin.fileSize > 0 { dimensions += " · \(humanFileSize(pin.fileSize))" }
                 lines.append("- **Dimensions:** \(dimensions)")
             }
+            if pin.isAnimated || pin.image.lowercased().hasSuffix(".gif") {
+                lines.append("- **Format:** GIF" + (pin.frameCount > 1 ? " · \(pin.frameCount) frames" : ""))
+            }
             if !pin.colors.isEmpty { lines.append("- **Palette:** " + pin.colors.map { "`\(escapeCode($0))`" }.joined(separator: ", ")) }
+            let profile = pin.resolvedColorProfile
+            var colorLine = "- **Color family:** " + profile.families.map(\.rawValue).joined(separator: " / ") + " · \(profile.tone.rawValue)"
+            if profile.isMulticolor { colorLine += " · multicolor" }
+            lines.append(colorLine)
             if let sourceURL = pin.sourceURL, !sourceURL.isEmpty {
                 let label = pin.sourceLabel.map { escapeInline($0) + " — " } ?? ""
                 lines.append("- **Source:** \(label)<\(safeURL(sourceURL))>")
@@ -670,7 +721,7 @@ enum ContextMarkdown {
         if totalMatches > selected.count {
             lines.append("---")
             lines.append("")
-            lines.append("Showing \(selected.count) of \(totalMatches) matching pins. Fetch all of them as JSON: \(baseURL)/api/v1/pins?limit=200" + contextQuerySuffix(board: board, tag: tag))
+            lines.append("Showing \(selected.count) of \(totalMatches) matching pins. Fetch all of them as JSON: \(baseURL)/api/v1/pins?limit=200" + contextQuerySuffix(board: board, tag: tag, color: color, tone: tone))
             lines.append("")
         }
         lines.append("## Next steps")
@@ -682,7 +733,7 @@ enum ContextMarkdown {
         return lines.joined(separator: "\n")
     }
 
-    private static func contextQuerySuffix(board: String?, tag: String?) -> String {
+    private static func contextQuerySuffix(board: String?, tag: String?, color: LoraColorFamily?, tone: LoraColorTone?) -> String {
         var parts: [String] = []
         if let board, !board.isEmpty {
             parts.append("board=" + (board.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? board))
@@ -690,6 +741,8 @@ enum ContextMarkdown {
         if let tag, !tag.isEmpty {
             parts.append("tag=" + (tag.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? tag))
         }
+        if let color { parts.append("color=" + color.rawValue) }
+        if let tone { parts.append("tone=" + tone.rawValue) }
         return parts.isEmpty ? "" : "&" + parts.joined(separator: "&")
     }
 

@@ -20,6 +20,8 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Fast to capture** — drag files in, paste from the clipboard (⇧⌘V), or grab a screen region (⇧⌘2).
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
+- **GIF support** — import, drop, paste, or upload a GIF through the Agent API and the original animation is preserved. Cards play it on hover, the detail card and large-image mode keep it looping, and the API exposes `animated` and `frameCount`.
+- **Automatic color families** — every pin is analysed into multi-valued hue families (blue, teal, green, yellow, red, violet, pink, brown, neutral, multicolor) plus a tone (light, pastel, vivid, muted, deep). The gallery filters by both, agents can query `color` and `tone`, and older pins are backfilled in the background.
 - **Agent-readable by default** — a localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site. Agents can also add images back into the library.
 - **Agent-editable metadata** — agents can also update titles, notes, boards, tags, and favorites through `PATCH /api/v1/pins/{id}`; a Settings switch can disable it.
 - **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
@@ -62,7 +64,7 @@ In selection mode, cards get a check circle and the bottom bar can select all, f
 
 ![Quick capture sheet](docs/screenshots/en/capture.png)
 
-You can also drop files anywhere on the window. Lora reads pixel dimensions, file size, and a five-color palette automatically; titles are derived from filenames and can be edited in the pin close-up.
+You can also drop files anywhere on the window. Lora reads pixel dimensions, file size, and a five-color palette automatically (GIFs keep their animation and frame count), then classifies searchable color families and tone; titles are derived from filenames and can be edited in the pin close-up.
 
 > Screen region capture uses macOS's built-in `screencapture -i`. The first run may ask for Screen Recording permission.
 
@@ -76,6 +78,14 @@ curl -s http://127.0.0.1:4242/api/v1/library | jq
 
 # Filter pins
 curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true" | jq
+
+# Upload an animated GIF
+curl -s -X POST --data-binary @loading.gif \
+  -H "Content-Type: image/gif" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" | jq
+
+# Filter by colour family and tone (or color=multicolor)
+curl -s "http://127.0.0.1:4242/api/v1/pins?color=teal&tone=deep" | jq
 
 # Markdown context — paste straight into an agent prompt
 curl -s http://127.0.0.1:4242/api/v1/context

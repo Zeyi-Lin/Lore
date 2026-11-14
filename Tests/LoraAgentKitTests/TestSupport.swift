@@ -284,6 +284,10 @@ struct PinFixture {
     var colors: [String] = []
     var favorite: Bool = false
     var kind: String = "screenshot"
+    var colorFamilies: [String]? = nil
+    var colorTone: String? = nil
+    var isAnimated: Bool = false
+    var frameCount: Int = 1
 
     func json() -> [String: Any] {
         var dictionary: [String: Any] = [
@@ -305,6 +309,10 @@ struct PinFixture {
         dictionary["thumbnail"] = thumbnail.map { $0 as Any } ?? NSNull()
         dictionary["sourceURL"] = sourceURL.map { $0 as Any } ?? NSNull()
         dictionary["sourceLabel"] = sourceLabel.map { $0 as Any } ?? NSNull()
+        dictionary["colorFamilies"] = colorFamilies.map { $0 as Any } ?? NSNull()
+        dictionary["colorTone"] = colorTone.map { $0 as Any } ?? NSNull()
+        dictionary["animated"] = isAnimated
+        dictionary["frameCount"] = frameCount
         return dictionary
     }
 }
@@ -342,6 +350,8 @@ enum Fixture {
         aurora.sourceURL = "https://dribbble.com/shots/1"
         aurora.sourceLabel = "Dribbble"
         aurora.colors = ["#0E1117", "#E60023", "#F5F5F7"]
+        aurora.colorFamilies = ["blue", "violet"]
+        aurora.colorTone = "deep"
         aurora.favorite = true
         aurora.kind = "screenshot"
 
@@ -358,6 +368,8 @@ enum Fixture {
         ledger.board = "Mobile flows"
         ledger.sourceLabel = "Lora Seed"
         ledger.colors = ["#F4EDE4", "#1F1B16"]
+        ledger.colorFamilies = ["neutral"]
+        ledger.colorTone = "light"
 
         var noema = PinFixture(id: noemaID, title: "Noema field notes")
         noema.note = "Typographic editorial page with a quiet grid and serif display type."
@@ -371,6 +383,8 @@ enum Fixture {
         noema.tags = ["editorial", "typography"]
         noema.board = "Editorial"
         noema.colors = ["#F7F3EC"]
+        noema.colorFamilies = ["yellow", "green", "red"]
+        noema.colorTone = "pastel"
 
         var zephyr = PinFixture(id: zephyrID, title: "Zephyr pricing page")
         zephyr.note = "Landing page with three-tier pricing and soft gradients."
@@ -385,6 +399,8 @@ enum Fixture {
         zephyr.board = "Landing pages"
         zephyr.sourceLabel = "Lora Seed"
         zephyr.colors = ["#111111"]
+        zephyr.colorFamilies = ["neutral"]
+        zephyr.colorTone = "deep"
 
         return [aurora.json(), ledger.json(), noema.json(), zephyr.json()]
     }
@@ -404,6 +420,46 @@ enum Fixture {
     static func writeRawLibrary(_ text: String, to root: URL) throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try text.write(to: root.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
+    }
+
+    /// Generates a two-frame animated GIF (red → blue) for ingest tests.
+    static func makeAnimatedGIF(width: Int = 40, height: Int = 30, frames: Int = 2) -> Data {
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.gif.identifier as CFString,
+            frames,
+            nil
+        ) else {
+            fatalError("Could not create a GIF destination")
+        }
+        CGImageDestinationSetProperties(destination, [
+            kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
+        ] as CFDictionary)
+        for index in 0..<frames {
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!
+            let isFirst = index.isMultiple(of: 2)
+            context.setFillColor(isFirst
+                ? CGColor(red: 0.9, green: 0.1, blue: 0.15, alpha: 1)
+                : CGColor(red: 0.1, green: 0.2, blue: 0.85, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            let image = context.makeImage()!
+            CGImageDestinationAddImage(destination, image, [
+                kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]
+            ] as CFDictionary)
+        }
+        guard CGImageDestinationFinalize(destination) else {
+            fatalError("Could not encode the fixture GIF")
+        }
+        return Data(referencing: output)
     }
 
     /// Generates a PNG with three vertical colour bands (red, green, blue),

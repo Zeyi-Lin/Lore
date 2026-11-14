@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import LoraAgentKit
 
 // MARK: - Card projection
 
@@ -16,6 +17,9 @@ struct PinCardModel: Identifiable, Equatable {
     let isFavorite: Bool
     let kindIcon: String
     let hasSource: Bool
+    let isGIF: Bool
+    /// Original GIF paths for hover playback, empty for still images.
+    let animatedPaths: [String]
 }
 
 /// Identifies one gallery query. `revision` ties a cached result to the
@@ -26,6 +30,8 @@ struct GalleryQuery: Hashable {
     var filterRaw: String
     var sortRaw: String
     var needle: String
+    var colorRaw: String?
+    var toneRaw: String?
     var languageRaw: String
     var revision: UInt64
 }
@@ -50,6 +56,13 @@ final class LibrarySnapshot {
     let boardTree: [BoardNode]
     /// tag -> count
     let tagCounts: [String: Int]
+    /// Per-pin colour filter keys (families plus the derived "multicolor").
+    let colorKeys: [[String]]
+    /// Per-pin tone key.
+    let toneKeys: [String]
+    /// Multi-membership family counts, so filters can surface availability.
+    let colorFamilyCounts: [LoraColorFamily: Int]
+    let toneCounts: [LoraColorTone: Int]
 
     private var cachedSearchKeys: [String]?
     private var cachedSearchKeyBytes: [[UInt8]]?
@@ -68,11 +81,28 @@ final class LibrarySnapshot {
         var boardNames: [String] = []
         var seenBoards = Set<String>()
         var tags: [String: Int] = [:]
+        var colorKeys: [[String]] = []
+        var toneKeys: [String] = []
+        colorKeys.reserveCapacity(pins.count)
+        toneKeys.reserveCapacity(pins.count)
+        var familyCounts: [LoraColorFamily: Int] = [:]
+        var toneCounts: [LoraColorTone: Int] = [:]
 
         for (offset, pin) in pins.enumerated() {
             index[pin.id] = offset
             if pin.isFavorite { favorites += 1 }
             if pin.kind == .screenshot { screenshots += 1 }
+
+            let profile = pin.colorProfile
+            colorKeys.append(profile.filterKeys)
+            toneKeys.append(profile.tone.rawValue)
+            for family in profile.families {
+                familyCounts[family, default: 0] += 1
+            }
+            if profile.isMulticolor {
+                familyCounts[.multicolor, default: 0] += 1
+            }
+            toneCounts[profile.tone, default: 0] += 1
 
             let trimmedBoard = pin.board.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayBoard = trimmedBoard.isEmpty ? "Unsorted" : trimmedBoard
@@ -97,6 +127,10 @@ final class LibrarySnapshot {
         self.boardNamesInOrder = boardNames
         self.boardTree = BoardTreeBuilder.build(boardCounts: boards)
         self.tagCounts = tags
+        self.colorKeys = colorKeys
+        self.toneKeys = toneKeys
+        self.colorFamilyCounts = familyCounts
+        self.toneCounts = toneCounts
     }
 
     func pin(at index: Int) -> Pin { pins[index] }
@@ -114,7 +148,8 @@ final class LibrarySnapshot {
         var keys: [String] = []
         keys.reserveCapacity(pins.count)
         for pin in pins {
-            keys.append([
+            let profile = pin.colorProfile
+            var words = [
                 pin.title,
                 pin.note,
                 pin.board,
@@ -122,7 +157,22 @@ final class LibrarySnapshot {
                 pin.sourceLabel ?? "",
                 pin.tags.joined(separator: " "),
                 pin.kind.label
-            ].joined(separator: " ").lowercased().precomposedStringWithCanonicalMapping)
+            ]
+            if pin.isGIF {
+                words.append("gif animated")
+                words.append(T("GIF"))
+            }
+            for family in profile.families {
+                words.append(family.rawValue)
+                words.append(family.localizedTitle)
+            }
+            words.append(profile.tone.rawValue)
+            words.append(profile.tone.localizedTitle)
+            if profile.isMulticolor {
+                words.append(LoraColorFamily.multicolor.rawValue)
+                words.append(LoraColorFamily.multicolor.localizedTitle)
+            }
+            keys.append(words.joined(separator: " ").lowercased().precomposedStringWithCanonicalMapping)
         }
         cachedSearchKeys = keys
         cachedSearchKeyBytes = nil
@@ -212,8 +262,10 @@ final class GalleryProjection {
                     aspectRatio: pin.aspectRatio,
                     imageCandidates: candidates,
                     isFavorite: pin.isFavorite,
-                    kindIcon: pin.kind.icon,
-                    hasSource: pin.sourceURL != nil
+                    kindIcon: pin.mediaIcon,
+                    hasSource: pin.sourceURL != nil,
+                    isGIF: pin.isGIF,
+                    animatedPaths: pin.isGIF ? [rootPath + "/" + pin.image] : []
                 ))
             }
             return built
@@ -297,6 +349,15 @@ final class GalleryProjection {
                 guard pin.isFavorite else { continue }
             default:
                 break
+            }
+
+            if let colorRaw = query.colorRaw,
+               !snapshot.colorKeys[index].contains(colorRaw) {
+                continue
+            }
+            if let toneRaw = query.toneRaw,
+               snapshot.toneKeys[index] != toneRaw {
+                continue
             }
 
             if let searchKeyBytes {

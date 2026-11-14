@@ -44,6 +44,7 @@ struct LibraryView: View {
     @Environment(LibraryStore.self) private var store
     @Environment(\.loraContentWidth) private var contentWidth
     @State private var showSortMenu = false
+    @State private var sortHovering = false
     @State private var gridWidth: CGFloat = 1080
     @State private var pendingDeleteID: UUID?
 
@@ -246,6 +247,7 @@ struct LibraryView: View {
             FilterChip(title: T("Favorites"), count: store.favoriteCount, isSelected: store.filter == .favorites) {
                 store.filter = .favorites
             }
+            ColorFilterControl()
 
             Rectangle()
                 .fill(Theme.hairline)
@@ -323,12 +325,14 @@ struct LibraryView: View {
             .foregroundStyle(Theme.inkSecondary)
             .padding(.horizontal, 12)
             .frame(height: 32)
-            .background(Capsule().fill(Theme.parchment))
+            .background(Capsule().fill(sortHovering ? Theme.parchmentDeep : Theme.parchment))
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
+        .onHover { sortHovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: sortHovering)
         .popover(isPresented: $showSortMenu, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(PinSort.allCases) { sort in
@@ -350,10 +354,7 @@ struct LibraryView: View {
                         .padding(.horizontal, 10)
                         .frame(height: 31)
                         .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(store.sort == sort ? Theme.parchment : Color.clear)
-                        )
+                        .menuRowHover(isSelected: store.sort == sort)
                     }
                     .buttonStyle(PointerPlainButtonStyle())
                 }

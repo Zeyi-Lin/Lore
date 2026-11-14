@@ -5,6 +5,7 @@ struct CaptureSheet: View {
     @Environment(LibraryStore.self) private var store
     @State private var board = "Unsorted"
     @State private var dropTargeted = false
+    @State private var boardMenuHovering = false
 
     var body: some View {
         GeometryReader { geo in
@@ -100,7 +101,7 @@ struct CaptureSheet: View {
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(Theme.ink)
 
-            Text(T("or paste with ⇧⌘V · PNG, JPEG, HEIC, TIFF"))
+            Text(T("or paste with ⇧⌘V · PNG, JPEG, GIF, HEIC, TIFF"))
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.inkTertiary)
         }
@@ -178,11 +179,13 @@ struct CaptureSheet: View {
                     }
                     .padding(.horizontal, 9)
                     .frame(height: 27)
-                    .background(Capsule().fill(Theme.parchment))
+                    .background(Capsule().fill(boardMenuHovering ? Theme.parchmentDeep : Theme.parchment))
                     .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
+                .onHover { boardMenuHovering = $0 }
+                .animation(.easeOut(duration: 0.14), value: boardMenuHovering)
                 .focusable(false)
                 .fixedSize()
                 .pointerCursor()

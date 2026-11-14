@@ -6,7 +6,7 @@ enum LlmsTxt {
         return """
 # Lora Agent API
 
-> Lora is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. Agents can also add new pins with POST /api/v1/pins using a JSON base64 payload or a raw image body. The library is re-read from disk on every request.
+> Lora is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, auto-detected colour families and tones, GIF/animation metadata, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. Agents can also add new pins with POST /api/v1/pins using a JSON base64 payload or a raw image body. The library is re-read from disk on every request.
 
 Base URL: \(baseURL)
 API version: v1
@@ -21,16 +21,16 @@ Human documentation: \(baseURL)/docs
 ## Endpoints
 
 - [Health](\(baseURL)/health): liveness check with the bound port and current pin count. Alias: \(baseURL)/api/v1/health.
-- [Library](\(baseURL)/api/v1/library): the complete enriched library with stats, boards, tags, and every pin.
-- [Pins](\(baseURL)/api/v1/pins): filterable pin list. Query parameters: q, tag, board, favorite, kind, sort (recent|oldest|title), limit (1-200), offset.
-- [Create pin](\(baseURL)/api/v1/pins): POST a new pin. Send application/json with imageBase64 (data URI prefixes accepted) and optional metadata, or send a raw image body with Content-Type image/* and metadata as query parameters. Bodies are limited to 20 MiB; responses are 201 with an EnrichedPin and a Location header. Board names are plain strings: use a Product/Screen name — e.g. board=Linear/Settings — so the pin nests under "Linear" in the app sidebar.
+- [Library](\(baseURL)/api/v1/library): the complete enriched library with stats, boards, tags, colour-family facets, tone facets, and every pin.
+- [Pins](\(baseURL)/api/v1/pins): filterable pin list. Query parameters: q, tag, board, color (neutral|red|orange|yellow|green|teal|blue|violet|pink|brown|multicolor), tone (light|pastel|vivid|muted|deep), favorite, kind, sort (recent|oldest|title), limit (1-200), offset.
+- [Create pin](\(baseURL)/api/v1/pins): POST a new pin. Send application/json with imageBase64 (data URI prefixes accepted) and optional metadata, or send a raw image body with Content-Type image/* and metadata as query parameters. Animated GIFs keep their frames; the response includes `animated` and `frameCount`. Bodies are limited to 20 MiB; responses are 201 with an EnrichedPin and a Location header. Board names are plain strings: use a Product/Screen name — e.g. board=Linear/Settings — so the pin nests under "Linear" in the app sidebar.
 - [Update pin](\(baseURL)/api/v1/pins/{id}): PATCH pin metadata. Send application/json with one or more of title, note, board, tags, sourceURL, sourceLabel, favorite, kind; null clears a nullable field. Bodies are limited to 256 KiB and the response is the updated EnrichedPin. The library owner can disable PATCH in Lora Settings; it then returns 403 metadata_edits_disabled.
 - [Pin](\(baseURL)/api/v1/pins/{id}): one enriched pin by its UUID.
 - [Pin image](\(baseURL)/api/v1/pins/{id}/image): raw image bytes. Use variant=original (default) or variant=thumb; thumb falls back to original.
 - [Boards](\(baseURL)/api/v1/boards): board names with pin counts.
 - [Tags](\(baseURL)/api/v1/tags): tag names with pin counts.
 - [Stats](\(baseURL)/api/v1/stats): library counters for pins, boards, tags, favorites, and images.
-- [Context](\(baseURL)/api/v1/context): markdown design context with absolute image URLs, ready to paste into an agent prompt. Optional board and tag filters.
+- [Context](\(baseURL)/api/v1/context): markdown design context with absolute image URLs, ready to paste into an agent prompt. Optional board, tag, color, and tone filters.
 - [llms.txt](\(baseURL)/llms.txt): this index.
 - [Landing page](\(baseURL)/): links to all of the above.
 
@@ -44,6 +44,10 @@ Fetch paste-ready design context for one board:
 
     curl -s "\(baseURL)/api/v1/context?board=Web%20dashboards"
 
+Find references by colour family and tone:
+
+    curl -s "\(baseURL)/api/v1/pins?color=teal&tone=deep&limit=20" | jq '.pins[] | {title, colorFamilies, colorTone, imageURL}'
+
 Download the original image for a pin:
 
     curl -s -o reference.png "\(baseURL)/api/v1/pins/{id}/image?variant=original"
@@ -53,6 +57,13 @@ Add a pin from a local screenshot (raw image body). Prefix the board with the pr
     curl -s -X POST --data-binary @settings.png \\
       -H "Content-Type: image/png" \\
       "\(baseURL)/api/v1/pins?title=Settings&board=Linear%2FSettings&tags=settings,linear"
+
+Add an animated GIF (frames are preserved; `animated` and `frameCount` are returned):
+
+    curl -s -X POST --data-binary @loading.gif \
+      -H "Content-Type: image/gif" \
+      "\(baseURL)/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
+      | jq '{id, animated, frameCount, imageURL}'
 
 Add a pin with JSON base64 (data URI prefixes are accepted):
 
@@ -65,6 +76,25 @@ Rename or refile an existing pin (PATCH only touches the fields you send):
     curl -s -X PATCH "\(baseURL)/api/v1/pins/{id}" \\
       -H "Content-Type: application/json" \\
       -d '{"title":"Settings — Linear","board":"Linear/Settings","tags":["settings","linear"],"favorite":true}'
+
+## Colour taxonomy
+
+Every pin carries `colorFamily` (leading hue), `colorFamilies` (all meaningful
+hues, ordered by coverage), and `colorTone` (tonal character). Classification is
+automatic and works for pins added before the taxonomy existed.
+
+Hue families: neutral, red, orange, yellow, green, teal, blue, violet, pink,
+brown. A pin can belong to several families; `color=multicolor` matches pins
+with three or more named hues. Tone: light, pastel, vivid, muted, deep.
+
+## Animated images
+
+GIFs are preserved as the original `Images/<id>.gif`; `imageURL` streams the
+animated file, while `thumbnailURL` is a static first-frame JPEG. Every pin
+carries `animated` (boolean) and `frameCount` (integer). The app plays GIFs on
+card hover, in the detail card, and in large-image mode. Agent uploads are
+analysed automatically; `kind` defaults to `image` for animated GIFs when the
+agent does not supply one.
 
 ## Board hierarchy
 
