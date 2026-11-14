@@ -44,6 +44,7 @@ struct LibraryView: View {
     @Environment(LibraryStore.self) private var store
     @State private var showSortMenu = false
     @State private var gridWidth: CGFloat = 1080
+    @State private var pendingDeleteID: UUID?
 
     private struct GridWidthKey: PreferenceKey {
         static var defaultValue: CGFloat = 0
@@ -70,6 +71,21 @@ struct LibraryView: View {
             }
             .background(Theme.paper)
             .animation(.spring(response: 0.34, dampingFraction: 0.86), value: store.isSelectingPins)
+            .alert(T("Delete this pin?"), isPresented: Binding(
+                get: { pendingDeleteID != nil },
+                set: { if !$0 { pendingDeleteID = nil } }
+            )) {
+                Button(T("Delete"), role: .destructive) {
+                    if let id = pendingDeleteID,
+                       let pin = store.pins.first(where: { $0.id == id }) {
+                        store.deletePin(pin)
+                    }
+                    pendingDeleteID = nil
+                }
+                Button(T("Cancel"), role: .cancel) { pendingDeleteID = nil }
+            } message: {
+                Text(T("The original image and its metadata will be removed from Canta."))
+            }
     }
 
     private var libraryScroll: some View {
@@ -180,6 +196,7 @@ struct LibraryView: View {
             openOriginal: { store.openOriginal(id: $0) },
             reveal: { store.revealPin(id: $0) },
             openSource: { store.openSource(id: $0) },
+            requestDelete: { pendingDeleteID = $0 },
             boardNames: { store.allBoardNames }
         )
     }
@@ -220,6 +237,10 @@ struct LibraryView: View {
             }
             .padding(.bottom, 3)
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { WindowZoom.toggle() }
+        )
     }
 
     private var kicker: String {

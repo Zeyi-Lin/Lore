@@ -69,6 +69,10 @@ struct SidebarView: View {
         }
         .frame(width: 246)
         .background(Theme.parchment)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { WindowZoom.toggle() }
+        )
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(Theme.hairline)

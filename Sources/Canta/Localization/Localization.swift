@@ -137,6 +137,7 @@ final class LanguageManager: ObservableObject {
         "or press ⇧⌘V to pin the clipboard": "或按 ⇧⌘V 收录剪贴板",
         "⇧⌘2 for a screen capture": "⇧⌘2 截取屏幕",
         "agent ready": "Agent 就绪",
+        "Couldn't save the library: %@": "无法保存图库：%@",
         "An agent added %ld pin": "Agent 添加了 %ld 个灵感",
         "An agent added %ld pins": "Agent 添加了 %ld 个灵感",
         "Select": "选择",

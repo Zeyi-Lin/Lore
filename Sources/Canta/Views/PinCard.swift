@@ -14,6 +14,7 @@ struct PinCardActions {
     var openOriginal: (UUID) -> Void
     var reveal: (UUID) -> Void
     var openSource: (UUID) -> Void
+    var requestDelete: (UUID) -> Void
     var boardNames: () -> [String]
 }
 
@@ -205,6 +206,10 @@ struct PinCard: View, Equatable {
         Button(T("Reveal in Finder")) { actions.reveal(model.id) }
         if model.hasSource {
             Button(T("Open source page")) { actions.openSource(model.id) }
+        }
+        Divider()
+        Button(T("Delete pin"), role: .destructive) {
+            actions.requestDelete(model.id)
         }
     }
 }

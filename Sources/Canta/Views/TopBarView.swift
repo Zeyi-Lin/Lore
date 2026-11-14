@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct TopBarView: View {
     @Environment(LibraryStore.self) private var store
@@ -27,6 +28,14 @@ struct TopBarView: View {
         .padding(.horizontal, 30)
         .padding(.top, 19)
         .padding(.bottom, 8)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                if !WindowZoom.isEditingText {
+                    WindowZoom.toggle()
+                }
+            }
+        )
         .onReceive(NotificationCenter.default.publisher(for: .cantaFocusSearch)) { _ in
             searchFocused = true
         }

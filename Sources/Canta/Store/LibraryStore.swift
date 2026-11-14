@@ -605,6 +605,7 @@ final class LibraryStore {
         try? fm.removeItem(at: CantaPaths.cardsDirectory(root: root)
             .appendingPathComponent("\(pin.id.uuidString).jpg"))
         pins.removeAll { $0.id == pin.id }
+        selectedPinIDs.remove(pin.id)
         if selectedPinID == pin.id { selectedPinID = nil }
         refreshSnapshot()
         persist(debounce: 0.1)

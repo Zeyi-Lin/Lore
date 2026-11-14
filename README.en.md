@@ -21,9 +21,10 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **Agent-readable by default** — a localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site. Agents can also add images back into the library.
-- **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once.
+- **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
 - **Large image & keyboard browsing** — open a pin and switch to image-only mode; use ← / → to move between pins and Esc to go back.
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
+- **Window gestures** — double-click the sidebar or page header to maximize/restore the window.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
 
 ## Capture
