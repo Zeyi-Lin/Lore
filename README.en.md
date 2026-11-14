@@ -24,7 +24,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Agent-editable metadata** — agents can also update titles, notes, boards, tags, and favorites through `PATCH /api/v1/pins/{id}`; a Settings switch can disable it.
 - **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
-- **Large image & keyboard browsing** — open a pin and switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back.
+- **Large image & keyboard browsing** — open a pin, then single-click the image to switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back.
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Window gestures** — double-click the sidebar or page header to maximize/restore the window.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
@@ -41,7 +41,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | Open Agent access | ⌘4 |
 | Select multiple cards | ⌘B |
 | Previous / next pin in detail | ← / → |
-| Enter image-only mode (detail) | Double-click image or click “Large image” |
+| Enter image-only mode (detail) | Click the image or the “Large image” button |
 | Large image: zoom in / out | + / - |
 | Large image: rotate right / left 90° | R / ⇧R |
 | Large image: mirror horizontally | M |
@@ -56,7 +56,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
   <img src="docs/screenshots/en/large.png" width="49%" alt="Image-only large mode" />
 </p>
 
-In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, click **Large image** or double-click the image for an image-only view; the floating toolbar along the bottom offers zoom out, the zoom percentage (100% fits the window), zoom in, rotate left/right 90°, mirror horizontally, and reset view, with a one-line gesture hint beneath it. Scroll or pinch to zoom, drag the image to pan once zoomed in, and double-click to toggle between fit and 250%; on the keyboard, + / - zoom, R rotates right, ⇧R rotates left, M mirrors horizontally, 0 resets the view, ← / → move between pins, and Esc goes back.
+In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, single-click the image (or the **Large image** button) for an image-only view; the floating toolbar along the bottom offers zoom out, the zoom percentage (100% fits the window), zoom in, rotate left/right 90°, mirror horizontally, and reset view, with a one-line gesture hint beneath it. Scroll or pinch to zoom, drag the image to pan once zoomed in, and double-click to toggle between fit and 250%; on the keyboard, + / - zoom, R rotates right, ⇧R rotates left, M mirrors horizontally, 0 resets the view, ← / → move between pins, and Esc goes back.
 
 ![Quick capture sheet](docs/screenshots/en/capture.png)
 

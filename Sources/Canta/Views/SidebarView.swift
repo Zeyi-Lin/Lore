@@ -72,7 +72,7 @@ struct SidebarView: View {
                 .padding(.top, 14)
                 .padding(.bottom, 16)
         }
-        .frame(width: 246)
+        .frame(width: CantaLayout.sidebarWidth)
         .background(Theme.parchment)
         .contentShape(Rectangle())
         .onAppear { revealSelectedBoard() }
@@ -80,11 +80,6 @@ struct SidebarView: View {
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { WindowZoom.toggle() }
         )
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Theme.hairline)
-                .frame(width: 1)
-        }
     }
 
     private var brand: some View {

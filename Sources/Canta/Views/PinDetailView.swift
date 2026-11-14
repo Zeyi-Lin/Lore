@@ -206,28 +206,8 @@ struct PinDetailOverlay: View {
                 endRadius: 430
             )
 
-            Color.clear
-                .aspectRatio(max(pin.aspectRatio, 0.05), contentMode: .fit)
-                .overlay {
-                    LibraryImage(
-                        paths: store.detailImageCandidates(for: pin),
-                        maxPixel: 1200,
-                        placeholderPaths: store.cardImageCandidates(for: pin),
-                        placeholderMaxPixel: 640,
-                        contentMode: .fill
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
+            detailImage
                 .padding(27)
-                .onTapGesture(count: 2) {
-                    withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
-                }
-                .pointerCursor()
 
             VStack {
                 HStack {
@@ -262,6 +242,36 @@ struct PinDetailOverlay: View {
             .padding(18)
         }
         .clipped()
+    }
+
+    /// The hero image. It is itself the affordance for the image-only view, so
+    /// a single click expands it; the 27 pt mat around it stays inert.
+    private var detailImage: some View {
+        Color.clear
+            .aspectRatio(max(pin.aspectRatio, 0.05), contentMode: .fit)
+            .overlay {
+                LibraryImage(
+                    paths: store.detailImageCandidates(for: pin),
+                    maxPixel: 1200,
+                    placeholderPaths: store.cardImageCandidates(for: pin),
+                    placeholderMaxPixel: 640,
+                    contentMode: .fill
+                )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
+            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .onTapGesture { enterImageMode() }
+            .help(T("Click to open large image"))
+            .pointerCursor()
+    }
+
+    private func enterImageMode() {
+        withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
     }
 
     private func detailChip(icon: String, text: String) -> some View {
@@ -359,7 +369,7 @@ struct PinDetailOverlay: View {
             Spacer()
 
             CircleActionButton(icon: "arrow.up.left.and.arrow.down.right", label: T("Large image"), size: 35) {
-                withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
+                enterImageMode()
             }
             .help(T("Large image"))
 

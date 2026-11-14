@@ -160,6 +160,7 @@ final class LanguageManager: ObservableObject {
         "Copy context": "复制上下文",
         "Exit selection": "退出选择",
         "Large image": "大图模式",
+        "Click to open large image": "单击打开大图",
         "Exit large image": "退出大图",
         "Use ← → to browse": "使用 ← → 切换",
         "Zoom": "缩放",

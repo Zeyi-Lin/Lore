@@ -12,12 +12,29 @@ struct RootView: View {
             Theme.paper
                 .ignoresSafeArea()
 
+            // The sidebar is one full-height plane: its tint starts at the
+            // window's top edge so the traffic-light strip belongs to the
+            // panel instead of floating in a separate title-bar band. The
+            // divider itself is drawn after the content (see below) so the
+            // sidebar's own background cannot cover it.
+            HStack(spacing: 0) {
+                Theme.parchment
+                    .frame(width: CantaLayout.sidebarWidth)
+                Color.clear
+            }
+            .ignoresSafeArea()
+
             GeometryReader { geometry in
-                let sidebarWidth: CGFloat = 246
+                let sidebarWidth = CantaLayout.sidebarWidth
                 let contentWidth = max(geometry.size.width - sidebarWidth, 0)
                 HStack(spacing: 0) {
+                    // The sidebar still clears the traffic lights, so it keeps
+                    // the title-bar inset; the content column lifts into that
+                    // band (its top row shares the row with the window
+                    // controls) so the library starts at the window's top edge.
                     SidebarView()
                         .frame(width: sidebarWidth)
+                        .padding(.top, CantaLayout.titlebarInset)
 
                     VStack(spacing: 0) {
                         TopBarView()
@@ -29,6 +46,18 @@ struct RootView: View {
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
                 .environment(\.cantaContentWidth, contentWidth)
             }
+            .ignoresSafeArea(edges: .top)
+
+            // Continuous sidebar edge: from the window's top edge all the way
+            // down, so the strip and the sidebar read as one piece.
+            HStack(spacing: 0) {
+                Theme.hairline
+                    .frame(width: 1)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, CantaLayout.sidebarWidth - 1)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
 
             if dropTargeted {
                 dropOverlay

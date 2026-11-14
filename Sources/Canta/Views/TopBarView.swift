@@ -26,9 +26,9 @@ struct TopBarView: View {
             .help(T("Capture a new pin"))
         }
         .padding(.horizontal, 30)
-        // Aligns the search row with the sidebar brand; keep in sync with
-        // SidebarView's brand top padding.
-        .padding(.top, 19)
+        // The content column lifts into the window's title-bar band, so the
+        // search row sits beside the traffic lights instead of below them.
+        .padding(.top, CantaLayout.contentTopPadding)
         .padding(.bottom, 8)
         .contentShape(Rectangle())
         .simultaneousGesture(
