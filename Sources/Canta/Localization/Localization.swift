@@ -87,6 +87,9 @@ final class LanguageManager: ObservableObject {
         "Agent Access": "Agent 访问",
         "Boards": "画板",
         "Boards appear here as you pin.": "收录内容后，画板会显示在这里。",
+        "Expand board group": "展开画板分组",
+        "Collapse board group": "收起画板分组",
+        "Use “/” to nest boards, e.g. Linear/Settings": "用 “/” 分级画板，例如 Linear/Settings",
         "VISUAL LIBRARY": "视觉图库",
         "Local library": "本地图库",
         "Local only": "仅本地",
@@ -95,6 +98,11 @@ final class LanguageManager: ObservableObject {
         "Keep Canta quiet, local, and ready for your agent.": "让 Canta 保持安静、本地，随时为你的 Agent 服务。",
         "Agent API": "Agent API",
         "Metadata and image streams for your coding agent.": "为编程 Agent 提供元数据与图片流。",
+        "Prefix the product name and nest with “/” — board=Linear/Settings files the pin under Linear in the sidebar.": "用产品名作为画板前缀，并用 “/” 分级 —— board=Linear/Settings 会把这张灵感收进侧边栏的 Linear 分组。",
+        "Allow metadata edits": "允许修改元数据",
+        "Agents can update titles, notes, boards, tags, and favorites through PATCH /api/v1/pins/{id}.": "Agent 可以通过 PATCH /api/v1/pins/{id} 修改标题、笔记、画板、标签与收藏。",
+        "Update pin metadata": "修改灵感元数据",
+        "Metadata edits are off": "元数据修改已关闭",
         "Agent API live": "Agent API 已启动",
         "API live": "API 已启动",
         "API stopped": "API 已停止",
@@ -154,6 +162,18 @@ final class LanguageManager: ObservableObject {
         "Large image": "大图模式",
         "Exit large image": "退出大图",
         "Use ← → to browse": "使用 ← → 切换",
+        "Zoom": "缩放",
+        "Zoom in · +": "放大 · +",
+        "Zoom out · −": "缩小 · −",
+        "Zoom · 100% fits the window": "缩放 · 100% 表示适应窗口",
+        "Rotate left · ⇧R": "向左旋转 · ⇧R",
+        "Rotate right · R": "向右旋转 · R",
+        "Mirror horizontally · M": "水平翻转 · M",
+        "Reset view · 0": "重置视图 · 0",
+        "Double-click to zoom · drag to pan": "双击缩放 · 拖拽平移",
+        "← → browse · scroll to zoom · drag to pan · R rotate · 0 reset": "← → 浏览 · 滚轮缩放 · 拖拽平移 · R 旋转 · 0 重置",
+        "Previous pin": "上一个灵感",
+        "Next pin": "下一个灵感",
         "Done": "完成",
         "%ld pins added to favorites": "已收藏 %ld 个灵感",
         "%ld pins removed from favorites": "已取消收藏 %ld 个灵感",
@@ -292,6 +312,7 @@ final class LanguageManager: ObservableObject {
         "Paste Image": "粘贴图片",
         "Capture Screenshot": "截取屏幕",
         "Copy Agent Context": "复制 Agent 上下文",
+        "Copy agent prompt": "复制 Agent 提示词",
         "Open Data Folder": "打开数据文件夹",
         "Canta Agent API Documentation": "Canta Agent API 文档",
         "Canta Agent API Documentation…": "Canta Agent API 文档…",
@@ -391,6 +412,12 @@ func localizedSourceLabel(_ source: String?) -> String? {
 }
 
 func localizedBoard(_ board: String) -> String {
+    let segments = BoardPath.segments(board)
+    guard segments.count > 1 else { return localizedBoardSegment(board) }
+    return segments.map(localizedBoardSegment).joined(separator: " / ")
+}
+
+private func localizedBoardSegment(_ board: String) -> String {
     switch board.lowercased() {
     case "web dashboards": return T("Web dashboards")
     case "mobile flows": return T("Mobile flows")

@@ -4,6 +4,7 @@
 # Usage:
 #   ./scripts/screenshot-app.sh gallery
 #   ./scripts/screenshot-app.sh agent
+#   ./scripts/screenshot-app.sh settings
 #   ./scripts/screenshot-app.sh capture
 #   ./scripts/screenshot-app.sh detail "Aurora"
 #   ./scripts/screenshot-app.sh batch
@@ -86,7 +87,12 @@ if [ "$(pgrep -x Canta | wc -l | tr -d ' ')" != "1" ]; then
   exit 1
 fi
 
-WINDOW_ID="$(.build/tools/window-id Canta | head -1 | awk '{print $1}')"
+if [ "$MODE" = "settings" ]; then
+  # The Settings panel is the narrowest Canta window; the main gallery is wide.
+  WINDOW_ID="$(.build/tools/window-id Canta | awk '{print $2"\t"$1}' | sort -t x -k1n | head -1 | awk -F '\t' '{print $2}')"
+else
+  WINDOW_ID="$(.build/tools/window-id Canta | head -1 | awk '{print $1}')"
+fi
 if [ -z "${WINDOW_ID:-}" ]; then
   echo "Canta window not found" >&2
   defaults delete studio.canta.library canta.debugShow >/dev/null 2>&1 || true

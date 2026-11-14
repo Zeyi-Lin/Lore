@@ -18,7 +18,7 @@ struct TopBarView: View {
             CircleActionButton(icon: "sparkles", size: 38) {
                 store.copyAgentContext()
             }
-            .help(T("Copy filtered pins as agent context"))
+            .help(T("Copy agent prompt"))
 
             CircleActionButton(icon: "plus", filled: true, size: 38) {
                 store.capturePresented = true
@@ -26,6 +26,8 @@ struct TopBarView: View {
             .help(T("Capture a new pin"))
         }
         .padding(.horizontal, 30)
+        // Aligns the search row with the sidebar brand; keep in sync with
+        // SidebarView's brand top padding.
         .padding(.top, 19)
         .padding(.bottom, 8)
         .contentShape(Rectangle())

@@ -3,13 +3,18 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(LibraryStore.self) private var store
     @State private var hoveredNav: LibrarySection?
-    @State private var hoveredBoard: String?
+    @State private var hoveredBoardKey: String?
+    /// Group keys the user has opened. Empty by default, so prefix groups
+    /// arrive folded into a single row ("收起").
+    @AppStorage("canta.expandedBoardGroups") private var expandedBoardGroups = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             brand
                 .padding(.horizontal, 20)
-                .padding(.top, 48)
+                // Aligns the brand row with the top bar content; keep in sync
+                // with TopBarView's top padding.
+                .padding(.top, 19)
 
             CantaButton(
                 title: T("Capture"),
@@ -42,8 +47,8 @@ struct SidebarView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 2) {
-                    ForEach(store.boardSummaries) { board in
-                        boardRow(board)
+                    ForEach(visibleBoardRows) { item in
+                        boardRow(item)
                     }
                     if store.boardSummaries.isEmpty {
                         Text(T("Boards appear here as you pin."))
@@ -70,6 +75,8 @@ struct SidebarView: View {
         .frame(width: 246)
         .background(Theme.parchment)
         .contentShape(Rectangle())
+        .onAppear { revealSelectedBoard() }
+        .onChange(of: store.selectedBoard) { _, _ in revealSelectedBoard() }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded { WindowZoom.toggle() }
         )
@@ -118,47 +125,143 @@ struct SidebarView: View {
         .onHover { hovering in hoveredNav = hovering ? section : (hoveredNav == section ? nil : hoveredNav) }
     }
 
-    private func boardRow(_ board: BoardSummary) -> some View {
-        let selected = store.section == .all && store.selectedBoard == board.name
-        let representative = store.representativePin(forBoard: board.name)
+    // MARK: - Hierarchical boards
 
-        return Button {
-            store.select(board: board.name)
-        } label: {
-            HStack(spacing: 9) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Theme.boardColor(board.name).opacity(0.14))
-                    if let representative {
-                        LibraryImage(paths: store.cardImageCandidates(for: representative), maxPixel: 64, contentMode: .fill)
-                    } else {
-                        Circle().fill(Theme.boardColor(board.name)).frame(width: 6, height: 6)
+    private struct BoardRowItem: Identifiable {
+        let node: BoardNode
+        let depth: Int
+        var id: String { node.id }
+    }
+
+    private var expandedGroups: Set<String> {
+        Set(expandedBoardGroups.split(separator: "\n").map(String.init))
+    }
+
+    private var visibleBoardRows: [BoardRowItem] {
+        var rows: [BoardRowItem] = []
+        let expanded = expandedGroups
+        func walk(_ nodes: [BoardNode], depth: Int) {
+            for node in nodes {
+                rows.append(BoardRowItem(node: node, depth: depth))
+                if !node.children.isEmpty, expanded.contains(node.id) {
+                    walk(node.children, depth: depth + 1)
+                }
+            }
+        }
+        walk(store.boardTree, depth: 0)
+        return rows
+    }
+
+    private func setGroup(_ key: String, expanded: Bool) {
+        var keys = expandedGroups
+        if expanded {
+            keys.insert(key)
+        } else {
+            keys.remove(key)
+        }
+        expandedBoardGroups = keys.sorted().joined(separator: "\n")
+    }
+
+    private func revealSelectedBoard() {
+        guard let board = store.selectedBoard else { return }
+        let ancestors = BoardPath.ancestorKeys(board)
+        guard !ancestors.isEmpty else { return }
+        var keys = expandedGroups
+        let before = keys.count
+        keys.formUnion(ancestors)
+        guard keys.count != before else { return }
+        expandedBoardGroups = keys.sorted().joined(separator: "\n")
+    }
+
+    private func boardRow(_ item: BoardRowItem) -> some View {
+        let node = item.node
+        let hasChildren = !node.children.isEmpty
+        let expanded = expandedGroups.contains(node.id)
+        let selected = node.boardName.map {
+            store.section == .all && store.selectedBoard?.caseInsensitiveCompare($0) == .orderedSame
+        } ?? false
+        let hovered = hoveredBoardKey == node.id
+        let depthInset = CGFloat(item.depth) * 13
+
+        return HStack(spacing: 0) {
+            if hasChildren {
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) {
+                        setGroup(node.id, expanded: !expanded)
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .frame(width: 17, height: 35)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PointerPlainButtonStyle())
+                .help(expanded ? T("Collapse board group") : T("Expand board group"))
+            } else {
+                Color.clear.frame(width: 17, height: 35)
+            }
+
+            Button {
+                if let board = node.boardName {
+                    store.select(board: board)
+                } else {
+                    withAnimation(.snappy(duration: 0.22)) {
+                        setGroup(node.id, expanded: !expanded)
                     }
                 }
-                .frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } label: {
+                HStack(spacing: 9) {
+                    boardIcon(node)
 
-                Text(localizedBoard(board.name))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(selected ? Theme.ink : Theme.inkSecondary)
-                    .lineLimit(1)
+                    Text(localizedBoard(node.title))
+                        .font(.system(size: 12, weight: node.isBoard ? .medium : .semibold))
+                        .foregroundStyle(selected ? Theme.ink : Theme.inkSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
 
-                Spacer(minLength: 4)
+                    Spacer(minLength: 4)
 
-                Text("\(board.count)")
-                    .font(Theme.mono(9.5, weight: .medium))
-                    .foregroundStyle(Theme.inkTertiary)
+                    Text("\(node.totalCount)")
+                        .font(Theme.mono(9.5, weight: .medium))
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+                .padding(.trailing, 9)
+                .frame(height: 35)
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
-            .padding(.horizontal, 9)
-            .frame(height: 35)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(selected ? Theme.parchmentDeep : (hoveredBoard == board.name ? Theme.parchmentDeep.opacity(0.5) : Color.clear))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .buttonStyle(PointerPlainButtonStyle())
         }
-        .buttonStyle(PointerPlainButtonStyle())
-        .onHover { hovering in hoveredBoard = hovering ? board.name : (hoveredBoard == board.name ? nil : hoveredBoard) }
+        .padding(.leading, 9 + depthInset)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(selected ? Theme.parchmentDeep : (hovered ? Theme.parchmentDeep.opacity(0.5) : Color.clear))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .onHover { hovering in
+            hoveredBoardKey = hovering ? node.id : (hoveredBoardKey == node.id ? nil : hoveredBoardKey)
+        }
+    }
+
+    @ViewBuilder
+    private func boardIcon(_ node: BoardNode) -> some View {
+        let accent = Theme.boardColor(node.segments.first ?? node.title)
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(accent.opacity(0.14))
+            if let board = node.boardName, let representative = store.representativePin(forBoard: board) {
+                LibraryImage(paths: store.cardImageCandidates(for: representative), maxPixel: 64, contentMode: .fill)
+            } else if node.children.isEmpty {
+                Circle().fill(accent).frame(width: 6, height: 6)
+            } else {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+        }
+        .frame(width: 22, height: 22)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     private var agentCard: some View {

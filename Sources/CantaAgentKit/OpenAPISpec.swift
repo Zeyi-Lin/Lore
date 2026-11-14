@@ -68,7 +68,7 @@ enum OpenAPISpec {
             parameters: [
                 queryParameter("q", description: "Case-insensitive text search across title, note, board, source label, kind, tags, and colours.", schema: ["type": "string"], example: "dashboard"),
                 queryParameter("tag", description: "Only pins carrying this tag (case-insensitive).", schema: ["type": "string"], example: "dark"),
-                queryParameter("board", description: "Only pins on this board (case-insensitive).", schema: ["type": "string"], example: "Web dashboards"),
+                queryParameter("board", description: "Only pins on this board (case-insensitive). Board names may nest with a slash: Linear/Settings is a child of the Linear group in the app.", schema: ["type": "string"], example: "Web dashboards"),
                 queryParameter("favorite", description: "Filter by favorite state.", schema: ["type": "boolean"]),
                 queryParameter("kind", description: "Only pins of this kind.", schema: ["type": "string"], example: "screenshot"),
                 queryParameter("sort", description: "Sort order. Defaults to recent.", schema: ["type": "string", "enum": ["recent", "oldest", "title"]], example: "recent"),
@@ -77,14 +77,17 @@ enum OpenAPISpec {
             ],
             responses: responses(primary: ["200": jsonResponse(description: "A page of enriched pins.", schema: ref("PinListResponse"))], errors: [400: "invalid_parameter when a query value is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
         ), post: createPinOperation())
-        paths["/api/v1/pins/{id}"] = pathItem(operation(
-            token: "getPin",
-            summary: "Single pin",
-            description: "Returns one enriched pin by its stable UUID.",
-            tags: ["Library"],
-            parameters: [pathParameter("id", description: "Stable pin UUID.")],
-            responses: responses(primary: ["200": jsonResponse(description: "The requested pin.", schema: ref("EnrichedPin"))], errors: [404: "pin_not_found when no pin has this id.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
-        ))
+        paths["/api/v1/pins/{id}"] = pathItem(
+            operation(
+                token: "getPin",
+                summary: "Single pin",
+                description: "Returns one enriched pin by its stable UUID.",
+                tags: ["Library"],
+                parameters: [pathParameter("id", description: "Stable pin UUID.")],
+                responses: responses(primary: ["200": jsonResponse(description: "The requested pin.", schema: ref("EnrichedPin"))], errors: [404: "pin_not_found when no pin has this id.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
+            ),
+            patch: updatePinOperation()
+        )
         paths["/api/v1/pins/{id}/image"] = pathItem(operation(
             token: "getPinImage",
             summary: "Pin image bytes",
@@ -99,7 +102,7 @@ enum OpenAPISpec {
         paths["/api/v1/boards"] = pathItem(operation(
             token: "getBoards",
             summary: "Boards with counts",
-            description: "Board names and pin counts, sorted by count descending then name.",
+            description: "Board names and pin counts, sorted by count descending then name. Names may contain a slash to nest: Linear/Settings and Linear/Onboarding fold into the Linear group in the app sidebar. The API returns the flat full names.",
             tags: ["Library"],
             responses: responses(primary: ["200": jsonResponse(description: "Board names with pin counts.", schema: ref("BoardsResponse"))], errors: [500: "library_unavailable or library_corrupt when library.json cannot be read."])
         ))
@@ -123,7 +126,7 @@ enum OpenAPISpec {
             description: "Returns markdown design context containing curated pin metadata and absolute image URLs, ready to paste into a coding agent prompt. Use board and/or tag to narrow the selection. When nothing matches, the document lists the available boards and tags.",
             tags: ["Library"],
             parameters: [
-                queryParameter("board", description: "Only include pins on this board.", schema: ["type": "string"], example: "Web dashboards"),
+                queryParameter("board", description: "Only include pins on this board (the full name, e.g. Linear/Settings).", schema: ["type": "string"], example: "Web dashboards"),
                 queryParameter("tag", description: "Only include pins carrying this tag.", schema: ["type": "string"], example: "dashboard"),
                 queryParameter("limit", description: "Maximum number of pins to include (1-100). Defaults to 20.", schema: ["type": "integer", "minimum": 1, "maximum": 100], example: 20)
             ],
@@ -133,7 +136,7 @@ enum OpenAPISpec {
         let info: [String: Any] = [
             "title": "Canta Agent API",
             "version": CantaAgentAPI.version,
-            "description": "Loopback-only HTTP API for the Canta visual design library. Canta serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. Read endpoints are read-only; POST /api/v1/pins adds pins and re-reads library.json on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
+            "description": "Loopback-only HTTP API for the Canta visual design library. Canta serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. Read endpoints are read-only; POST /api/v1/pins adds pins and PATCH /api/v1/pins/{id} updates pin metadata (title, note, board, tags, source, favorite, kind) when metadata edits are enabled in Canta Settings. The library is re-read on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
         ]
         let server: [String: Any] = [
             "url": baseURL,
@@ -141,7 +144,7 @@ enum OpenAPISpec {
         ]
         let tags: [[String: Any]] = [
             ["name": "System", "description": "Liveness and version information."],
-            ["name": "Library", "description": "Read-only access to pins, boards, tags, stats, images, and agent context."],
+            ["name": "Library", "description": "Access to pins, boards, tags, stats, images, and agent context. POST adds pins; PATCH updates pin metadata when the owner has it enabled."],
             ["name": "Discovery", "description": "Human and machine-readable documentation."]
         ]
         let document: [String: Any] = [
@@ -160,7 +163,7 @@ enum OpenAPISpec {
         let rawMetadata: [[String: Any]] = [
             queryParameter("title", description: "Pin title. Defaults to an \"Agent capture\" timestamp title.", schema: ["type": "string"], example: "Checkout flow"),
             queryParameter("note", description: "Design note stored with the pin.", schema: ["type": "string"]),
-            queryParameter("board", description: "Board name. Defaults to Unsorted.", schema: ["type": "string"], example: "Mobile flows"),
+            queryParameter("board", description: "Board name. Use Product/Screen to nest under a product group in the app, for example Linear/Settings. Defaults to Unsorted.", schema: ["type": "string"], example: "Linear/Settings"),
             queryParameter("tags", description: "Comma-separated tags; trimmed, lower-cased, and de-duplicated.", schema: ["type": "string"], example: "mobile,checkout"),
             queryParameter("sourceURL", description: "Optional source URL for the inspiration.", schema: ["type": "string"]),
             queryParameter("sourceLabel", description: "Optional source label. Defaults to Agent API.", schema: ["type": "string"], example: "Claude Code"),
@@ -239,13 +242,20 @@ enum OpenAPISpec {
         return result
     }
 
-    private static func pathItem(_ get: [String: Any], post: [String: Any]? = nil) -> [String: Any] {
+    private static func pathItem(
+        _ get: [String: Any],
+        post: [String: Any]? = nil,
+        patch: [String: Any]? = nil
+    ) -> [String: Any] {
         var item: [String: Any] = [
             "get": get,
             "head": headOperation(for: get)
         ]
         if let post {
             item["post"] = post
+        }
+        if let patch {
+            item["patch"] = patch
         }
         return item
     }
@@ -339,6 +349,32 @@ enum OpenAPISpec {
 
     // MARK: - Schemas
 
+    private static func updatePinOperation() -> [String: Any] {
+        operation(
+            token: "updatePin",
+            summary: "Update pin metadata",
+            description: "Partially updates a pin's metadata. Only the fields named in the JSON body change; nullable fields accept null to clear them. Image assets, dimensions, colours, id, and createdAt are preserved. The app owner can disable metadata edits in Canta Settings; PATCH then answers 403 metadata_edits_disabled.",
+            tags: ["Library"],
+            parameters: [pathParameter("id", description: "Stable pin UUID.")],
+            requestBody: [
+                "required": true,
+                "description": "JSON object with one or more metadata fields to update. Bodies are limited to 256 KiB.",
+                "content": ["application/json": ["schema": ref("UpdatePinRequest")]]
+            ],
+            responses: responses(
+                primary: ["200": jsonResponse(description: "The updated pin.", schema: ref("EnrichedPin"))],
+                errors: [
+                    400: "invalid_json, invalid_metadata, or unsupported_media_type when the payload is malformed, empty, contains unknown fields, or has a wrong value type.",
+                    403: "metadata_edits_disabled when metadata edits are turned off in Canta Settings.",
+                    404: "pin_not_found when no pin has this id.",
+                    413: "request_body_too_large when the JSON body exceeds 256 KiB.",
+                    415: "unsupported_media_type when the Content-Type is not application/json.",
+                    500: "library_unavailable, library_corrupt, or storage_failure when the library cannot be read or written."
+                ]
+            )
+        )
+    }
+
     private static func schemas() -> [String: Any] {
         let nullableString: [String: Any] = ["type": ["string", "null"]]
         let stringArray: [String: Any] = ["type": "array", "items": ["type": "string"]]
@@ -407,7 +443,7 @@ enum OpenAPISpec {
                 "createdAt": ["type": "string", "format": "date-time"],
                 "updatedAt": ["type": "string", "format": "date-time"],
                 "tags": stringArray,
-                "board": ["type": "string"],
+                "board": ["type": "string", "description": "Board the pin belongs to. A slash nests the board under a group in the app, e.g. Linear/Settings."],
                 "sourceURL": nullableString,
                 "sourceLabel": nullableString,
                 "colors": stringArray,
@@ -430,7 +466,7 @@ enum OpenAPISpec {
                 "mimeType": ["type": "string", "description": "Optional declared media type, for example image/png."],
                 "title": ["type": "string"],
                 "note": ["type": "string"],
-                "board": ["type": "string"],
+                "board": ["type": "string", "description": "Board the pin belongs to. Prefix the product name and nest with a slash, e.g. Linear/Settings."],
                 "tags": ["type": "array", "items": ["type": "string"]],
                 "sourceURL": nullableString,
                 "sourceLabel": nullableString,
@@ -438,6 +474,22 @@ enum OpenAPISpec {
                 "favorite": ["type": "boolean"]
             ],
             "required": ["imageBase64"]
+        ]
+        let nullableMetadataString: [String: Any] = ["type": ["string", "null"]]
+        let updatePinRequest: [String: Any] = [
+            "type": "object",
+            "description": "Partial pin metadata update. Include at least one field; nullable fields accept null to clear them.",
+            "additionalProperties": false,
+            "properties": [
+                "title": ["type": "string", "description": "Non-empty pin title."],
+                "note": nullableMetadataString,
+                "board": ["type": ["string", "null"], "description": "Full board name. Null or empty moves the pin to Unsorted. A slash nests the board under a group in the app."],
+                "tags": ["type": ["array", "null"], "items": ["type": "string"], "description": "Replaces all tags; trimmed, lower-cased, and de-duplicated."],
+                "sourceURL": nullableMetadataString,
+                "sourceLabel": nullableMetadataString,
+                "favorite": ["type": "boolean"],
+                "kind": ["type": "string", "enum": ["screenshot", "image"]]
+            ]
         ]
         let pinList: [String: Any] = [
             "type": "object",
@@ -482,6 +534,7 @@ enum OpenAPISpec {
             "NamedCount": namedCount,
             "EnrichedPin": enrichedPin,
             "CreatePinRequest": createPinRequest,
+            "UpdatePinRequest": updatePinRequest,
             "PinListResponse": pinList,
             "Library": library,
             "BoardsResponse": boards,

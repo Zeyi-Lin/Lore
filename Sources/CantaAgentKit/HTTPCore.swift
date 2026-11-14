@@ -117,7 +117,7 @@ struct HTTPResponse {
         head += "Server: CantaAgentKit/\(CantaAgentAPI.version)\r\n"
         head += "Date: \(HTTPDate.now())\r\n"
         head += "Access-Control-Allow-Origin: *\r\n"
-        head += "Access-Control-Allow-Methods: GET, HEAD, OPTIONS, POST\r\n"
+        head += "Access-Control-Allow-Methods: GET, HEAD, OPTIONS, POST, PATCH\r\n"
         head += "Access-Control-Allow-Headers: Accept, Content-Type, Origin\r\n"
         head += "Access-Control-Max-Age: 86400\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"

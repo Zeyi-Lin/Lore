@@ -85,6 +85,28 @@ struct SettingsView: View {
                                 .foregroundStyle(Theme.inkSecondary)
                         }
 
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(T("Allow metadata edits"))
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundStyle(Theme.ink)
+                                Text(T("Agents can update titles, notes, boards, tags, and favorites through PATCH /api/v1/pins/{id}."))
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(Theme.inkTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 12)
+                            Toggle("", isOn: Binding(
+                                get: { store.allowsAgentMetadataEdits },
+                                set: { store.setAgentMetadataEdits($0) }
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .tint(Theme.red)
+                            .pointerCursor()
+                        }
+
                         HStack(spacing: 7) {
                             SmallPillButton(title: T("Open docs"), icon: "book") { store.openAgentDocs() }
                             SmallPillButton(title: T("Copy endpoint"), icon: "doc.on.doc") {

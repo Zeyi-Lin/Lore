@@ -9,6 +9,7 @@ enum PinIngestError: Error {
     case invalidMetadata(String)
     case unsupportedMediaType(String)
     case storageFailure(String)
+    case pinNotFound(String)
 }
 
 /// A validated upload request, independent of HTTP representation.
@@ -23,6 +24,26 @@ struct NewPinRequest {
     var sourceLabel: String?
     var kind: String?
     var favorite: Bool?
+}
+
+/// One field of a metadata update: either a new value, or an explicit clear
+/// (JSON null) for nullable fields.
+enum PatchValue<Value> {
+    case set(Value)
+    case clear
+}
+
+/// A partial pin metadata update. Every property is `nil` when the field was
+/// absent from the request, so a PATCH only touches what it names.
+struct PinMetadataPatch {
+    var title: String?
+    var note: PatchValue<String>?
+    var board: PatchValue<String>?
+    var tags: PatchValue<[String]>?
+    var sourceURL: PatchValue<String>?
+    var sourceLabel: PatchValue<String>?
+    var favorite: Bool?
+    var kind: String?
 }
 
 /// Serializes writes into the Canta library and performs the full ingest
@@ -45,6 +66,83 @@ final class LibraryIngestor {
         try queue.sync {
             try createPinLocked(request)
         }
+    }
+
+    /// Applies a partial metadata update to an existing pin and rewrites
+    /// library.json atomically. Only metadata is touched: image assets,
+    /// dimensions, palette, id, and createdAt are preserved.
+    func updatePin(id: String, patch: PinMetadataPatch) throws -> CantaPinRecord {
+        try queue.sync {
+            let library = try store.loadLibrary()
+            guard let index = library.pins.firstIndex(where: { $0.id == id }) else {
+                throw PinIngestError.pinNotFound(id)
+            }
+            var pins = library.pins
+            let updated = Self.applying(patch, to: pins[index])
+            pins[index] = updated
+            let updatedLibrary = CantaLibraryFile(version: library.version, pins: pins)
+            do {
+                let encoded = try JSONCoding.encodePretty(updatedLibrary)
+                try encoded.write(to: store.libraryFileURL, options: [.atomic])
+            } catch {
+                throw PinIngestError.storageFailure("The pin metadata could not be saved: \(error.localizedDescription)")
+            }
+            onLibraryChanged?()
+            return updated
+        }
+    }
+
+    private static func applying(_ patch: PinMetadataPatch, to pin: CantaPinRecord) -> CantaPinRecord {
+        let title = patch.title.flatMap(normalizedText) ?? pin.title
+        let note: String
+        switch patch.note {
+        case .none: note = pin.note
+        case .clear: note = ""
+        case .set(let value): note = normalizedText(value) ?? ""
+        }
+        let board: String
+        switch patch.board {
+        case .none: board = pin.board
+        case .clear: board = "Unsorted"
+        case .set(let value): board = normalizedText(value) ?? "Unsorted"
+        }
+        let tags: [String]
+        switch patch.tags {
+        case .none: tags = pin.tags
+        case .clear: tags = []
+        case .set(let values): tags = normalizedTags(values)
+        }
+        let sourceURL: String?
+        switch patch.sourceURL {
+        case .none: sourceURL = pin.sourceURL
+        case .clear: sourceURL = nil
+        case .set(let value): sourceURL = normalizedText(value)
+        }
+        let sourceLabel: String?
+        switch patch.sourceLabel {
+        case .none: sourceLabel = pin.sourceLabel
+        case .clear: sourceLabel = nil
+        case .set(let value): sourceLabel = normalizedText(value)
+        }
+        return CantaPinRecord(
+            id: pin.id,
+            title: title,
+            note: note,
+            image: pin.image,
+            thumbnail: pin.thumbnail,
+            width: pin.width,
+            height: pin.height,
+            fileSize: pin.fileSize,
+            createdAt: pin.createdAt,
+            updatedAt: Timestamp.nowString(),
+            tags: tags,
+            board: board,
+            sourceURL: sourceURL,
+            sourceLabel: sourceLabel,
+            colors: pin.colors,
+            favorite: patch.favorite ?? pin.favorite,
+            kind: patch.kind ?? pin.kind
+        )
     }
 
     private func createPinLocked(_ request: NewPinRequest) throws -> CantaPinRecord {

@@ -26,6 +26,8 @@ final class LibraryStore {
     private(set) var agentStatus: AgentServerStatus = .stopped
     private(set) var agentPort: UInt16
     private(set) var agentAPIEnabled: Bool
+    /// Gates PATCH /api/v1/pins/{id}; the app's own editor is unaffected.
+    private(set) var allowsAgentMetadataEdits: Bool
 
     private var storedDefaultBoard: String
     var defaultBoard: String {
@@ -39,6 +41,7 @@ final class LibraryStore {
     private enum Keys {
         static let agentPort = "canta.agent.port"
         static let agentEnabled = "canta.agent.enabled"
+        static let agentMetadataEdits = "canta.agent.metadataEdits"
         static let defaultBoard = "canta.defaultBoard"
     }
 
@@ -82,6 +85,11 @@ final class LibraryStore {
             self.agentAPIEnabled = true
         } else {
             self.agentAPIEnabled = defaults.bool(forKey: Keys.agentEnabled)
+        }
+        if defaults.object(forKey: Keys.agentMetadataEdits) == nil {
+            self.allowsAgentMetadataEdits = true
+        } else {
+            self.allowsAgentMetadataEdits = defaults.bool(forKey: Keys.agentMetadataEdits)
         }
         self.storedDefaultBoard = defaults.string(forKey: Keys.defaultBoard) ?? "Unsorted"
 
@@ -159,6 +167,13 @@ final class LibraryStore {
     var boardSummaries: [BoardSummary] {
         _ = revision
         return projection.boardSummaries()
+    }
+
+    /// Hierarchical board rows for the sidebar: `Linear/Settings` boards fold
+    /// into a `Linear` group node.
+    var boardTree: [BoardNode] {
+        _ = revision
+        return projection.boardTree()
     }
 
     var allBoardNames: [String] {
@@ -366,9 +381,7 @@ final class LibraryStore {
 
     func openDetail(_ pin: Pin) {
         if isSelectingPins { endSelection() }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            selectedPinID = pin.id
-        }
+        selectedPinID = pin.id
         prefetchNeighbors(around: pin)
     }
 
@@ -380,9 +393,7 @@ final class LibraryStore {
     func dismissDetail() {
         // Leaving the detail is a natural save point for debounced edits.
         flushPersistence()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-            selectedPinID = nil
-        }
+        selectedPinID = nil
     }
 
     func showAdjacentPin(offset: Int) {
@@ -392,9 +403,7 @@ final class LibraryStore {
         let nextIndex = min(max(currentIndex + offset, 0), list.count - 1)
         guard nextIndex != currentIndex else { return }
         let next = list[nextIndex]
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-            selectedPinID = next.id
-        }
+        selectedPinID = next.id
         prefetchNeighbors(around: next)
     }
 
@@ -831,6 +840,18 @@ final class LibraryStore {
     // MARK: - Sharing / clipboard
 
     var agentBaseURL: String { "http://127.0.0.1:\(agentPort)" }
+
+    /// One short brief for any coding agent: what Canta is, and where to read the API.
+    /// Everything else (endpoints, filters, uploads) lives in the docs, so we don't restate it here.
+    var agentBrief: String {
+        let base = agentBaseURL
+        return """
+        Canta is a local visual reference library on this Mac — UI screenshots filed into boards, with tags, notes and palettes.
+        Docs: \(base)/docs
+        llms.txt: \(base)/llms.txt
+        Read the docs to learn how to query the library or add new screenshots.
+        """
+    }
     var agentDocsURL: URL? { URL(string: agentBaseURL + "/docs") }
     var agentContextURL: URL? { URL(string: agentBaseURL + "/api/v1/context") }
     var agentManifestURL: URL? { URL(string: agentBaseURL + "/llms.txt") }
@@ -856,14 +877,8 @@ final class LibraryStore {
 
     func agentContext(includePins subset: [Pin]? = nil) -> String {
         let chosen = subset ?? filteredPins
-        var lines: [String] = []
-        lines.append("# Canta design context")
-        lines.append("")
-        lines.append("A local visual reference library for building interfaces. Treat these as art direction, not code to copy verbatim.")
-        lines.append("")
-        lines.append("- API docs: \(agentBaseURL)/docs")
-        lines.append("- Full JSON library: \(agentBaseURL)/api/v1/library")
-        lines.append("- Pins in this context: \(chosen.count)")
+        var lines: [String] = [agentBrief, ""]
+        lines.append("## References in this context (\(chosen.count))")
         lines.append("")
         for pin in chosen {
             lines.append(agentSnippet(for: pin))
@@ -877,7 +892,7 @@ final class LibraryStore {
     }
 
     func copyAgentContext() {
-        copyText(agentContext(), message: T("Agent context copied"), icon: "sparkles")
+        copyText(agentBrief, message: T("Prompt copied"), icon: "sparkles")
     }
 
     func copyPinJSON(_ pin: Pin) {
@@ -960,7 +975,11 @@ final class LibraryStore {
         agentGeneration += 1
         let generation = agentGeneration
         let server = CantaAgentServer(
-            config: AgentServerConfig(port: agentPort, libraryRoot: root)
+            config: AgentServerConfig(
+                port: agentPort,
+                libraryRoot: root,
+                allowsMetadataEdits: allowsAgentMetadataEdits
+            )
         )
         server.onStatusChange = { [weak self] status in
             Task { @MainActor [weak self] in
@@ -1000,6 +1019,15 @@ final class LibraryStore {
             startAgentServerIfNeeded()
         } else {
             stopAgentServer()
+        }
+    }
+
+    func setAgentMetadataEdits(_ enabled: Bool) {
+        guard allowsAgentMetadataEdits != enabled else { return }
+        allowsAgentMetadataEdits = enabled
+        UserDefaults.standard.set(enabled, forKey: Keys.agentMetadataEdits)
+        if agentServer != nil || agentStatus.isRunning {
+            restartAgentServer()
         }
     }
 
@@ -1085,6 +1113,16 @@ final class LibraryStore {
         let pins = self.pins
         Task.detached(priority: .utility) {
             await CardThumbnailBackfill.run(root: root, pins: pins)
+        }
+    }
+
+    /// Warm a single detail image when the pointer rests on a card, so the
+    /// first paint after the click uses an already-decoded 1200 px image.
+    func prefetchDetail(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        let candidates = detailImageCandidates(for: pin)
+        Task.detached(priority: .utility) {
+            _ = await ImageLoader.shared.image(paths: candidates, maxPixel: 1200)
         }
     }
 

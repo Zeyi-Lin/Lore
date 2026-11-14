@@ -6,6 +6,9 @@ struct AgentRouter {
     let store: LibraryStore
     let ingestor: LibraryIngestor
     let portProvider: () -> UInt16
+    /// When false, PATCH /api/v1/pins/{id} answers 403 and the library stays
+    /// untouched. Toggled from Canta Settings.
+    let allowsMetadataEdits: Bool
     let responseCache = AgentResponseCache()
 
     // MARK: - Routing
@@ -85,24 +88,32 @@ struct AgentRouter {
         }
     }
 
-    /// Methods accepted by each route. The pins collection is the only route
-    /// with a write method.
+    /// Methods accepted by each route.
     private func allowedMethods(for route: Route) -> [String] {
         switch route {
         case .pins:
             return ["GET", "HEAD", "OPTIONS", "POST"]
+        case .pin:
+            return ["GET", "HEAD", "OPTIONS", "PATCH"]
         default:
             return ["GET", "HEAD", "OPTIONS"]
         }
     }
 
-    /// Body buffering policy used by the HTTP connection. Only pin creation
-    /// waits for a body; read endpoints answer from the head immediately.
+    /// Body buffering policy used by the HTTP connection. Pin creation and
+    /// metadata updates wait for a body; other routes answer from the head.
     func maxBodyBytes(for head: HTTPRequestHead) -> Int {
-        guard head.method == "POST", head.pathSegments == ["api", "v1", "pins"] else {
-            return 0
+        if head.method == "POST", head.pathSegments == ["api", "v1", "pins"] {
+            return CantaAgentAPI.maxUploadBytes
         }
-        return CantaAgentAPI.maxUploadBytes
+        if head.method == "PATCH",
+           head.pathSegments.count == 4,
+           head.pathSegments[0] == "api",
+           head.pathSegments[1] == "v1",
+           head.pathSegments[2] == "pins" {
+            return CantaAgentAPI.maxMetadataBytes
+        }
+        return 0
     }
 
     private static func response(for error: PinIngestError) -> HTTPResponse {
@@ -119,6 +130,8 @@ struct AgentRouter {
             return .error(status: 415, code: "unsupported_media_type", message: message)
         case .storageFailure(let message):
             return .error(status: 500, code: "storage_failure", message: message)
+        case .pinNotFound(let id):
+            return .error(status: 404, code: "pin_not_found", message: "No pin with id \"\(id)\" exists in the Canta library.")
         }
     }
 
@@ -225,6 +238,16 @@ struct AgentRouter {
             ))
 
         case .pin(let id):
+            if request.method == "PATCH" {
+                guard allowsMetadataEdits else {
+                    throw APIError(
+                        status: 403,
+                        code: "metadata_edits_disabled",
+                        message: "Metadata edits are turned off in Canta Settings. Enable \"Allow metadata edits\" to let agents update pins."
+                    )
+                }
+                return try updatePin(id: id, from: request, baseURL: baseURL)
+            }
             let pins = try store.loadLibrary().pins
             guard let pin = pins.first(where: { $0.id == id }) else {
                 throw APIError(status: 404, code: "pin_not_found", message: "No pin with id \"\(id)\" exists in the Canta library.")
@@ -407,6 +430,111 @@ struct AgentRouter {
         }
         if let bool = value as? Bool { return bool }
         throw PinIngestError.invalidMetadata("\"\(field)\" must be a boolean.")
+    }
+
+    // MARK: - Metadata updates
+
+    /// Editable pin fields. Anything else is rejected so typos cannot silently
+    /// do nothing.
+    private static let editableMetadataFields: Set<String> = [
+        "title", "note", "board", "tags", "sourceURL", "sourceLabel", "favorite", "kind"
+    ]
+
+    private func updatePin(id: String, from request: HTTPRequest, baseURL: String) throws -> HTTPResponse {
+        let patch = try parseMetadataPatch(from: request)
+        let pin = try ingestor.updatePin(id: id, patch: patch)
+        return .json(pin.enriched(baseURL: baseURL))
+    }
+
+    private func parseMetadataPatch(from request: HTTPRequest) throws -> PinMetadataPatch {
+        guard request.contentType == "application/json" else {
+            throw PinIngestError.unsupportedMediaType("PATCH requests must use Content-Type: application/json.")
+        }
+        guard !request.body.isEmpty else {
+            throw PinIngestError.malformedJSON("The PATCH request body is empty; send a JSON object with the fields to update.")
+        }
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: request.body)
+        } catch {
+            throw PinIngestError.malformedJSON("The request body is not valid JSON.")
+        }
+        guard let dictionary = object as? [String: Any] else {
+            throw PinIngestError.malformedJSON("The JSON request body must be an object.")
+        }
+        let keys = Set(dictionary.keys)
+        guard keys.isSubset(of: Self.editableMetadataFields) else {
+            let unknown = keys.subtracting(Self.editableMetadataFields).sorted().joined(separator: ", ")
+            throw PinIngestError.invalidMetadata("Unknown field(s): \(unknown). Editable fields: title, note, board, tags, sourceURL, sourceLabel, favorite, kind.")
+        }
+        guard !keys.isEmpty else {
+            throw PinIngestError.invalidMetadata("Provide at least one field to update: title, note, board, tags, sourceURL, sourceLabel, favorite, kind.")
+        }
+
+        var patch = PinMetadataPatch()
+        if keys.contains("title") {
+            if dictionary["title"] is NSNull {
+                throw PinIngestError.invalidMetadata("\"title\" cannot be null.")
+            }
+            guard let title = try optionalString(dictionary["title"], field: "title") else {
+                throw PinIngestError.invalidMetadata("\"title\" must be a non-empty string.")
+            }
+            patch.title = title
+        }
+        if keys.contains("note") {
+            patch.note = try patchString(dictionary["note"], field: "note")
+        }
+        if keys.contains("board") {
+            switch try patchString(dictionary["board"], field: "board") {
+            case .clear: patch.board = .clear
+            case .set(let value): patch.board = .set(value)
+            }
+        }
+        if keys.contains("tags") {
+            if dictionary["tags"] is NSNull {
+                patch.tags = .clear
+            } else {
+                patch.tags = .set(try stringArray(dictionary["tags"], field: "tags"))
+            }
+        }
+        if keys.contains("sourceURL") {
+            patch.sourceURL = try patchString(dictionary["sourceURL"], field: "sourceURL")
+        }
+        if keys.contains("sourceLabel") {
+            patch.sourceLabel = try patchString(dictionary["sourceLabel"], field: "sourceLabel")
+        }
+        if keys.contains("favorite") {
+            if dictionary["favorite"] is NSNull {
+                throw PinIngestError.invalidMetadata("\"favorite\" must be a boolean.")
+            }
+            guard let favorite = try optionalBool(dictionary["favorite"], field: "favorite") else {
+                throw PinIngestError.invalidMetadata("\"favorite\" must be a boolean.")
+            }
+            patch.favorite = favorite
+        }
+        if keys.contains("kind") {
+            if dictionary["kind"] is NSNull {
+                throw PinIngestError.invalidMetadata("\"kind\" cannot be null; use \"screenshot\" or \"image\".")
+            }
+            guard let raw = try optionalString(dictionary["kind"], field: "kind") else {
+                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\" or \"image\".")
+            }
+            let normalized = raw.lowercased()
+            guard normalized == "screenshot" || normalized == "image" else {
+                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\" or \"image\".")
+            }
+            patch.kind = normalized
+        }
+        return patch
+    }
+
+    private func patchString(_ value: Any?, field: String) throws -> PatchValue<String> {
+        if value is NSNull { return .clear }
+        guard let string = value as? String else {
+            throw PinIngestError.invalidMetadata("\"\(field)\" must be a string or null.")
+        }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? .clear : .set(trimmed)
     }
 
     // MARK: - Query parsing

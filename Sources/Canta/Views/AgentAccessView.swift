@@ -250,12 +250,22 @@ struct AgentAccessView: View {
                         store.copyText(uploadCommand, message: T("Command copied"), icon: "terminal")
                     }
                 }
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .padding(.top, 1)
+                    Text(T("Prefix the product name and nest with “/” — board=Linear/Settings files the pin under Linear in the sidebar."))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
 
     private var uploadCommand: String {
-        "curl -X POST \"\(store.agentBaseURL)/api/v1/pins?title=My%20capture&board=Unsorted\" \\\n  -H \"Content-Type: image/png\" \\\n  --data-binary @screenshot.png"
+        "curl -X POST \"\(store.agentBaseURL)/api/v1/pins?title=Settings&board=Linear%2FSettings\" \\\n  -H \"Content-Type: image/png\" \\\n  --data-binary @screenshot.png"
     }
 
     private var promptCard: some View {
@@ -264,13 +274,13 @@ struct AgentAccessView: View {
                 Text(T("Paste this into your coding agent to establish the reference loop."))
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.inkTertiary)
-                codeBlock("Read \(store.agentBaseURL)/api/v1/context and use the Canta references as art direction. For each component, match the palette and spacing language, not the code.", id: "prompt")
+                codeBlock(store.agentBrief, id: "prompt", lineLimit: 7)
                 HStack(spacing: 7) {
                     SmallPillButton(title: T("Copy prompt"), icon: "doc.on.doc") {
-                        store.copyText(promptText, message: T("Prompt copied"), icon: "sparkles")
+                        store.copyText(store.agentBrief, message: T("Prompt copied"), icon: "sparkles")
                     }
-                    SmallPillButton(title: T("Open llms.txt"), icon: "doc.text") {
-                        store.openAgentManifest()
+                    SmallPillButton(title: T("Open docs"), icon: "book") {
+                        store.openAgentDocs()
                     }
                 }
             }
@@ -281,6 +291,7 @@ struct AgentAccessView: View {
         AgentPanel(title: T("API SURFACE"), icon: "point.3.connected.trianglepath.dotted") {
             VStack(spacing: 0) {
                 endpointRow("POST", "/api/v1/pins", T("Add an image from an agent"))
+                endpointRow("PATCH", "/api/v1/pins/{id}", store.allowsAgentMetadataEdits ? T("Update pin metadata") : T("Metadata edits are off"))
                 endpointRow("GET", "/api/v1/library", T("Everything in one payload"))
                 endpointRow("GET", "/api/v1/pins", T("Filter by q, tag, board, favorite"))
                 endpointRow("GET", "/api/v1/pins/{id}", T("A single enriched pin"))
@@ -398,7 +409,7 @@ struct AgentAccessView: View {
         }
     }
 
-    private func codeBlock(_ text: String, id: String) -> some View {
+    private func codeBlock(_ text: String, id: String, lineLimit: Int = 3) -> some View {
         Button {
             store.copyText(text, message: T("Copied"), icon: "doc.on.doc")
             copiedBlock = id
@@ -411,7 +422,7 @@ struct AgentAccessView: View {
                     .font(Theme.mono(9.5, weight: .regular))
                     .foregroundStyle(Theme.inkSecondary)
                     .multilineTextAlignment(.leading)
-                    .lineLimit(3)
+                    .lineLimit(lineLimit)
                 Spacer(minLength: 4)
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 9, weight: .semibold))
@@ -424,10 +435,6 @@ struct AgentAccessView: View {
         }
         .buttonStyle(PointerPlainButtonStyle())
         .help(T("Copy"))
-    }
-
-    private var promptText: String {
-        "Read \(store.agentBaseURL)/api/v1/context and use these Canta references as art direction for the UI we build. For each component, match the palette, spacing, and type hierarchy rather than copying text or logos. Fetch images from the imageURL fields when you need to inspect a reference."
     }
 
     private var statusColor: Color {

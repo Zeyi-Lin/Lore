@@ -24,6 +24,8 @@ CACHE="$ROOT/.build/agent-smoke-cache"
 TMP="$WORK/tmp"
 PORT_FILE="$WORK/port.txt"
 SERVER_LOG="$WORK/server.log"
+DISABLED_PORT_FILE="$WORK/port-disabled.txt"
+DISABLED_LOG="$WORK/server-disabled.log"
 HARNESS="$WORK/harness/canta-agent-smoke"
 RUN_TESTS=0
 if [ "$#" -ge 1 ] && [ "$1" = "--tests" ]; then
@@ -41,10 +43,15 @@ export SWIFT_MODULECACHE_PATH="$CACHE/swift"
 export TMPDIR="$TMP"
 
 SERVER_PID=""
+DISABLED_PID=""
 cleanup() {
     if [ -n "$SERVER_PID" ]; then
         kill "$SERVER_PID" 2>/dev/null
         wait "$SERVER_PID" 2>/dev/null
+    fi
+    if [ -n "$DISABLED_PID" ]; then
+        kill "$DISABLED_PID" 2>/dev/null
+        wait "$DISABLED_PID" 2>/dev/null
     fi
     if [ "$KEEP_SMOKE_WORK" = "1" ]; then
         echo "Smoke-test work directory kept at $WORK"
@@ -170,7 +177,8 @@ guard arguments.count >= 3 else {
 }
 let libraryRoot = URL(fileURLWithPath: arguments[1], isDirectory: true)
 let portFile = URL(fileURLWithPath: arguments[2])
-let server = CantaAgentServer(config: AgentServerConfig(port: 0, libraryRoot: libraryRoot))
+let allowsMetadataEdits = ProcessInfo.processInfo.environment["CANTA_SMOKE_METADATA_EDITS"] != "0"
+let server = CantaAgentServer(config: AgentServerConfig(port: 0, libraryRoot: libraryRoot, allowsMetadataEdits: allowsMetadataEdits))
 server.onStatusChange = { status in
     switch status {
     case .running(let port):
@@ -228,8 +236,31 @@ fi
 BASE="http://127.0.0.1:$PORT"
 echo "    listening on $BASE"
 
+echo "==> Starting metadata-disabled server"
+CANTA_SMOKE_METADATA_EDITS=0 "$HARNESS" "$LIBRARY" "$DISABLED_PORT_FILE" > "$DISABLED_LOG" 2>&1 &
+DISABLED_PID=$!
+for _ in $(seq 1 300); do
+    if [ -s "$DISABLED_PORT_FILE" ]; then
+        break
+    fi
+    if ! kill -0 "$DISABLED_PID" 2>/dev/null; then
+        echo "    metadata-disabled server exited early:"
+        cat "$DISABLED_LOG"
+        exit 1
+    fi
+    sleep 0.05
+done
+DISABLED_PORT="$(cat "$DISABLED_PORT_FILE" 2>/dev/null)"
+if [ -z "$DISABLED_PORT" ]; then
+    echo "    metadata-disabled server did not report a port:"
+    cat "$DISABLED_LOG"
+    exit 1
+fi
+DISABLED_BASE="http://127.0.0.1:$DISABLED_PORT"
+echo "    listening on $DISABLED_BASE (metadata edits off)"
+
 echo "==> Running HTTP smoke checks"
-python3 - "$BASE" "$FIXTURE" "$LIBRARY" <<'PY'
+python3 - "$BASE" "$DISABLED_BASE" "$FIXTURE" "$LIBRARY" <<'PY'
 import base64
 import json
 import os
@@ -238,7 +269,7 @@ import sys
 import urllib.error
 import urllib.request
 
-base, fixture, library = sys.argv[1:4]
+base, disabled_base, fixture, library = sys.argv[1:5]
 png = open(os.path.join(fixture, "expected-png.bin"), "rb").read()
 jpeg = open(os.path.join(fixture, "expected-jpeg.bin"), "rb").read()
 secret = open(os.path.join(fixture, "secret-marker.txt"), "r", encoding="utf-8").read().strip()
@@ -258,11 +289,11 @@ def record(label, ok, detail=""):
         print("    FAIL  " + label + (("  (" + detail + ")") if detail else ""))
 
 
-def request(path, method="GET", data=None, content_type=None):
+def request(path, method="GET", data=None, content_type=None, root=None):
     headers = {}
     if content_type:
         headers["Content-Type"] = content_type
-    req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+    req = urllib.request.Request((root or base) + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
             return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
@@ -387,6 +418,7 @@ record("/docs uses Canta accent", "#E60023" in docs)
 record("/docs links OpenAPI", "/openapi.json" in docs)
 record("/docs has no external CDN", "https://cdn" not in docs and "fonts.googleapis" not in docs and "@import" not in docs)
 record("/docs mentions llms.txt", "/llms.txt" in docs)
+record("/docs mentions PATCH metadata edits", "PATCH" in docs and "metadata_edits_disabled" in docs)
 
 openapi_payload = expect_json("GET /openapi.json", "/openapi.json")
 record("OpenAPI version 3.1.0", openapi_payload.get("openapi") == "3.1.0", str(openapi_payload.get("openapi")))
@@ -395,6 +427,9 @@ required_paths = ["/health", "/api/v1/library", "/api/v1/pins", "/api/v1/pins/{i
 record("OpenAPI required paths", all(path in paths for path in required_paths), str(sorted(set(required_paths) - set(paths.keys()))))
 servers = openapi_payload.get("servers", [])
 record("OpenAPI server URL", bool(servers) and servers[0].get("url") == base, str(servers[:1]))
+pin_path = paths.get("/api/v1/pins/{id}", {})
+record("OpenAPI documents PATCH /api/v1/pins/{id}", "patch" in pin_path, str(sorted(pin_path.keys())))
+record("OpenAPI has UpdatePinRequest schema", "UpdatePinRequest" in openapi_payload.get("components", {}).get("schemas", {}))
 
 status, headers, body = request("/llms.txt")
 llms = body.decode("utf-8", "replace")
@@ -402,6 +437,8 @@ record("/llms.txt status", status == 200, str(status))
 record("/llms.txt plain text", "text/plain" in headers.get("content-type", ""), headers.get("content-type", ""))
 record("/llms.txt headline", llms.startswith("# Canta Agent API"))
 record("/llms.txt absolute links", base + "/api/v1/pins" in llms)
+record("/llms.txt documents PATCH", "PATCH" in llms and "metadata_edits_disabled" in llms)
+record("/llms.txt documents board hierarchy", "Board hierarchy" in llms)
 
 status, headers, body = request("/")
 record("/ landing status", status == 200, str(status))
@@ -412,6 +449,7 @@ status, headers, body = request("/api/v1/pins", method="OPTIONS")
 record("OPTIONS preflight 204", status == 204, str(status))
 record("CORS allow origin", headers.get("access-control-allow-origin") == "*", headers.get("access-control-allow-origin", ""))
 record("CORS allow methods", "GET" in headers.get("access-control-allow-methods", ""), headers.get("access-control-allow-methods", ""))
+record("CORS advertises PATCH", "PATCH" in headers.get("access-control-allow-methods", ""), headers.get("access-control-allow-methods", ""))
 status, headers, body = request("/health")
 record("GET CORS header", headers.get("access-control-allow-origin") == "*", headers.get("access-control-allow-origin", ""))
 record("GET connection close", headers.get("connection") == "close", headers.get("connection", ""))
@@ -531,6 +569,84 @@ record(
     b" 413 " in oversize_response.split(b"\r\n")[0] and b"request_body_too_large" in oversize_response,
     oversize_response[:160].decode("utf-8", "replace"),
 )
+
+# Metadata updates (edits enabled)
+print("  [metadata edits]")
+
+def patch_pin(pin_id, payload, root=None):
+    data = json.dumps(payload).encode("utf-8") if isinstance(payload, dict) else payload
+    return request("/api/v1/pins/" + pin_id, method="PATCH", data=data, content_type="application/json", root=root)
+
+status, headers, body = patch_pin(created_id, {
+    "title": "Settings — Linear",
+    "note": "Edited by the smoke test.",
+    "board": "Linear/Settings",
+    "tags": ["UPDATED", "updated", "settings"],
+    "sourceURL": None,
+    "favorite": True,
+})
+updated = json.loads(body) if status == 200 else {}
+record("PATCH -> 200", status == 200, str(status) + " " + body[:160].decode("utf-8", "replace"))
+record("PATCH title", updated.get("title") == "Settings — Linear", str(updated.get("title")))
+record("PATCH note", updated.get("note") == "Edited by the smoke test.", str(updated.get("note")))
+record("PATCH board", updated.get("board") == "Linear/Settings", str(updated.get("board")))
+record("PATCH tags normalized", updated.get("tags") == ["updated", "settings"], str(updated.get("tags")))
+record("PATCH clears nullable field", updated.get("sourceURL") is None, str(updated.get("sourceURL")))
+record("PATCH favorite", updated.get("favorite") is True, str(updated.get("favorite")))
+record("PATCH keeps imageURL", str(updated.get("imageURL", "")).startswith(base + "/api/v1/pins/"), str(updated.get("imageURL")))
+updated_detail = json.loads(request("/api/v1/pins/" + created_id)[2])
+record("PATCH persisted to GET detail", updated_detail.get("title") == "Settings — Linear" and updated_detail.get("board") == "Linear/Settings")
+nested_board = json.loads(request("/api/v1/pins?board=Linear%2FSettings")[2])
+record("PATCH board is filterable", nested_board.get("total") == 1 and nested_board.get("pins", [{}])[0].get("id") == created_id, str(nested_board.get("total")))
+status, headers, body = patch_pin(created_id, {"note": "cleared"})
+record("PATCH only named fields", status == 200 and json.loads(body).get("title") == "Settings — Linear", str(status))
+status, headers, body = patch_pin(created_id, {"note": None, "sourceLabel": None})
+record("PATCH null clears note", status == 200 and json.loads(body).get("note") == "" and json.loads(body).get("sourceLabel") is None, str(status))
+status, headers, body = patch_pin(created_id, {"kind": "image", "board": None})
+cleared_board = json.loads(body) if status == 200 else {}
+record("PATCH kind", cleared_board.get("kind") == "image", str(cleared_board.get("kind")))
+record("PATCH null board -> Unsorted", cleared_board.get("board") == "Unsorted", str(cleared_board.get("board")))
+# Restore a nested board for later checks.
+patch_pin(created_id, {"board": "Linear/Settings"})
+
+for label, payload, expected_status, expected_code in [
+    ("empty JSON", {}, 400, "invalid_metadata"),
+    ("unknown field", {"colour": "#000000"}, 400, "invalid_metadata"),
+    ("null title", {"title": None}, 400, "invalid_metadata"),
+    ("empty title", {"title": "   "}, 400, "invalid_metadata"),
+    ("bad kind", {"kind": "animation"}, 400, "invalid_metadata"),
+    ("bad tags", {"tags": "settings"}, 400, "invalid_metadata"),
+    ("bad favorite", {"favorite": "yes"}, 400, "invalid_metadata"),
+]:
+    status, headers, body = patch_pin(created_id, payload)
+    error = json.loads(body).get("error", {}) if body[:1] == b"{" else {}
+    record("PATCH invalid payload: " + label, status == expected_status and error.get("code") == expected_code, str(status) + " " + str(error.get("code")))
+
+status, headers, body = request("/api/v1/pins/" + created_id, method="PATCH", data=b"{ not json", content_type="application/json")
+record("PATCH malformed JSON -> 400 invalid_json", status == 400 and b"invalid_json" in body, str(status))
+status, headers, body = request("/api/v1/pins/" + created_id, method="PATCH", data=b"", content_type="application/json")
+record("PATCH empty body -> 400 invalid_json", status == 400 and b"invalid_json" in body, str(status))
+status, headers, body = request("/api/v1/pins/" + created_id, method="PATCH", data=b'{"title":"x"}', content_type="text/plain")
+record("PATCH wrong content type -> 415", status == 415 and b"unsupported_media_type" in body, str(status))
+status, headers, body = patch_pin("99999999-9999-4999-8999-999999999999", {"title": "Nowhere"})
+record("PATCH unknown pin -> 404 pin_not_found", status == 404 and b"pin_not_found" in body, str(status))
+status, headers, body = request("/api/v1/pins", method="PATCH", data=b'{"title":"x"}', content_type="application/json")
+record("PATCH collection -> 405", status == 405 and b"method_not_allowed" in body, str(status))
+status, headers, body = request("/api/v1/pins/" + created_id, method="OPTIONS")
+record("OPTIONS pin allows PATCH", status == 204 and "PATCH" in headers.get("allow", ""), headers.get("allow", ""))
+
+# Metadata edits disabled (second server, same library)
+print("  [metadata edits disabled]")
+status, headers, body = patch_pin(created_id, {"title": "Should not stick"}, root=disabled_base)
+error = json.loads(body).get("error", {}) if body[:1] == b"{" else {}
+record("disabled PATCH -> 403", status == 403, str(status) + " " + body[:160].decode("utf-8", "replace"))
+record("disabled PATCH code", error.get("code") == "metadata_edits_disabled", str(error.get("code")))
+status, headers, body = request("/api/v1/pins/" + created_id, root=disabled_base)
+record("disabled server still reads pins", status == 200 and b"Settings" in body, str(status))
+status, headers, body = request("/api/v1/pins/" + created_id, method="OPTIONS", root=disabled_base)
+record("disabled server still advertises PATCH", "PATCH" in headers.get("allow", ""), headers.get("allow", ""))
+status, headers, body = request("/api/v1/pins/" + created_id, root=base)
+record("main server title unchanged after disabled PATCH", b"Should not stick" not in body)
 
 final_library = json.loads(request("/api/v1/library")[2])
 record("final library has 10 pins", final_library.get("stats", {}).get("pins") == 10, str(final_library.get("stats", {}).get("pins")))

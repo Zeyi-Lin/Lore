@@ -72,4 +72,6 @@ bundle; only the PNG/JPEG artifacts and `seed.json` are runtime resources. Regen
 sources reproduces the same compositions.
 
 The app icon lives separately at `Sources/Canta/Resources/AppIcon/icon_1024.png` (1024×1024,
-opaque squircle, warm paper + signature red `#E60023`).
+transparent canvas: signature red `#E60023` squircle carrying the in-app brand mark — two tilted
+cards and the red heart). Regenerate it with `python3 scripts/make-app-icon.py`; the geometry mirrors
+`CantaMark` in `Sources/Canta/Design/Components.swift`.

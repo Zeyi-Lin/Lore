@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     @Environment(LibraryStore.self) private var store
+    @Environment(\.openSettings) private var openSettings
     @State private var dropTargeted = false
 
     var body: some View {
@@ -42,6 +43,7 @@ struct RootView: View {
         .tint(Theme.red)
         .focusEffectDisabled()
         .background(WindowConfigurator().frame(width: 0, height: 0))
+        .background(DetailPrewarm())
         .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $dropTargeted) { providers in
             DropReceiver.handle(providers: providers, store: store)
         }
@@ -92,6 +94,16 @@ struct RootView: View {
         switch mode {
         case "agent":
             store.select(section: .agent)
+        case "settings":
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                openSettings()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.windows
+                        .first { $0.canBecomeKey && $0.title.contains("Settings") }?
+                        .makeKeyAndOrderFront(nil)
+                }
+            }
         case "capture":
             store.capturePresented = true
         case "batch":
@@ -178,7 +190,7 @@ private struct DetailLayer: View {
                     .zIndex(7)
             }
         }
-        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: store.selectedPinID)
+        .animation(.easeOut(duration: 0.16), value: store.selectedPinID)
     }
 }
 
@@ -214,5 +226,19 @@ private struct ToastLayer: View {
         }
         .zIndex(9)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.toast?.id)
+    }
+}
+
+/// Warms AppKit's scroll-view machinery once at launch so the first detail
+/// open does not pay the NSScrollView creation cost on the critical frame.
+private struct DetailPrewarm: View {
+    var body: some View {
+        ScrollView(.vertical) {
+            Color.clear.frame(height: 600)
+        }
+        .frame(width: 240, height: 240)
+        .opacity(0.001)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

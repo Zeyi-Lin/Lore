@@ -12,6 +12,11 @@ struct PinDetailOverlay: View {
     @State private var showBoardMenu = false
     @State private var isImageMode = UserDefaults.standard.bool(forKey: "canta.debugLargeImage")
     @State private var keyMonitor: Any?
+    @State private var detailStage = 0
+    @State private var isEditingTitle = false
+    @State private var isEditingNote = false
+    @FocusState private var titleFieldFocused: Bool
+    @FocusState private var noteFieldFocused: Bool
 
     var body: some View {
         GeometryReader { geo in
@@ -23,47 +28,56 @@ struct PinDetailOverlay: View {
                     .ignoresSafeArea()
                     .onTapGesture {
                         if isImageMode {
-                            withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                            exitImageMode()
                         } else {
                             store.dismissDetail()
                         }
                     }
 
                 if isImageMode {
-                    imageOnlyLayer
+                    LargeImageViewer(pin: pin, onExit: exitImageMode)
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 } else {
                     regularCard(width: width, height: height)
                         .transition(.opacity)
-                }
 
-                if store.filteredPins.count > 1 {
-                    HStack {
-                        navButton(icon: "chevron.left", offset: -1)
-                            .padding(.leading, 22)
-                        Spacer()
-                        navButton(icon: "chevron.right", offset: 1)
-                            .padding(.trailing, 22)
+                    if store.filteredPins.count > 1 {
+                        HStack {
+                            navButton(icon: "chevron.left", offset: -1)
+                                .padding(.leading, 22)
+                            Spacer()
+                            navButton(icon: "chevron.right", offset: 1)
+                                .padding(.trailing, 22)
+                        }
+                        .frame(width: geo.size.width)
                     }
-                    .frame(width: geo.size.width)
-                }
-
-                if isImageMode {
-                    imageModeChrome
-                        .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.975)))
+        .transition(.opacity)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 NSApp.keyWindow?.makeFirstResponder(nil)
             }
             installKeyMonitor()
             store.prefetchNeighbors(around: pin)
+            if detailStage == 0 {
+                // Let the lightweight shell commit its first frame before the
+                // metadata editor and the heavier sections are built.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    detailStage = 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+                        detailStage = 2
+                    }
+                }
+            }
         }
         .onChange(of: pin.id) { _, _ in
+            titleFieldFocused = false
+            noteFieldFocused = false
+            isEditingTitle = false
+            isEditingNote = false
             store.prefetchNeighbors(around: pin)
         }
         .onDisappear {
@@ -73,8 +87,16 @@ struct PinDetailOverlay: View {
             }
         }
         .onExitCommand {
+            if isEditingTitle {
+                isEditingTitle = false
+                return
+            }
+            if isEditingNote {
+                isEditingNote = false
+                return
+            }
             if isImageMode {
-                withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                exitImageMode()
             } else {
                 store.dismissDetail()
             }
@@ -121,82 +143,26 @@ struct PinDetailOverlay: View {
         .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
     }
 
-    private var imageOnlyLayer: some View {
-        GeometryReader { proxy in
-            let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 130, height: proxy.size.height - 130))
-            LibraryImage(paths: store.largeImageCandidates(for: pin), maxPixel: 0, contentMode: .fit)
-                .frame(width: fitted.width, height: fitted.height)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.55), radius: 50, x: 0, y: 22)
-                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-                .onTapGesture(count: 2) {
-                    withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
-                }
-                .pointerCursor()
-        }
-        .ignoresSafeArea()
-    }
-
-    private var imageModeChrome: some View {
-        ZStack {
-            VStack {
-                HStack {
-                    if let index = store.filteredPins.firstIndex(where: { $0.id == pin.id }) {
-                        Text("\(index + 1) / \(store.filteredPins.count)")
-                            .font(Theme.mono(10, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.72))
-                            .padding(.horizontal, 9)
-                            .frame(height: 26)
-                            .background(Capsule().fill(Color.black.opacity(0.32)))
-                    }
-                    Spacer()
-                    HStack(spacing: 10) {
-                        overlayCircleButton(icon: "arrow.down.right.and.arrow.up.left", help: T("Exit large image")) {
-                            withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
-                        }
-                        overlayCircleButton(icon: "xmark", help: T("Close")) {
-                            store.dismissDetail()
-                        }
-                    }
-                }
-                .padding(.horizontal, 26)
-                .padding(.top, 40)
-
-                Spacer()
-
-                Text(T("Use ← → to browse"))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.52))
-                    .padding(.horizontal, 11)
-                    .frame(height: 25)
-                    .background(Capsule().fill(Color.black.opacity(0.28)))
-                    .padding(.bottom, 28)
-            }
-        }
-    }
-
-    private func overlayCircleButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.9))
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(Color.black.opacity(0.38)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
-                .background(.ultraThinMaterial, in: Circle())
-        }
-        .buttonStyle(PressableStyle())
-        .help(help)
+    private func exitImageMode() {
+        withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
     }
 
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
+            if event.keyCode == 53 {
+                if isEditingTitle {
+                    titleFieldFocused = false
+                    isEditingTitle = false
+                    return nil
+                }
+                if isEditingNote {
+                    noteFieldFocused = false
+                    isEditingNote = false
+                    return nil
+                }
+            }
             if let responder = NSApp.keyWindow?.firstResponder,
                responder is NSTextView || responder is NSTextField {
                 return event
@@ -212,7 +178,7 @@ struct PinDetailOverlay: View {
                 return nil
             case 53:
                 if isImageMode {
-                    withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                    exitImageMode()
                 } else {
                     store.dismissDetail()
                 }
@@ -240,23 +206,28 @@ struct PinDetailOverlay: View {
                 endRadius: 430
             )
 
-            GeometryReader { proxy in
-                let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 54, height: proxy.size.height - 54))
-                LibraryImage(paths: store.detailImageCandidates(for: pin), maxPixel: 1200, contentMode: .fit)
-                    .frame(width: fitted.width, height: fitted.height)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+            Color.clear
+                .aspectRatio(max(pin.aspectRatio, 0.05), contentMode: .fit)
+                .overlay {
+                    LibraryImage(
+                        paths: store.detailImageCandidates(for: pin),
+                        maxPixel: 1200,
+                        placeholderPaths: store.cardImageCandidates(for: pin),
+                        placeholderMaxPixel: 640,
+                        contentMode: .fill
                     )
-                    .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
-                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-                    .onTapGesture(count: 2) {
-                        withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
-                    }
-                    .pointerCursor()
-            }
-            .padding(27)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
+                .padding(27)
+                .onTapGesture(count: 2) {
+                    withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
+                }
+                .pointerCursor()
 
             VStack {
                 HStack {
@@ -293,18 +264,6 @@ struct PinDetailOverlay: View {
         .clipped()
     }
 
-    private func fittedImageSize(in available: CGSize) -> CGSize {
-        guard available.width > 1, available.height > 1 else { return available }
-        let ratio = max(pin.aspectRatio, 0.3)
-        var width = available.width
-        var height = width / ratio
-        if height > available.height {
-            height = available.height
-            width = height * ratio
-        }
-        return CGSize(width: width, height: height)
-    }
-
     private func detailChip(icon: String, text: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
@@ -323,29 +282,74 @@ struct PinDetailOverlay: View {
 
     private var metaPane: some View {
         VStack(spacing: 0) {
-            actionRow
-                .padding(.horizontal, 26)
-                .padding(.top, 24)
-                .padding(.bottom, 16)
+            Group {
+                if detailStage >= 1 {
+                    actionRow
+                } else {
+                    HStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Theme.parchment)
+                            .frame(width: 92, height: 24)
+                        Spacer()
+                        Circle().fill(Theme.parchment).frame(width: 30, height: 30)
+                        Circle().fill(Theme.parchment).frame(width: 30, height: 30)
+                        Circle().fill(Theme.parchment).frame(width: 30, height: 30)
+                    }
+                    .frame(height: 35)
+                    .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 26)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
 
             Hairline()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 21) {
-                    titleSection
-                    noteSection
-                    tagsSection
-                    paletteSection
-                    agentSection
-                    metadataSection
-                    footerActions
-                }
-                .padding(.horizontal, 26)
-                .padding(.top, 20)
-                .padding(.bottom, 26)
+                metaSections
             }
         }
         .background(Theme.paper)
+    }
+
+    @ViewBuilder
+    private var metaSections: some View {
+        VStack(alignment: .leading, spacing: 21) {
+            titleSection
+
+            if detailStage >= 1 {
+                noteSection
+                tagsSection
+            } else {
+                detailSkeleton(rows: 4)
+            }
+
+            if detailStage >= 2 {
+                paletteSection
+                agentSection
+                metadataSection
+                footerActions
+            } else {
+                detailSkeleton(rows: 8)
+            }
+        }
+        .padding(.horizontal, 26)
+        .padding(.top, 20)
+        .padding(.bottom, 26)
+    }
+
+    /// Cheap placeholder for the deferred metadata sections, so the first
+    /// frame does not lay out the full editor.
+    private func detailSkeleton(rows: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(0..<rows, id: \.self) { row in
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Theme.parchment.opacity(row.isMultiple(of: 3) ? 0.9 : 0.55))
+                    .frame(width: row.isMultiple(of: 3) ? 140 : 230, height: 10)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityHidden(true)
     }
 
     private var actionRow: some View {
@@ -480,12 +484,35 @@ struct PinDetailOverlay: View {
 
     private var titleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField(T("Untitled pin"), text: titleBinding, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 26, weight: .bold))
-                .tracking(-0.9)
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1...3)
+            if isEditingTitle {
+                TextField(T("Untitled pin"), text: titleBinding, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 26, weight: .bold))
+                    .tracking(-0.9)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1...3)
+                    .focused($titleFieldFocused)
+                    .onAppear {
+                        DispatchQueue.main.async { titleFieldFocused = true }
+                    }
+                    .onSubmit {
+                        titleFieldFocused = false
+                        isEditingTitle = false
+                    }
+                    .onChange(of: titleFieldFocused) { _, focused in
+                        if !focused { isEditingTitle = false }
+                    }
+            } else {
+                Text(pin.title.isEmpty ? T("Untitled pin") : pin.title)
+                    .font(.system(size: 26, weight: .bold))
+                    .tracking(-0.9)
+                    .foregroundStyle(pin.title.isEmpty ? Theme.inkTertiary : Theme.ink)
+                    .lineLimit(1...3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { isEditingTitle = true }
+                    .help(T("Click to edit"))
+            }
 
             HStack(spacing: 7) {
                 if let sourceLabel = localizedSourceLabel(pin.sourceLabel) {
@@ -509,31 +536,38 @@ struct PinDetailOverlay: View {
             .foregroundStyle(Theme.inkTertiary)
 
             if showNewBoardField {
-                HStack(spacing: 6) {
-                    TextField(T("New board name"), text: $newBoardName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11.5))
-                        .padding(.horizontal, 10)
-                        .frame(height: 29)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.parchment))
-                    Button(T("Move")) {
-                        let name = newBoardName.trimmed
-                        guard !name.isEmpty else { return }
-                        store.movePin(pin.id, toBoard: name)
-                        newBoardName = ""
-                        showNewBoardField = false
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        TextField(T("New board name"), text: $newBoardName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11.5))
+                            .padding(.horizontal, 10)
+                            .frame(height: 29)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.parchment))
+                            .help(T("Use “/” to nest boards, e.g. Linear/Settings"))
+                        Button(T("Move")) {
+                            let name = newBoardName.trimmed
+                            guard !name.isEmpty else { return }
+                            store.movePin(pin.id, toBoard: name)
+                            newBoardName = ""
+                            showNewBoardField = false
+                        }
+                        .buttonStyle(PointerPlainButtonStyle())
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.red)
+                        Button {
+                            showNewBoardField = false
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Theme.inkTertiary)
+                        }
+                        .buttonStyle(PointerPlainButtonStyle())
                     }
-                    .buttonStyle(PointerPlainButtonStyle())
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.red)
-                    Button {
-                        showNewBoardField = false
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Theme.inkTertiary)
-                    }
-                    .buttonStyle(PointerPlainButtonStyle())
+                    Text(T("Use “/” to nest boards, e.g. Linear/Settings"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .padding(.leading, 2)
                 }
             }
         }
@@ -542,22 +576,45 @@ struct PinDetailOverlay: View {
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel(text: T("Design note"))
-            TextField(T("What makes this worth copying? Layout, type, color…"), text: noteBinding, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.inkSecondary)
-                .lineSpacing(3)
-                .lineLimit(2...6)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Theme.parchment)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Theme.hairline.opacity(0.8), lineWidth: 1)
-                )
+            Group {
+                if isEditingNote {
+                    TextField(T("What makes this worth copying? Layout, type, color…"), text: noteBinding, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .focused($noteFieldFocused)
+                        .onAppear {
+                            DispatchQueue.main.async { noteFieldFocused = true }
+                        }
+                        .onSubmit {
+                            noteFieldFocused = false
+                            isEditingNote = false
+                        }
+                        .onChange(of: noteFieldFocused) { _, focused in
+                            if !focused { isEditingNote = false }
+                        }
+                } else {
+                    Text(pin.note.isEmpty
+                         ? T("What makes this worth copying? Layout, type, color…")
+                         : pin.note)
+                        .foregroundStyle(pin.note.isEmpty ? Theme.inkTertiary : Theme.inkSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isEditingNote = true }
+                        .help(T("Click to edit"))
+                }
+            }
+            .font(.system(size: 12))
+            .lineSpacing(3)
+            .lineLimit(2...6)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.parchment)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.hairline.opacity(0.8), lineWidth: 1)
+            )
         }
     }
 

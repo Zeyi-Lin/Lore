@@ -252,22 +252,60 @@ struct SectionLabel: View {
 struct LibraryImage: View {
     var paths: [String]
     var maxPixel: Int = 640
+    /// Low-resolution image shown immediately while the target decodes.
+    var placeholderPaths: [String] = []
+    var placeholderMaxPixel: Int = 640
     var contentMode: ContentMode = .fill
     var placeholderIcon: String = "photo"
 
     @State private var image: CGImage?
+    @State private var placeholderImage: CGImage?
     @State private var failed = false
+    @State private var loadedKey: String = ""
+    @State private var placeholderKey: String = ""
+
+    init(
+        paths: [String],
+        maxPixel: Int = 640,
+        placeholderPaths: [String] = [],
+        placeholderMaxPixel: Int = 640,
+        contentMode: ContentMode = .fill,
+        placeholderIcon: String = "photo"
+    ) {
+        self.paths = paths
+        self.maxPixel = maxPixel
+        self.placeholderPaths = placeholderPaths
+        self.placeholderMaxPixel = placeholderMaxPixel
+        self.contentMode = contentMode
+        self.placeholderIcon = placeholderIcon
+
+        let key = "\(maxPixel)|" + paths.joined(separator: "|")
+        let cached = ImageLoader.shared.cachedImage(paths: paths, maxPixel: maxPixel)
+        let cachedLow = placeholderPaths.isEmpty
+            ? nil
+            : ImageLoader.shared.cachedImage(paths: placeholderPaths, maxPixel: placeholderMaxPixel)
+        _image = State(initialValue: cached)
+        _placeholderImage = State(initialValue: cachedLow)
+        _loadedKey = State(initialValue: cached == nil ? "" : key)
+        _placeholderKey = State(initialValue: cachedLow == nil ? "" : key)
+    }
 
     private var loadKey: String { "\(maxPixel)|" + paths.joined(separator: "|") }
 
     var body: some View {
         ZStack {
             Rectangle().fill(Theme.parchmentDeep)
-            if let image {
+            if let image, loadedKey == loadKey {
                 Image(decorative: image, scale: 2)
                     .resizable()
                     .interpolation(.medium)
                     .aspectRatio(contentMode: contentMode)
+            } else if let placeholderImage, placeholderKey == loadKey {
+                Image(decorative: placeholderImage, scale: 2)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: contentMode)
+                    .transition(.opacity)
             } else if failed {
                 VStack(spacing: 8) {
                     Image(systemName: "photo.badge.exclamationmark")
@@ -283,12 +321,34 @@ struct LibraryImage: View {
             }
         }
         .task(id: loadKey) {
-            image = nil
+            if loadKey == loadedKey, image != nil { return }
             failed = false
+
+            if let cached = ImageLoader.shared.cachedImage(paths: paths, maxPixel: maxPixel) {
+                image = cached
+                loadedKey = loadKey
+                return
+            }
+
+            image = nil
+            if placeholderPaths.isEmpty {
+                placeholderImage = nil
+            } else if let cachedLow = ImageLoader.shared.cachedImage(
+                paths: placeholderPaths, maxPixel: placeholderMaxPixel
+            ) {
+                placeholderImage = cachedLow
+            } else {
+                placeholderImage = nil
+                let low = await ImageLoader.shared.image(paths: placeholderPaths, maxPixel: placeholderMaxPixel)
+                guard !Task.isCancelled else { return }
+                placeholderImage = low
+            }
+
             let loaded = await ImageLoader.shared.image(paths: paths, maxPixel: maxPixel)
             guard !Task.isCancelled else { return }
             if let loaded {
                 image = loaded
+                loadedKey = loadKey
             } else {
                 failed = true
             }

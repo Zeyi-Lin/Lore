@@ -182,7 +182,7 @@ footer strong { color: var(--ink); }
 
   <section class="section" id="quickstart">
     <div class="section-head"><h2>Quickstart</h2></div>
-    <p class="section-sub">Six requests get an agent from "is Canta running?" to a design brief with reference images — including adding new references from an agent workflow.</p>
+    <p class="section-sub">Seven requests get an agent from "is Canta running?" to a design brief with reference images — including adding new references and editing their metadata from an agent workflow.</p>
     <div class="grid">
       <article class="card">
         <h3><span class="step">1</span>Check the server</h3>
@@ -229,12 +229,23 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
       </article>
       <article class="card">
         <h3><span class="step">6</span>Add a pin (raw image)</h3>
-        <p>Stream the file directly with an <span class="inline-code">image/*</span> Content-Type and metadata as query parameters. Great for large screenshots; 20 MiB limit.</p>
+        <p>Stream the file directly with an <span class="inline-code">image/*</span> Content-Type and metadata as query parameters. Great for large screenshots; 20 MiB limit. Prefix the board with the product name (<span class="inline-code">Linear/Settings</span>) so captures file under that product's group.</p>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-create-raw">Copy</button></div>
-          <pre id="snip-create-raw"><code>curl -s -X POST --data-binary @shot.png \\
+          <pre id="snip-create-raw"><code>curl -s -X POST --data-binary @settings.png \\
   -H "Content-Type: image/png" \\
-  "\(baseURL)/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" | jq</code></pre>
+  "\(baseURL)/api/v1/pins?title=Settings&board=Linear%2FSettings&tags=settings,linear" | jq</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <h3><span class="step">7</span>Edit pin metadata</h3>
+        <p>Send only the fields you want to change: title, note, board, tags, source, favorite, or kind. Null clears a nullable field. The owner can switch this off in Settings.</p>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-update">Copy</button></div>
+          <pre id="snip-update"><code>curl -s -X PATCH "\(baseURL)/api/v1/pins/&lt;pin-id&gt;" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title": "Settings — Linear", "board": "Linear/Settings", "tags": ["settings", "linear"]}' \\
+  | jq '{id, title, board, updatedAt}'</code></pre>
         </div>
       </article>
     </div>
@@ -253,9 +264,10 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/library</code></td><td><code>application/json</code></td><td>Full enriched library: stats, boards, tags, and every pin.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins</code></td><td><code>application/json</code></td><td>Filtered, sorted, paginated pin list with <span class="inline-code">count</span>, <span class="inline-code">total</span>, <span class="inline-code">offset</span>, <span class="inline-code">limit</span>.</td></tr>
           <tr><td><span class="method method-post">POST</span></td><td><code>/api/v1/pins</code></td><td><code>application/json</code></td><td>Add a pin: JSON <span class="inline-code">imageBase64</span> body, or raw <span class="inline-code">image/*</span> body with metadata query parameters. Returns <span class="inline-code">201</span> and a <span class="inline-code">Location</span> header.</td></tr>
+          <tr><td><span class="method method-post">PATCH</span></td><td><code>/api/v1/pins/{id}</code></td><td><code>application/json</code></td><td>Update metadata: title, note, board, tags, source, favorite, or kind. Null clears a nullable field. Returns the updated pin, or <span class="inline-code">403 metadata_edits_disabled</span> when the owner turned edits off.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}</code></td><td><code>application/json</code></td><td>A single enriched pin, or a 404 JSON error.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}/image</code></td><td><code>image/png</code> · <code>image/jpeg</code> · …</td><td>Raw image bytes. <span class="inline-code">variant=original|thumb</span>, defaults to original.</td></tr>
-          <tr><td><span class="method">GET</span></td><td><code>/api/v1/boards</code></td><td><code>application/json</code></td><td>Board names with pin counts.</td></tr>
+          <tr><td><span class="method">GET</span></td><td><code>/api/v1/boards</code></td><td><code>application/json</code></td><td>Board names with pin counts. A <code>/</code> in a name nests it under a group in the app — <code>Linear/Settings</code> folds into <code>Linear</code>.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/tags</code></td><td><code>application/json</code></td><td>Tag names with pin counts.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/stats</code></td><td><code>application/json</code></td><td>Library counters: pins, boards, tags, favorites, images.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/context</code></td><td><code>text/markdown</code></td><td>Paste-ready design context with absolute image URLs. <span class="inline-code">board=</span>, <span class="inline-code">tag=</span>, optional <span class="inline-code">limit=</span>.</td></tr>
@@ -335,8 +347,22 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \\
           <pre id="ex-create-json"><code>B64=$(base64 -i shot.png)
 curl -s -X POST "\(baseURL)/api/v1/pins" \\
   -H "Content-Type: application/json" \\
-  -d "{\\\"imageBase64\\\": \\\"$B64\\\", \\\"title\\\": \\\"Checkout flow\\\", \\\"board\\\": \\\"Mobile flows\\\", \\\"tags\\\": [\\\"mobile\\\", \\\"checkout\\\"], \\\"favorite\\\": true}" \\
+  -d "{\\\"imageBase64\\\": \\\"$B64\\\", \\\"title\\\": \\\"Settings\\\", \\\"board\\\": \\\"Linear/Settings\\\", \\\"tags\\\": [\\\"settings\\\", \\\"linear\\\"], \\\"favorite\\\": true}" \\
   | jq '{id, title, width, height, colors, imageURL}'</code></pre>
+        </div>
+        <div class="note" style="margin-top:18px">
+          <strong>Board hierarchy.</strong> Board names are plain strings; only <span class="inline-code">/</span> is special. A pin on <span class="inline-code">Linear/Settings</span> appears under the <span class="inline-code">Linear</span> group in Canta's sidebar, next to <span class="inline-code">Linear/Onboarding</span>. Groups are collapsed by default, and filtering still matches the full board string — URL-encode the slash as <span class="inline-code">%2F</span> in query strings. When capturing screenshots for a product, prefix the board with the product name and keep one nesting level.
+        </div>
+        <h3 style="margin-top:22px">Update pin metadata</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-update">Copy</button></div>
+          <pre id="ex-update"><code>curl -s -X PATCH "\(baseURL)/api/v1/pins/&lt;pin-id&gt;" \\
+  -H "Content-Type: application/json" \\
+  -d '{"note": null, "board": "Linear/Onboarding", "favorite": true}' \\
+  | jq '{id, title, board, note, favorite, updatedAt}'</code></pre>
+        </div>
+        <div class="note" style="margin-top:18px">
+          <strong>Metadata edits can be disabled.</strong> In Canta, open <em>Settings → Agent API</em> and turn off <em>Allow metadata edits</em>. PATCH then returns <span class="inline-code">403 metadata_edits_disabled</span> while every read endpoint keeps working. Editing in the app is never affected.
         </div>
       </div>
     </div>
@@ -360,7 +386,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><code>fileSize</code></td><td><code>integer</code></td><td>Original image size in bytes.</td></tr>
           <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td><code>string</code></td><td>ISO 8601 timestamps.</td></tr>
           <tr><td><code>tags</code></td><td><code>string[]</code></td><td>Lower-case filter labels.</td></tr>
-          <tr><td><code>board</code></td><td><code>string</code></td><td>Board the pin belongs to.</td></tr>
+          <tr><td><code>board</code></td><td><code>string</code></td><td>Board the pin belongs to. Use <code>Product/Screen</code> to nest under a product group, e.g. <code>Linear/Settings</code>.</td></tr>
           <tr><td><code>sourceURL</code>, <code>sourceLabel</code></td><td><code>string | null</code></td><td>Original inspiration URL and label, when known.</td></tr>
           <tr><td><code>colors</code></td><td><code>string[]</code></td><td>Dominant palette as <code>#RRGGBB</code> strings (up to 5).</td></tr>
           <tr><td><code>favorite</code></td><td><code>boolean</code></td><td>Whether the pin is marked as a favorite.</td></tr>
@@ -390,12 +416,19 @@ pinned UI screenshots. Use it before writing UI code.
 - Pin:         GET /api/v1/pins/{id}
 - Image:       GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:     GET /api/v1/library
+- Boards:      GET /api/v1/boards  (a "/" in a board name nests it under a group)
 - Add pin:     POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata)
+- Update pin:  PATCH /api/v1/pins/{id}   (title, note, board, tags, source, favorite, kind; null clears)
 - Discovery:   GET /openapi.json and GET /llms.txt
 
 Fetch /api/v1/context first, choose 1-2 reference pins, inspect their
 imageURLs, then reproduce the layout, spacing, typography, and palette.
-Do not invent image URLs; always use the absolute URLs from the API.</code></pre>
+Do not invent image URLs; always use the absolute URLs from the API.
+
+When you capture screenshots for a product, name the board
+"&lt;Product&gt;/&lt;Screen&gt;" — for example Linear/Settings — and include the
+product name in the title (e.g. "Settings — Linear"). Canta files those
+pins under the product group in the sidebar, so the library stays tidy.</code></pre>
         </div>
       </div>
       <div>
@@ -406,14 +439,18 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
         </div>
         <div class="prompt">
           <span class="prompt-label">Capture into the library</span>
-          <p>"Use Canta to add this screenshot to the Mobile flows board with the tags checkout and onboarding, then fetch its imageURL and use it as the reference for the empty-state screen."</p>
+          <p>"Use Canta to add this settings screenshot to the board Linear/Settings with the tags settings and onboarding, then fetch its imageURL and use it as the reference for the empty-state screen."</p>
+        </div>
+        <div class="prompt">
+          <span class="prompt-label">File captures by product</span>
+          <p>"Capture these five screenshots, add them to Canta with board names like Linear/Settings and Linear/Onboarding, then pull the Linear context and restyle our app to match the product family."</p>
         </div>
         <div class="prompt">
           <span class="prompt-label">Extract a palette</span>
           <p>"List Canta pins tagged editorial, read their colors and thumbnails, and produce a consistent four-colour palette with hex values and suggested usage."</p>
         </div>
         <div class="note">
-          <strong>Tip:</strong> the API is local. Read endpoints are read-only, and <span class="inline-code">POST /api/v1/pins</span> lets an agent add references it captured. The agent only needs <span class="inline-code">curl</span> (or any HTTP client) and access to <span class="inline-code">127.0.0.1</span>.
+          <strong>Tip:</strong> the API is local. Read endpoints are read-only, while <span class="inline-code">POST /api/v1/pins</span> adds references and <span class="inline-code">PATCH /api/v1/pins/{id}</span> fixes their metadata (the owner can disable PATCH in Settings). The agent only needs <span class="inline-code">curl</span> (or any HTTP client) and access to <span class="inline-code">127.0.0.1</span>.
         </div>
       </div>
     </div>
@@ -421,7 +458,7 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
 
   <section class="section" id="errors">
     <div class="section-head"><h2>Errors</h2></div>
-    <p class="section-sub">Every non-2xx response is JSON with a stable error code and a human-readable message. HTTP status codes used: 400, 404, 405, 413, 415, 500.</p>
+    <p class="section-sub">Every non-2xx response is JSON with a stable error code and a human-readable message. HTTP status codes used: 400, 403, 404, 405, 413, 415, 500.</p>
     <div class="two-col">
       <div class="snippet">
         <div class="snippet-head"><span class="snippet-label">error envelope</span><button class="copy" type="button" data-copy="err-shape">Copy</button></div>
@@ -438,6 +475,7 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
           <tbody>
             <tr><td><code>400</code></td><td><code>bad_request</code>, <code>invalid_parameter</code>, <code>invalid_percent_encoding</code>, <code>invalid_content_length</code>, <code>request_header_too_large</code>, <code>unsupported_http_version</code>, <code>invalid_json</code>, <code>missing_image</code>, <code>invalid_image_data</code>, <code>invalid_metadata</code></td></tr>
             <tr><td><code>404</code></td><td><code>not_found</code>, <code>pin_not_found</code>, <code>image_not_found</code></td></tr>
+            <tr><td><code>403</code></td><td><code>metadata_edits_disabled</code> — metadata edits are turned off in Settings</td></tr>
             <tr><td><code>405</code></td><td><code>method_not_allowed</code> — includes an <code>Allow</code> header</td></tr>
             <tr><td><code>413</code></td><td><code>request_body_too_large</code> — upload bodies are limited to 20 MiB</td></tr>
             <tr><td><code>415</code></td><td><code>unsupported_media_type</code> — send <code>application/json</code> or an <code>image/*</code> body</td></tr>
@@ -453,7 +491,7 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
     <ul class="list">
       <li><strong>Loopback only.</strong> The listener binds to <span class="inline-code">127.0.0.1</span>; it is not reachable from other devices on the network.</li>
       <li><strong>No authentication.</strong> Any local process can read the library. That is the intended contract for a local design tool; avoid port-forwarding or proxying the API.</li>
-      <li><strong>Single write endpoint.</strong> <span class="inline-code">POST /api/v1/pins</span> validates images with ImageIO, writes assets inside the library root, and appends to <span class="inline-code">library.json</span> atomically. Read endpoints remain read-only; there are no cookies or session state.</li>
+      <li><strong>Two write endpoints.</strong> <span class="inline-code">POST /api/v1/pins</span> validates images with ImageIO and appends a pin; <span class="inline-code">PATCH /api/v1/pins/{id}</span> rewrites only metadata and can be disabled in Settings. Both update <span class="inline-code">library.json</span> atomically. Read endpoints remain read-only; there are no cookies or session state.</li>
       <li><strong>Local writes only.</strong> Any process that can reach loopback can add pins. Do not port-forward or proxy the API; it is designed for trusted local workflows.</li>
       <li><strong>Path-safe image serving.</strong> Only files referenced by pin entries and resolvable inside the library root are streamed. Absolute paths, dot-segment escapes, and symlinks that leave the root return a 404 JSON error.</li>
       <li><strong>Fresh reads.</strong> <span class="inline-code">library.json</span> is decoded on every request, so edits made in the app or through the API appear immediately without restarting the server.</li>

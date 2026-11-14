@@ -21,8 +21,10 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **Agent-readable by default** — a localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site. Agents can also add images back into the library.
+- **Agent-editable metadata** — agents can also update titles, notes, boards, tags, and favorites through `PATCH /api/v1/pins/{id}`; a Settings switch can disable it.
+- **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
-- **Large image & keyboard browsing** — open a pin and switch to image-only mode; use ← / → to move between pins and Esc to go back.
+- **Large image & keyboard browsing** — open a pin and switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back.
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Window gestures** — double-click the sidebar or page header to maximize/restore the window.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
@@ -40,6 +42,12 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | Select multiple cards | ⌘B |
 | Previous / next pin in detail | ← / → |
 | Enter image-only mode (detail) | Double-click image or click “Large image” |
+| Large image: zoom in / out | + / - |
+| Large image: rotate right / left 90° | R / ⇧R |
+| Large image: mirror horizontally | M |
+| Large image: reset view | 0 |
+| Large image: pan the image | Drag the image |
+| Large image: toggle between fit and 250% | Double-click image |
 
 ### Batch selection & large image
 
@@ -48,7 +56,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
   <img src="docs/screenshots/en/large.png" width="49%" alt="Image-only large mode" />
 </p>
 
-In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, click **Large image** or double-click the image for an image-only view; use ← / → to move between pins and Esc to go back.
+In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, click **Large image** or double-click the image for an image-only view; the floating toolbar along the bottom offers zoom out, the zoom percentage (100% fits the window), zoom in, rotate left/right 90°, mirror horizontally, and reset view, with a one-line gesture hint beneath it. Scroll or pinch to zoom, drag the image to pan once zoomed in, and double-click to toggle between fit and 250%; on the keyboard, + / - zoom, R rotates right, ⇧R rotates left, M mirrors horizontally, 0 resets the view, ← / → move between pins, and Esc goes back.
 
 ![Quick capture sheet](docs/screenshots/en/capture.png)
 
@@ -80,11 +88,20 @@ curl -X POST http://127.0.0.1:4242/api/v1/pins \
   -H "Content-Type: application/json" \
   -d '{"imageBase64":"...","title":"Agent capture","tags":["landing","dark"]}'
 
+# Let an agent update an existing pin's metadata
+curl -X PATCH "http://127.0.0.1:4242/api/v1/pins/<pin-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Settings — Linear","board":"Linear/Settings","tags":["settings"]}'
+
 # Open the documentation site
 open http://127.0.0.1:4242/docs
 ```
 
+Agents can update a pin's title, note, board, tags, source, favorite, and kind with `PATCH /api/v1/pins/{id}`; turn this off in **Settings → Agent API → Allow metadata edits**.
+
 Each pin exposes `imageURL` and `thumbnailURL` fields that stream raw bytes, so an agent can inspect the reference itself, not just its description.
+
+When an agent adds screenshots, prefix the board with the product name, e.g. `board=Linear/Settings` — Canta groups them under `Linear` in the sidebar. On raw uploads, encode the slash in the query string as `%2F`.
 
 Discovery endpoints:
 
@@ -93,6 +110,7 @@ Discovery endpoints:
 - `/llms.txt` — compact machine-readable index
 - `/api/v1/context` — Markdown design context for prompting
 - `POST /api/v1/pins` — image ingest (raw image or JSON base64)
+- `PATCH /api/v1/pins/{id}` — agent metadata updates (title, note, board, tags, source, favorite, kind)
 
 The server can be stopped, restarted, or moved to another port from **Agent access** in the sidebar or **Settings**. The offline HTML docs at `/docs` are a first-class surface:
 
@@ -110,6 +128,8 @@ open dist/Canta.app
 ```
 
 The build script bundles the SwiftPM resource bundle, generates the app icon from the 1024 px master, writes `Info.plist`, and ad-hoc signs `dist/Canta.app`.
+
+The icon master `Sources/Canta/Resources/AppIcon/icon_1024.png` is drawn by `scripts/make-app-icon.py` from the same geometry as the in-app `CantaMark`, so the Dock icon and the app's own brand mark stay one artwork.
 
 For day-to-day development:
 
@@ -180,7 +200,7 @@ Canta ships with **English** and **Simplified Chinese** interfaces. It follows t
   ./scripts/agent-smoke-test.sh
   ```
 
-  It starts the real server on an ephemeral port and checks every endpoint family, JSON/raw image uploads, HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection (154 checks).
+  It starts the real server on an ephemeral port and checks every endpoint family, JSON/raw image uploads, metadata PATCH updates (including null clearing, board moves, validation failures, unknown pins, and the disabled-editing 403), HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection (192 checks).
 - The Swift Testing suite in `Tests/CantaAgentKitTests` contains 49 tests. Executing it requires Xcode's XCTest runner; the Command Line Tools-only environment here compiles the suite but cannot run it, so the smoke test is the authoritative local check.
 - Automated screenshots are reproducible with `./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`; set `SCREENSHOT_LANG=en|zh` to capture either language.
 

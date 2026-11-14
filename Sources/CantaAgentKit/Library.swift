@@ -15,6 +15,8 @@ public enum CantaAgentAPI {
     public static let defaultPort: UInt16 = 4242
     /// Maximum accepted request body for image ingestion (20 MiB).
     public static let maxUploadBytes = 20 * 1024 * 1024
+    /// Maximum accepted JSON body for metadata updates (256 KiB).
+    public static let maxMetadataBytes = 256 * 1024
 }
 
 // MARK: - Library file model

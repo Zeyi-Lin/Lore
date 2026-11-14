@@ -8,6 +8,29 @@ final class CGImageBox: @unchecked Sendable {
     init(_ image: CGImage) { self.image = image }
 }
 
+/// Lock-free, thread-safe cache store shared by the actor and synchronous
+/// cache lookups from view initialization.
+final class ImageStore: @unchecked Sendable {
+    private let cache = NSCache<NSString, CGImageBox>()
+
+    init(totalCostLimit: Int, countLimit: Int) {
+        cache.totalCostLimit = totalCostLimit
+        cache.countLimit = countLimit
+    }
+
+    func image(for key: String) -> CGImage? {
+        cache.object(forKey: key as NSString)?.image
+    }
+
+    func insert(_ image: CGImage, for key: String) {
+        cache.setObject(CGImageBox(image), forKey: key as NSString, cost: image.bytesPerRow * image.height)
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
+}
+
 /// Background image loader with a byte-bounded cache and bounded concurrency.
 ///
 /// The old `LibraryImage` only called `NSImage(contentsOfFile:)`, which parses
@@ -17,7 +40,7 @@ final class CGImageBox: @unchecked Sendable {
 actor ImageLoader {
     static let shared = ImageLoader()
 
-    private let cache = NSCache<NSString, CGImageBox>()
+    nonisolated let store: ImageStore
     private var inflight: [String: Task<CGImage?, Never>] = [:]
     private let maxConcurrent: Int
     private var active = 0
@@ -25,16 +48,22 @@ actor ImageLoader {
 
     init(maxConcurrent: Int = max(2, min(6, ProcessInfo.processInfo.activeProcessorCount / 2))) {
         self.maxConcurrent = maxConcurrent
-        cache.totalCostLimit = 128 * 1024 * 1024
-        cache.countLimit = 600
+        self.store = ImageStore(totalCostLimit: 128 * 1024 * 1024, countLimit: 600)
+    }
+
+    /// Synchronous cache hit used by `LibraryImage.init`, so a hover-prefetched
+    /// image can be installed in the very first rendered frame.
+    nonisolated func cachedImage(paths: [String], maxPixel: Int) -> CGImage? {
+        guard !paths.isEmpty else { return nil }
+        return store.image(for: Self.cacheKey(paths: paths, maxPixel: maxPixel))
     }
 
     /// `maxPixel == 0` means "decode at native size" (used by the large image mode).
     func image(paths: [String], maxPixel: Int) async -> CGImage? {
         guard !paths.isEmpty else { return nil }
         let key = Self.cacheKey(paths: paths, maxPixel: maxPixel)
-        if let cached = cache.object(forKey: key as NSString) {
-            return cached.image
+        if let cached = store.image(for: key) {
+            return cached
         }
         if let running = inflight[key] {
             return await running.value
@@ -62,7 +91,7 @@ actor ImageLoader {
     }
 
     func purge() {
-        cache.removeAllObjects()
+        store.removeAll()
     }
 
     // MARK: - Slot gate
@@ -79,7 +108,7 @@ actor ImageLoader {
 
     private func finish(image: CGImage?, key: String) {
         if let image {
-            cache.setObject(CGImageBox(image), forKey: key as NSString, cost: image.bytesPerRow * image.height)
+            store.insert(image, for: key)
         }
         if !waiters.isEmpty {
             waiters.removeFirst().resume()

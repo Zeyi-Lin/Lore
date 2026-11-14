@@ -46,6 +46,8 @@ final class LibrarySnapshot {
     let boardFirstIndex: [String: Int]
     /// non-empty board names in first-seen order, for menus
     let boardNamesInOrder: [String]
+    /// Boards folded into prefix groups for the sidebar.
+    let boardTree: [BoardNode]
     /// tag -> count
     let tagCounts: [String: Int]
 
@@ -93,6 +95,7 @@ final class LibrarySnapshot {
         self.boardCounts = boards
         self.boardFirstIndex = firstIndex
         self.boardNamesInOrder = boardNames
+        self.boardTree = BoardTreeBuilder.build(boardCounts: boards)
         self.tagCounts = tags
     }
 
@@ -221,13 +224,19 @@ final class GalleryProjection {
 
     func boardSummaries() -> [BoardSummary] {
         let counts = snapshot.boardCounts
-        let ordered = Self.suggestedBoards.filter { counts[$0] != nil }
-        let extras = counts.keys.filter { !Self.suggestedBoards.contains($0) }.sorted()
+        let ordered = BoardDefaults.suggested.filter { counts[$0] != nil }
+        let extras = counts.keys.filter { !BoardDefaults.suggested.contains($0) }.sorted()
         return (ordered + extras).map { BoardSummary(name: $0, count: counts[$0] ?? 0) }
     }
 
+    /// Prefix groups for the sidebar. Empty boards are folded in through the
+    /// snapshot's board counts, exactly like the always-visible "Unsorted".
+    func boardTree() -> [BoardNode] {
+        snapshot.boardTree
+    }
+
     func allBoardNames() -> [String] {
-        var names = Self.suggestedBoards
+        var names = BoardDefaults.suggested
         for board in snapshot.boardNamesInOrder where !names.contains(board) {
             names.append(board)
         }
@@ -346,7 +355,6 @@ final class GalleryProjection {
         return result
     }
 
-    static let suggestedBoards = ["Web dashboards", "Mobile flows", "Landing pages", "Editorial", "Unsorted"]
 }
 
 // MARK: - Masonry composition

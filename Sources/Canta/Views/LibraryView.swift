@@ -202,6 +202,7 @@ struct LibraryView: View {
             reveal: { store.revealPin(id: $0) },
             openSource: { store.openSource(id: $0) },
             requestDelete: { pendingDeleteID = $0 },
+            prefetchDetail: { store.prefetchDetail(id: $0) },
             boardNames: { store.allBoardNames }
         )
     }

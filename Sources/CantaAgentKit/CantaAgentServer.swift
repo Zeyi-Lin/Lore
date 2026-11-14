@@ -8,10 +8,14 @@ public struct AgentServerConfig: Sendable {
     public var port: UInt16
     /// Directory that contains \`library.json\`, \`Images/\`, and \`Thumbnails/\`.
     public var libraryRoot: URL
+    /// When false, PATCH /api/v1/pins/{id} answers 403 and metadata can only
+    /// be edited in the app.
+    public var allowsMetadataEdits: Bool
 
-    public init(port: UInt16 = 4242, libraryRoot: URL) {
+    public init(port: UInt16 = 4242, libraryRoot: URL, allowsMetadataEdits: Bool = true) {
         self.port = port
         self.libraryRoot = libraryRoot
+        self.allowsMetadataEdits = allowsMetadataEdits
     }
 }
 
@@ -153,7 +157,8 @@ public final class CantaAgentServer {
             ingestor: ingestor,
             portProvider: { [weak self] in
                 self?.runningPort ?? self?.config.port ?? 0
-            }
+            },
+            allowsMetadataEdits: config.allowsMetadataEdits
         )
         let server: HTTPServer
         do {

@@ -83,7 +83,7 @@ struct CantaApp: App {
             }
             .keyboardShortcut("b", modifiers: .command)
             Divider()
-            Button(T("Copy Agent Context")) { store.copyAgentContext() }
+            Button(T("Copy agent prompt")) { store.copyAgentContext() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button(T("Open Data Folder")) { store.openDataFolder() }
         }

@@ -15,6 +15,7 @@ struct PinCardActions {
     var reveal: (UUID) -> Void
     var openSource: (UUID) -> Void
     var requestDelete: (UUID) -> Void
+    var prefetchDetail: (UUID) -> Void
     var boardNames: () -> [String]
 }
 
@@ -25,6 +26,7 @@ struct PinCard: View, Equatable {
     let actions: PinCardActions
 
     @State private var hovering = false
+    @State private var hoverPrefetchTask: Task<Void, Never>?
 
     static func == (lhs: PinCard, rhs: PinCard) -> Bool {
         lhs.model == rhs.model && lhs.isSelected == rhs.isSelected && lhs.isSelecting == rhs.isSelecting
@@ -46,7 +48,16 @@ struct PinCard: View, Equatable {
         .onHover { value in
             guard hovering != value else { return }
             withAnimation(.easeOut(duration: 0.16)) { hovering = value }
+            hoverPrefetchTask?.cancel()
+            if value && !isSelecting {
+                hoverPrefetchTask = Task {
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    guard !Task.isCancelled else { return }
+                    actions.prefetchDetail(model.id)
+                }
+            }
         }
+        .onDisappear { hoverPrefetchTask?.cancel() }
         .contextMenu { contextMenu }
         .scaleEffect(hovering && !isSelecting ? 1.004 : 1)
         .shadow(

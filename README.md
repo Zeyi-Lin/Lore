@@ -21,9 +21,11 @@ Canta 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinteres
 - **属于参考的 Pinterest**：平衡的瀑布流画廊，悬停收藏、画板、搜索、最近添加与收藏夹。
 - **有用的元数据**：可编辑标题、设计笔记、标签、画板、来源、尺寸、文件大小、主色板与时间。
 - **默认对 Agent 友好**：本地 API 提供增强 JSON、原图/缩略图流、Markdown 设计上下文、OpenAPI 3.1、`llms.txt`，以及应用内文档页；Agent 也可以反向写入图片。
+- **可回写元数据**：Agent 还能通过 `PATCH /api/v1/pins/{id}` 修改标题、笔记、画板、标签、收藏等元数据；设置里可以关闭这项能力。
+- **层级画板**：画板名用 `/` 分组，例如 `Linear/Settings` 会在侧栏归入可折叠的 `Linear` 组；Agent 收录截图时以产品名为前缀，归档更整齐。
 - **本地且私密**：图片和元数据始终留在这台 Mac 上，服务只绑定 `127.0.0.1`。
 - **批量整理**：进入选择模式后可一次收藏、移动画板、复制 Agent 上下文或删除多张卡片；右键单张卡片也可快速删除（带确认）。
-- **大图与键盘浏览**：详情支持只看图片的大图模式；← → 切换上一张/下一张，Esc 返回。
+- **大图与键盘浏览**：详情支持只看图片的大图模式；浮动工具栏与快捷键可缩放、平移、旋转、镜像和重置视图，← → 切换上一张/下一张，Esc 返回。
 - **手型光标细节**：卡片、按钮、菜单、开关等所有可点击元素统一使用手型光标。
 - **窗口快捷手势**：双击侧边栏或页面 Header，可在最大化与原始窗口位置之间切换。
 - **中英双语**：默认跟随 macOS 系统语言，可在设置中随时切换中文或 English。
@@ -41,6 +43,12 @@ Canta 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinteres
 | 批量选择卡片 | ⌘B |
 | 详情中切换上一张 / 下一张 | ← / → |
 | 进入大图模式（详情中） | 双击图片或点击「大图模式」 |
+| 大图模式：放大 / 缩小 | + / - |
+| 大图模式：向右 / 向左旋转 90° | R / ⇧R |
+| 大图模式：水平镜像 | M |
+| 大图模式：重置视图 | 0 |
+| 大图模式：平移图片 | 拖动图片 |
+| 大图模式：在适应窗口与 250% 间切换 | 双击图片 |
 
 ### 批量选择与大图
 
@@ -49,7 +57,7 @@ Canta 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinteres
   <img src="docs/screenshots/large.png" width="49%" alt="只显示图片的大图模式" />
 </p>
 
-在选择模式下，卡片会被加上选择圈；底部操作条可一键全选、收藏、移动画板、复制 Agent 上下文或删除。打开任一详情后，点击右上角「大图模式」或双击图片即可进入纯图片视图；← / → 键切换上一张 / 下一张，Esc 返回。
+在选择模式下，卡片会被加上选择圈；底部操作条可一键全选、收藏、移动画板、复制 Agent 上下文或删除。打开任一详情后，点击右上角「大图模式」或双击图片即可进入纯图片视图；底部浮动工具栏从左到右提供缩小、缩放比例（100% 即适应窗口）、放大、向左/向右旋转 90°、水平镜像与重置视图，下方有一行手势提示。滚轮或触控板捏合可缩放，放大后拖动图片平移，双击在适应窗口与 250% 之间切换；键盘上 + / - 缩放，R 向右旋转、⇧R 向左旋转，M 水平镜像，0 重置视图，← / → 切换上一张 / 下一张，Esc 返回。
 
 ![快速收录](docs/screenshots/capture.png)
 
@@ -81,11 +89,20 @@ curl -X POST http://127.0.0.1:4242/api/v1/pins \
   -H "Content-Type: application/json" \
   -d '{"imageBase64":"...","title":"Agent capture","tags":["landing","dark"]}'
 
+# 让 Agent 更新已有灵感的元数据
+curl -X PATCH "http://127.0.0.1:4242/api/v1/pins/<pin-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Settings — Linear","board":"Linear/Settings","tags":["settings"]}'
+
 # 打开文档站
 open http://127.0.0.1:4242/docs
 ```
 
+Agent 可以通过 `PATCH /api/v1/pins/{id}` 更新已有灵感的标题、笔记、画板、标签、来源、收藏与类型；这项能力可以在 **设置 → Agent API → 允许修改元数据** 中关闭。
+
 每个灵感都包含 `imageURL` 和 `thumbnailURL`，Agent 可以直接读取真实图片，而不只是阅读描述。
+
+Agent 添加截图时，建议把画板名写成「产品/界面」，例如 `board=Linear/Settings`——Canta 会把它归到侧栏的 `Linear` 组下。原始图片上传时，查询串里的斜杠要写成 `%2F`。
 
 发现端点：
 
@@ -94,6 +111,7 @@ open http://127.0.0.1:4242/docs
 - `/llms.txt` — 供机器读取的索引
 - `/api/v1/context` — 用于提示词的 Markdown 设计上下文
 - `POST /api/v1/pins` — Agent 添加图片（原始图片或 JSON base64）
+- `PATCH /api/v1/pins/{id}` — Agent 更新灵感元数据（标题、笔记、画板、标签、来源、收藏、类型）
 
 服务可以在侧栏的 **Agent 访问** 或 **设置** 中停止、重启或更换端口。`/docs` 是应用内的一等界面：
 
@@ -111,6 +129,8 @@ open dist/Canta.app
 ```
 
 构建脚本会打包 SwiftPM 资源包、用 1024px 母版生成应用图标、写入 `Info.plist`，并对 `dist/Canta.app` 做 ad-hoc 签名。
+
+应用图标母版 `Sources/Canta/Resources/AppIcon/icon_1024.png` 由 `scripts/make-app-icon.py` 绘制，几何参数与应用内的 `CantaMark` 一致，所以 Dock 里的图标和侧栏品牌标记是同一套图形。
 
 日常开发：
 
@@ -181,7 +201,7 @@ Canta 借用了 Pinterest 的自信——图片优先、留白充分、标志性
   ./scripts/agent-smoke-test.sh
   ```
 
-  脚本会在临时端口启动真实服务，覆盖所有端点族、JSON/原始图片上传、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护（共 154 项检查）。
+  脚本会在临时端口启动真实服务，覆盖所有端点族、JSON/原始图片上传、元数据 PATCH 更新（含空值清除、画板移动、校验失败、未知灵感、关闭修改后的 403）、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护（共 192 项检查）。
 - `Tests/CantaAgentKitTests` 中有 49 个 Swift Testing 用例。在本机纯 Command Line Tools 环境下编译通过，但缺少 XCTest runner 无法执行；因此上述 smoke test 是本地权威验证。
 - 截图可复现：`./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`，支持 `SCREENSHOT_LANG=en|zh`。
 
