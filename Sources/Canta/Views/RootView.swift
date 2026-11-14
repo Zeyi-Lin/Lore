@@ -3,7 +3,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct RootView: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @State private var dropTargeted = false
 
     var body: some View {
@@ -27,28 +27,9 @@ struct RootView: View {
                     .zIndex(4)
             }
 
-            if store.capturePresented {
-                CaptureSheet()
-                    .environmentObject(store)
-                    .zIndex(6)
-            }
-
-            if let pin = store.selectedPin {
-                PinDetailOverlay(pin: pin)
-                    .environmentObject(store)
-                    .zIndex(7)
-            }
-
-            if let toast = store.toast {
-                VStack {
-                    Spacer()
-                    ToastView(toast: toast)
-                        .padding(.bottom, store.isSelectingPins ? 100 : 28)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .allowsHitTesting(false)
-                .zIndex(9)
-            }
+            CaptureLayer()
+            DetailLayer()
+            ToastLayer()
         }
         .tint(Theme.red)
         .focusEffectDisabled()
@@ -84,12 +65,10 @@ struct RootView: View {
             } else if store.isSelectingPins {
                 store.endSelection()
             } else if !store.searchText.isEmpty {
-                withAnimation(.snappy(duration: 0.28)) { store.searchText = "" }
+                store.clearSearch()
             }
         }
         .animation(.easeOut(duration: 0.18), value: dropTargeted)
-        .animation(.spring(response: 0.32, dampingFraction: 0.84), value: store.capturePresented)
-        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: store.selectedPinID)
     }
 
     /// Hidden launch-argument hooks used for automated design verification:
@@ -109,9 +88,15 @@ struct RootView: View {
             store.capturePresented = true
         case "batch":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let ids = Set(store.filteredPins.prefix(4).map(\.id))
+                let ids = store.filteredPins.prefix(4).map(\.id)
                 store.beginSelection()
-                store.selectedPinIDs = ids
+                // Toggle on separate runloop turns so the debug state follows
+                // the same path as real clicks.
+                for (index, id) in ids.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25 + Double(index) * 0.15) {
+                        store.toggleSelection(id)
+                    }
+                }
             }
         case "detail":
             if let query = UserDefaults.standard.string(forKey: "canta.debugPin"),
@@ -166,5 +151,60 @@ struct RootView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Presentation layers
+
+/// Each overlay observes only the slice of state it needs, so opening a
+/// detail or showing a toast does not re-evaluate the gallery.
+
+private struct DetailLayer: View {
+    @Environment(LibraryStore.self) private var store
+
+    var body: some View {
+        Group {
+            if let pin = store.selectedPin {
+                PinDetailOverlay(pin: pin)
+                    .transition(.opacity.combined(with: .scale(scale: 0.975)))
+                    .zIndex(7)
+            }
+        }
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: store.selectedPinID)
+    }
+}
+
+private struct CaptureLayer: View {
+    @Environment(LibraryStore.self) private var store
+
+    var body: some View {
+        Group {
+            if store.capturePresented {
+                CaptureSheet()
+                    .transition(.opacity)
+                    .zIndex(6)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.84), value: store.capturePresented)
+    }
+}
+
+private struct ToastLayer: View {
+    @Environment(LibraryStore.self) private var store
+
+    var body: some View {
+        Group {
+            if let toast = store.toast {
+                VStack {
+                    Spacer()
+                    ToastView(toast: toast)
+                        .padding(.bottom, store.isSelectingPins ? 100 : 28)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .allowsHitTesting(false)
+            }
+        }
+        .zIndex(9)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.toast?.id)
     }
 }

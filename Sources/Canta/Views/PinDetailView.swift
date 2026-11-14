@@ -4,7 +4,7 @@ import AppKit
 struct PinDetailOverlay: View {
     let pin: Pin
 
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @State private var showDeleteAlert = false
     @State private var tagEntry = ""
     @State private var showNewBoardField = false

@@ -6,6 +6,7 @@ struct AgentRouter {
     let store: LibraryStore
     let ingestor: LibraryIngestor
     let portProvider: () -> UInt16
+    let responseCache = AgentResponseCache()
 
     // MARK: - Routing
 
@@ -41,6 +42,17 @@ struct AgentRouter {
                     extraHeaders: ["Allow": allowHeader]
                 )
             }
+            if request.method == "GET", isCacheable(route), let stamp = store.libraryFileStamp() {
+                let key = request.target
+                if let cached = responseCache.response(for: key, stamp: stamp) {
+                    return cached
+                }
+                let response = try respond(to: route, request: request)
+                if response.status == 200 {
+                    responseCache.store(response, for: key, stamp: stamp)
+                }
+                return response
+            }
             return try respond(to: route, request: request)
         } catch let error as APIError {
             var headers: [String: String] = [:]
@@ -59,6 +71,17 @@ struct AgentRouter {
             }
         } catch {
             return HTTPResponse.error(status: 500, code: "internal_error", message: "The Agent API could not complete this request.")
+        }
+    }
+
+    /// Only library-dependent GET responses are cached. Static docs, images,
+    /// and anything served from the write path stay uncached.
+    private func isCacheable(_ route: Route) -> Bool {
+        switch route {
+        case .health, .library, .pins, .pin, .boards, .tags, .stats, .context:
+            return true
+        case .landing, .docs, .openapi, .llms, .pinImage:
+            return false
         }
     }
 

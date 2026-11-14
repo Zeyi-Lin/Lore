@@ -6,7 +6,7 @@ enum EmptyMode {
 }
 
 struct EmptyStateView: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     var mode: EmptyMode
 
     var body: some View {
@@ -49,7 +49,7 @@ struct EmptyStateView: View {
                 } else {
                     CantaButton(title: T("Clear search & filters"), icon: "arrow.counterclockwise", variant: .secondary) {
                         withAnimation(.easeOut(duration: 0.2)) {
-                            store.searchText = ""
+                            store.clearSearch()
                             store.filter = .all
                             store.selectedBoard = nil
                             store.section = .all

@@ -4,13 +4,13 @@ import AppKit
 @main
 struct CantaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = LibraryStore()
+    @State private var store = LibraryStore()
     @StateObject private var language = LanguageManager.shared
 
     var body: some Scene {
         WindowGroup("Canta") {
             RootView()
-                .environmentObject(store)
+                .environment(store)
                 .id(language.resolved)
                 .environment(\.locale, language.resolved.locale)
                 .frame(minWidth: 1080, minHeight: 700)
@@ -23,7 +23,7 @@ struct CantaApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(store)
+                .environment(store)
                 .id(language.resolved)
                 .environment(\.locale, language.resolved.locale)
                 .preferredColorScheme(.light)

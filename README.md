@@ -173,6 +173,7 @@ Canta 借用了 Pinterest 的自信——图片优先、留白充分、标志性
 
 - `./scripts/build-app.sh release` 生成自包含的应用包。
 - `./scripts/perf-bench/run.sh` 复现优化前的数据层基线（对照用）；`Canta --bench` 在真实图库上打印当前实现的查询/编码/解码耗时。
+- `./scripts/perf-guard.sh --pins 5000` 运行数据层性能门禁（1k/5k 预算断言）。
 - Agent API 有一套黑盒冒烟测试，使用临时 fixture 图库：
 
   ```bash

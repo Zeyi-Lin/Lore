@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct AgentAccessView: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @State private var portField = ""
     @State private var copiedBlock: String?
 

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // MARK: - Card projection
 
@@ -49,6 +50,7 @@ final class LibrarySnapshot {
     let tagCounts: [String: Int]
 
     private var cachedSearchKeys: [String]?
+    private var cachedSearchKeyBytes: [[UInt8]]?
     private var cachedSearchLanguage: String?
     private var cachedBoardKeys: [String]?
 
@@ -117,11 +119,23 @@ final class LibrarySnapshot {
                 pin.sourceLabel ?? "",
                 pin.tags.joined(separator: " "),
                 pin.kind.label
-            ].joined(separator: " ").lowercased())
+            ].joined(separator: " ").lowercased().precomposedStringWithCanonicalMapping)
         }
         cachedSearchKeys = keys
+        cachedSearchKeyBytes = nil
         cachedSearchLanguage = language
         return keys
+    }
+
+    /// UTF-8 bytes for the same keys, used by byte-level substring search.
+    /// A byte match on valid UTF-8 is equivalent to a scalar substring match,
+    /// and is much faster than `String.contains` for the candidate pass.
+    func searchKeyBytes() -> [[UInt8]] {
+        _ = searchKeys()
+        if let cachedSearchKeyBytes { return cachedSearchKeyBytes }
+        let bytes = (cachedSearchKeys ?? []).map { Array($0.utf8) }
+        cachedSearchKeyBytes = bytes
+        return bytes
     }
 
     func boardKeys() -> [String] {
@@ -245,8 +259,11 @@ final class GalleryProjection {
             : nil
         let boardKey = query.board
         let boardKeys = boardKey != nil ? snapshot.boardKeys() : nil
-        let tokens: [String]? = query.needle.isEmpty ? nil : query.needle.split(separator: " ").map(String.init)
-        let searchKeys = tokens != nil ? snapshot.searchKeys() : nil
+        let tokens: [String]? = query.needle.isEmpty
+            ? nil
+            : query.needle.split(separator: " ").map(String.init)
+        let searchKeyBytes = tokens != nil ? snapshot.searchKeyBytes() : nil
+        let needleBytes: [[UInt8]] = tokens?.map { Array($0.utf8) } ?? []
 
         var result: [Pin] = []
         result.reserveCapacity(min(order.count, pins.count))
@@ -273,10 +290,10 @@ final class GalleryProjection {
                 break
             }
 
-            if let tokens, let searchKeys {
-                let haystack = searchKeys[index]
+            if let searchKeyBytes {
+                let haystack = searchKeyBytes[index]
                 var matched = true
-                for token in tokens where !haystack.contains(token) {
+                for needle in needleBytes where !Self.byteContains(haystack, needle) {
                     matched = false
                     break
                 }
@@ -286,6 +303,18 @@ final class GalleryProjection {
             result.append(pin)
         }
         return result
+    }
+
+    private static func byteContains(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
+        if needle.isEmpty { return true }
+        if needle.count > haystack.count { return false }
+        return haystack.withUnsafeBufferPointer { haystackBuffer in
+            needle.withUnsafeBufferPointer { needleBuffer in
+                guard let haystackBase = haystackBuffer.baseAddress,
+                      let needleBase = needleBuffer.baseAddress else { return false }
+                return memmem(haystackBase, haystackBuffer.count, needleBase, needleBuffer.count) != nil
+            }
+        }
     }
 
     private func orderedIndices(for sortRaw: String) -> [Int] {

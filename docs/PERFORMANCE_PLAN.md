@@ -416,11 +416,11 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 ### 3.5 搜索
 
-- 加载时预计算小写 `searchKey`（含标题/备注/画板/本地化画板/来源/标签/类型）。
-- 查询 memo：`QueryKey(section, board, filter, sort, needle)`。
-- >3000 张时加**单词倒排**（前缀匹配 + 子串后过滤，语义与现有 `.contains` 一致）；实测冷查询 1k/3k/5k = **1.8/4.9/7.8 ms**，memo 命中 0.0001 ms。
-- 输入 debounce：1k 以内可 0 ms；>3k 建议 60–80 ms（用户感知仍是即时）。
-- **升级阈值**：>50k 或需要排序/模糊/多语言分词 → SQLite FTS5（系统自带）或 Rust 索引（第 5 节）。在 1 万以内，Swift 的倒排完全够用（毫秒级，且不在关键帧路径上）。
+- 加载时预计算小写、NFC 归一的 `searchKey`（标题/备注/画板/本地化画板/来源/标签/类型）。
+- 查询 memo：`QueryKey(section, board, filter, sort, needle, language, revision)`。
+- 过滤用 **UTF-8 字节扫描**（预计算 `searchKeyBytes` + `memmem`）：合法 UTF-8 上的字节子串匹配等价于字符子串匹配，且比 `String.contains` 快一个数量级。实测冷查询 1k/5k/10k = **0.28 / 1.88 / 4.79 ms**。
+- 输入 debounce：>4000 张时 40 ms，其余即时；5k 以下每个按键的总数据层成本 <3 ms。
+- **升级阈值**：>50k 或需要排序/模糊/多语言分词 → SQLite FTS5（系统自带）或 trigram/倒排。实测 5k 线性字节扫描已远低于 16 ms 目标，倒排在这里是过度设计。
 
 ### 3.6 动效原则
 
@@ -472,12 +472,12 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 ### 4.2 P1 —— 规模（2–3 周）
 
-1. `NSCollectionView` 渲染层（条件触发，见 3.2），带预取/复用；
-2. `Cards/` 640 px 后台回填 + 进度提示（`Previews/` 按需）；
-3. 详情独立窗口/冻结背景；
-4. API 内存快照 + FSEvents 失效（GET <2 ms）；
-5. 搜索倒排 + debounce 策略（>3k）；
-6. 自动化性能门禁（见 4.4）。
+1. **已完成**：搜索改为 UTF-8 字节扫描 + 40 ms 防抖（5k 1.9 ms）；
+2. **已完成**：API 文件版本缓存 + 响应 LRU（GET `/pins` 1.2 ms、`/library` 1.4 ms）；
+3. **已完成**：`@Observable` 迁移 + `DetailLayer/CaptureLayer/ToastLayer` 隔离（打开详情不再重算网格）；
+4. **已完成**：`scripts/perf-guard.sh` 自动性能门禁；
+5. **未触发**：`NSCollectionView` 渲染层（需要真实 10k 库的滚动 p95 证据；当前 10k 冷启动 0.82 s、数据层均达标）；
+6. **不做**：详情独立窗口（隔离后网格已不重算，overlay 只做合成）；回填进度与 HUD 记录为可选打磨。
 
 **M2 门槛**：1 万卡片下点详情 ≤80 ms、换画板 ≤120 ms、滚动 ≥50 fps、内存 ≤800 MB、冷启动 ≤1.2 s。
 
@@ -675,11 +675,25 @@ HUD（`⌥⌘P`，仅 Debug）：`N / 可见卡 / 最近一秒 body 次数 / 帧
 
 ### 8.3 已知限制
 
-1. **5k 搜索仍 36 ms**：需 P1 的 trigram/FTS 索引或 Rust 索引；1k 已满足 P0 的 ≤8 ms。
+1. **滚动 p95 尚未自动化**：`NSCollectionView` 迁移的触发条件需要 Instruments 在真实 10k 库上测量；当前 10k 冷启动 0.82 s、搜索 4.8 ms、分列 0.8 ms，没有证据表明需要重写渲染层。
 2. **Agent 外部写 vs 本地 debounce 写**：仍是 last-writer-wins（原有行为）。窗口很小（仅当外部写入与本地待写重叠），后续可用文件版本号/合并解决。
 3. **旧库回填**：首次启动在后台生成 `Cards/`，期间网格回退到 1200 px 缩略图。
 4. **标题固定两行**：`.lineLimit(2, reservesSpace: true)` 带来的视觉变化（卡片题注高度一致）。
-5. **`@Observable` 未迁移**：卡片已不订阅整库；余下的大对象失效范围影响的是 LibraryView/Sidebar，P1 再做。
+5. **详情仍是 overlay**：没有独立窗口，但 `@Observable` + 呈现层隔离后，打开/切换详情不会重新求值网格（详见 8.4）。
+
+### 8.4 P1 实施记录（2026-11-14）
+
+| 项 | 实现 | 实测 |
+|---|---|---|
+| 搜索 | `searchKeyBytes` + `memmem` 字节扫描；>4000 张 40 ms 防抖 | 1k **0.28 ms** / 5k **1.88 ms** / 10k **4.79 ms**（P0 前 15.45 / 78.9 / 估算约 150 ms） |
+| API | `LibraryFileStamp` 解码缓存 + `AgentResponseCache`（16 MB / 64 条 LRU，按 size+mtime(ns)+inode 失效） | `GET /pins` **76 → 1.2 ms**；`/library` **30 → 1.4 ms**；POST 后立即失效 |
+| 观察粒度 | `LibraryStore` 迁移 `@Observable`；派生属性补数据依赖；`RootView` 拆出 `DetailLayer/CaptureLayer/ToastLayer` | 启动 3 s 后打开详情，`LibraryView.body` 在 openDetail 之后 **0 次**重算 |
+| 性能门禁 | `scripts/perf-guard.sh [--pins N]`，解析 `--bench` 的 JSON 输出 | 1k、5k 均 PASS |
+| 10k 规模 | 合成 10k 图库 | 冷启动 **0.82 s**、搜索 4.79 ms、换画板 1.31 ms、分列 0.82 ms、解码 101.7 ms |
+
+**取舍记录**：先尝试了 trigram 倒排（构建 26 ms/5k、内存数 MB），但字节扫描已把 5k 冷查询降到 1.9 ms，倒排只再省约 1 ms，属于过度设计，最终移除以保持代码简单。倒排/FTS 留到 >50k 或出现真实瓶颈时再评估。
+
+**未做**：`NSCollectionView`（缺少滚动 p95 证据）、详情独立窗口（隔离后无需）、回填进度提示与 HUD（可选打磨）。
 
 ---
 
@@ -928,7 +942,8 @@ fs_usage -w -f filesys Canta
 | `docs/PERFORMANCE_PLAN.md` | 本方案：诊断、目标架构、分期路线、Rust 评估、SLO 与回归方式 |
 | `docs/PERF_IMPROVEMENT_REPORT.md` | 本次优化报告（适合直接粘贴/导入飞书） |
 | `docs/Canta-交互性能优化报告.docx` | 同上的 Word 版，可在飞书知识库「导入」为文档 |
-| `scripts/perf-bench/run.sh` + `scripts/perf-bench/main.swift` | 可复现的数据层基准（真实 `Pin`/`Pin` 编解码逻辑），本文所有数字的来源；输出到 `stdout`，耗时约 1–2 分钟 |
+| `scripts/perf-bench/run.sh` + `scripts/perf-bench/main.swift` | 可复现的 P0 前数据层基准（对照用） |
+| `scripts/perf-guard.sh` | P1 性能门禁：合成图库 + `--bench` JSON + 预算断言，1k/5k 均通过 |
 | 应用源码（P0 实施） | 数据层、卡片、网格、图片管线、持久化、启动、动效均已落地；新增 `Store/LibrarySnapshot.swift`、`Store/ImageLoader.swift`、`Store/LibraryWriter.swift`、`Store/CardThumbnailBackfill.swift`、`Performance/` |
 
 约束（已遵守）：

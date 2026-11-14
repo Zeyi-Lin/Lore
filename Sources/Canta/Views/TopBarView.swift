@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TopBarView: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @FocusState private var searchFocused: Bool
     @State private var statusPulse = false
 
@@ -36,9 +36,7 @@ struct TopBarView: View {
         Binding(
             get: { store.searchText },
             set: { newValue in
-                withAnimation(.snappy(duration: 0.28)) {
-                    store.searchText = newValue
-                }
+                store.updateSearchText(newValue)
             }
         )
     }
@@ -66,7 +64,7 @@ struct TopBarView: View {
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 1))
             } else {
                 Button {
-                    withAnimation(.snappy(duration: 0.28)) { store.searchText = "" }
+                    store.clearSearch()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))

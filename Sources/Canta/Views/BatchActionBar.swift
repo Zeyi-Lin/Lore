@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct BatchActionBar: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @State private var showBoardPicker = false
     @State private var showDeleteConfirm = false
 

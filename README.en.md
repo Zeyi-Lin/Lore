@@ -172,6 +172,7 @@ Canta ships with **English** and **Simplified Chinese** interfaces. It follows t
 
 - `./scripts/build-app.sh release` produces the self-contained app bundle.
 - `./scripts/perf-bench/run.sh` reproduces the pre-optimization data-layer baseline; `Canta --bench` prints query/encode/decode timings of the current implementation for a real library.
+- `./scripts/perf-guard.sh --pins 5000` runs the data-layer performance gate (1k/5k budgets).
 - The Agent API has a black-box smoke suite with a temporary fixture library:
 
   ```bash

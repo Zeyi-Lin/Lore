@@ -1,30 +1,39 @@
 import SwiftUI
 import AppKit
+import Observation
 import CantaAgentKit
 
 @MainActor
-final class LibraryStore: ObservableObject {
+@Observable
+final class LibraryStore {
     let root: URL
 
-    @Published private(set) var pins: [Pin] = []
-    @Published var section: LibrarySection = .all
-    @Published var selectedBoard: String?
-    @Published var searchText: String = ""
-    @Published var filter: GalleryFilter = .all
-    @Published var sort: PinSort = .recent
-    @Published var selectedPinID: UUID?
-    @Published var isSelectingPins = false
-    @Published var selectedPinIDs: Set<UUID> = []
-    @Published var capturePresented = false
-    @Published var isImporting = false
-    @Published var toast: ToastMessage?
-    @Published var startupError: String?
+    private(set) var pins: [Pin] = []
+    var section: LibrarySection = .all
+    var selectedBoard: String?
+    private(set) var searchText: String = ""
+    private(set) var searchQuery: String = ""
+    var filter: GalleryFilter = .all
+    var sort: PinSort = .recent
+    var selectedPinID: UUID?
+    var isSelectingPins = false
+    var selectedPinIDs: Set<UUID> = []
+    var capturePresented = false
+    var isImporting = false
+    var toast: ToastMessage?
+    var startupError: String?
 
-    @Published private(set) var agentStatus: AgentServerStatus = .stopped
-    @Published private(set) var agentPort: UInt16
-    @Published private(set) var agentAPIEnabled: Bool
-    @Published var defaultBoard: String {
-        didSet { UserDefaults.standard.set(defaultBoard, forKey: Keys.defaultBoard) }
+    private(set) var agentStatus: AgentServerStatus = .stopped
+    private(set) var agentPort: UInt16
+    private(set) var agentAPIEnabled: Bool
+
+    private var storedDefaultBoard: String
+    var defaultBoard: String {
+        get { storedDefaultBoard }
+        set {
+            storedDefaultBoard = newValue
+            UserDefaults.standard.set(newValue, forKey: Keys.defaultBoard)
+        }
     }
 
     private enum Keys {
@@ -33,20 +42,22 @@ final class LibraryStore: ObservableObject {
         static let defaultBoard = "canta.defaultBoard"
     }
 
-    private var agentServer: CantaAgentServer?
-    private var agentGeneration = 0
-    private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var agentServer: CantaAgentServer?
+    @ObservationIgnored private var agentGeneration = 0
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
 
     // Derived-data core. `snapshot` is replaced on every data mutation;
     // `projection` memoises queries against it.
-    private let writer: LibraryWriter
-    private(set) var snapshot: LibrarySnapshot
-    private let projection: GalleryProjection
+    @ObservationIgnored private let writer: LibraryWriter
+    @ObservationIgnored private(set) var snapshot: LibrarySnapshot
+    @ObservationIgnored private let projection: GalleryProjection
     private var revision: UInt64
-    private var columnsMemo: (key: ColumnsKey, columns: [[PinCardModel]])?
-    private var recentCountMemo: (revision: UInt64, value: Int)?
-    private var didStartMaintenance = false
-    private var hasPendingWrite = false
+    @ObservationIgnored private var columnsMemo: (key: ColumnsKey, columns: [[PinCardModel]])?
+    @ObservationIgnored private var recentCountMemo: (revision: UInt64, value: Int)?
+    @ObservationIgnored private var didStartMaintenance = false
+    @ObservationIgnored private var hasPendingWrite = false
+    @ObservationIgnored private var searchDebounceTask: Task<Void, Never>?
+    @ObservationIgnored private var searchGeneration = 0
 
     private struct ColumnsKey: Hashable {
         var query: GalleryQuery
@@ -72,7 +83,7 @@ final class LibraryStore: ObservableObject {
         } else {
             self.agentAPIEnabled = defaults.bool(forKey: Keys.agentEnabled)
         }
-        self.defaultBoard = defaults.string(forKey: Keys.defaultBoard) ?? "Unsorted"
+        self.storedDefaultBoard = defaults.string(forKey: Keys.defaultBoard) ?? "Unsorted"
 
         let writer = LibraryWriter(
             root: resolvedRoot,
@@ -111,7 +122,7 @@ final class LibraryStore: ObservableObject {
             board: selectedBoard?.trimmed.lowercased(),
             filterRaw: filter.rawValue,
             sortRaw: sort.rawValue,
-            needle: searchText.trimmed.lowercased(),
+            needle: searchQuery,
             languageRaw: LanguageManager.shared.resolved.rawValue,
             revision: revision
         )
@@ -126,7 +137,9 @@ final class LibraryStore: ObservableObject {
 
     var selectedPin: Pin? {
         guard let selectedPinID else { return nil }
-        return snapshot.pin(id: selectedPinID)
+        _ = revision
+        guard let index = snapshot.indexByID[selectedPinID] else { return nil }
+        return pins[index]
     }
 
     var selectedPins: [Pin] {
@@ -143,15 +156,28 @@ final class LibraryStore: ObservableObject {
         return !chosen.isEmpty && chosen.allSatisfy(\.isFavorite)
     }
 
-    var boardSummaries: [BoardSummary] { projection.boardSummaries() }
+    var boardSummaries: [BoardSummary] {
+        _ = revision
+        return projection.boardSummaries()
+    }
 
-    var allBoardNames: [String] { projection.allBoardNames() }
+    var allBoardNames: [String] {
+        _ = revision
+        return projection.allBoardNames()
+    }
 
-    var favoriteCount: Int { snapshot.favoriteCount }
+    var favoriteCount: Int {
+        _ = revision
+        return snapshot.favoriteCount
+    }
 
-    var screenshotCount: Int { snapshot.screenshotCount }
+    var screenshotCount: Int {
+        _ = revision
+        return snapshot.screenshotCount
+    }
 
     var recentCount: Int {
+        _ = revision
         if let recentCountMemo, recentCountMemo.revision == revision { return recentCountMemo.value }
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
         let value = pins.filter { $0.createdAt >= cutoff }.count
@@ -159,7 +185,10 @@ final class LibraryStore: ObservableObject {
         return value
     }
 
-    var allTags: [(name: String, count: Int)] { projection.allTags() }
+    var allTags: [(name: String, count: Int)] {
+        _ = revision
+        return projection.allTags()
+    }
 
     var pageTitle: String {
         switch section {
@@ -192,7 +221,7 @@ final class LibraryStore: ObservableObject {
     }
 
     var currentListIdentity: String {
-        "\(section.rawValue)|\(selectedBoard ?? "")|\(filter.rawValue)|\(sort.rawValue)|\(searchText)"
+        "\(section.rawValue)|\(selectedBoard ?? "")|\(filter.rawValue)|\(sort.rawValue)|\(searchQuery)"
     }
 
     var dataFolderPath: String { root.path }
@@ -201,7 +230,8 @@ final class LibraryStore: ObservableObject {
     func pin(id: UUID) -> Pin? { snapshot.pin(id: id) }
 
     func representativePin(forBoard board: String) -> Pin? {
-        projection.representativePin(forBoard: board)
+        _ = revision
+        return projection.representativePin(forBoard: board)
     }
 
     func originalURL(for pin: Pin) -> URL { root.appendingPathComponent(pin.image) }
@@ -267,6 +297,46 @@ final class LibraryStore: ObservableObject {
     /// Rows are the same height for every card because the title reserves two
     /// lines; used by the grid's width math.
     var cardColumnSpacing: CGFloat { 20 }
+
+    // MARK: - Search
+
+    /// Updates the field immediately; the query is applied on a short debounce
+    /// for larger libraries so each keystroke does not rescan the library.
+    func updateSearchText(_ value: String) {
+        searchText = value
+        searchGeneration &+= 1
+        let generation = searchGeneration
+        searchDebounceTask?.cancel()
+
+        let needle = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .precomposedStringWithCanonicalMapping
+        guard !needle.isEmpty else {
+            applySearchQuery("")
+            return
+        }
+        guard pins.count > 4_000 else {
+            applySearchQuery(needle)
+            return
+        }
+        searchDebounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 40_000_000)
+            guard let self, !Task.isCancelled, self.searchGeneration == generation else { return }
+            self.applySearchQuery(needle)
+        }
+    }
+
+    func clearSearch() {
+        searchGeneration &+= 1
+        searchDebounceTask?.cancel()
+        searchText = ""
+        applySearchQuery("")
+    }
+
+    private func applySearchQuery(_ needle: String) {
+        guard searchQuery != needle else { return }
+        searchQuery = needle
+    }
 
     // MARK: - Navigation
 
@@ -721,7 +791,7 @@ final class LibraryStore: ObservableObject {
             section = .all
             selectedBoard = board
             filter = .all
-            searchText = ""
+            clearSearch()
         }
     }
 

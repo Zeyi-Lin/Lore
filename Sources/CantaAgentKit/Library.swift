@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // MARK: - Public constants
 
@@ -372,10 +373,22 @@ struct ResolvedImage {
     let contentType: String
 }
 
-/// Reads the Canta library from disk. A new snapshot is loaded for every
-/// request so agents always observe the app's latest state.
+struct LibraryFileStamp: Equatable, Sendable {
+    let size: Int64
+    let modifiedSeconds: Int64
+    let modifiedNanoseconds: Int64
+    let inode: UInt64
+}
+
+/// Reads the Canta library from disk. Requests within the same file version
+/// reuse a decoded snapshot; any write (atomic replace, app edit, Agent POST)
+/// changes the stat stamp and forces a fresh decode.
 final class LibraryStore {
     let root: URL
+
+    private let cacheLock = NSLock()
+    private var cachedStamp: LibraryFileStamp?
+    private var cachedLibrary: CantaLibraryFile?
 
     init(root: URL) {
         self.root = root.standardizedFileURL
@@ -385,11 +398,37 @@ final class LibraryStore {
         root.appendingPathComponent("library.json", isDirectory: false)
     }
 
+    func libraryFileStamp() -> LibraryFileStamp? {
+        var fileInfo = stat()
+        let status = libraryFileURL.path.withCString { path in
+            stat(path, &fileInfo)
+        }
+        guard status == 0 else { return nil }
+        return LibraryFileStamp(
+            size: Int64(fileInfo.st_size),
+            modifiedSeconds: Int64(fileInfo.st_mtimespec.tv_sec),
+            modifiedNanoseconds: Int64(fileInfo.st_mtimespec.tv_nsec),
+            inode: UInt64(fileInfo.st_ino)
+        )
+    }
+
     func loadLibrary() throws -> CantaLibraryFile {
         let fileURL = libraryFileURL
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw LibraryStoreError.unavailable("The Canta library file was not found. Open Canta and save at least one pin, then try again.")
+        guard let stamp = libraryFileStamp() else {
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                throw LibraryStoreError.unavailable("The Canta library file was not found. Open Canta and save at least one pin, then try again.")
+            }
+            throw LibraryStoreError.unavailable("Canta could not read library.json.")
         }
+
+        cacheLock.lock()
+        if cachedStamp == stamp, let cachedLibrary {
+            let library = cachedLibrary
+            cacheLock.unlock()
+            return library
+        }
+        cacheLock.unlock()
+
         let data: Data
         do {
             data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
@@ -397,12 +436,26 @@ final class LibraryStore {
             throw LibraryStoreError.unavailable("Canta could not read library.json: \(error.localizedDescription)")
         }
         do {
-            return try JSONDecoder().decode(CantaLibraryFile.self, from: data)
+            let library = try JSONDecoder().decode(CantaLibraryFile.self, from: data)
+            cacheLock.lock()
+            cachedStamp = stamp
+            cachedLibrary = library
+            cacheLock.unlock()
+            return library
         } catch let error as DecodingError {
+            invalidateCache()
             throw LibraryStoreError.corrupt("library.json is not valid: \(Self.describe(error))")
         } catch {
+            invalidateCache()
             throw LibraryStoreError.corrupt("library.json could not be decoded: \(error.localizedDescription)")
         }
+    }
+
+    private func invalidateCache() {
+        cacheLock.lock()
+        cachedStamp = nil
+        cachedLibrary = nil
+        cacheLock.unlock()
     }
 
     func enrichedPins(baseURL: String) throws -> [EnrichedPin] {

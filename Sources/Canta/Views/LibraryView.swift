@@ -41,7 +41,7 @@ struct MasonryColumns<Card: View>: View {
 }
 
 struct LibraryView: View {
-    @EnvironmentObject private var store: LibraryStore
+    @Environment(LibraryStore.self) private var store
     @State private var showSortMenu = false
     @State private var gridWidth: CGFloat = 1080
 
@@ -59,7 +59,7 @@ struct LibraryView: View {
                     HStack(spacing: 0) {
                         Spacer(minLength: 20)
                         BatchActionBar()
-                            .environmentObject(store)
+                            .environment(store)
                         Spacer(minLength: 20)
                     }
                     .frame(maxWidth: .infinity)

@@ -30,6 +30,8 @@
 | 每次编辑写盘 | 主线程 13.7 ms | **后台编码 + 0.4 s debounce** |
 | 详情首图 | 原图 68 ms（主线程绘制时解码） | **约 3 ms**（1200 px 后台解码） |
 
+**P1 追加（同日）**：搜索改为 UTF-8 字节扫描（5k 1.88 ms）、API 响应缓存（`/pins` 76 → 1.2 ms）、`@Observable` + 呈现层隔离（打开详情不再重算网格）、自动性能门禁；10k 图库冷启动 0.82 s。
+
 **关于 Rust**：本轮不建议、也未使用 Rust 重写。UI 延迟发生在 SwiftUI 的 view body、布局与失效传播路径上，Rust 无法进入这条路径；重写 UI 需 6–12 人月且会丢失现有 macOS 集成。Rust 的合理落点是离线批处理媒体、十万级索引或未来跨平台内核，需另立门槛评估。
 
 ---
@@ -231,14 +233,82 @@
 
 ---
 
-## 9. 后续计划
+## 9. P1 追加优化（2026-11-14）
 
-| 优先级 | 事项 | 目标 |
+在 P0 基础上继续完成 P1 的规模项，并修正两处只靠 P0 不够彻底的地方。
+
+### 9.1 搜索：从 36 ms 到 1.9 ms
+
+原来的搜索每次按键都重建搜索串并做 `String.contains`。P1 做了两件事：
+
+1. 预计算 UTF‑8 字节形式的搜索键（`searchKeyBytes`），用 `memmem` 做字节子串匹配。合法 UTF‑8 上的字节匹配等价于字符子串匹配，速度却高一个数量级；
+2. 小写 + Unicode NFC 归一，保证组合字符的匹配一致；>4000 张时输入防抖 40 ms。
+
+| 图库 | P0 前 | P0 | P1 |
+|---|---:|---:|---:|
+| 1 000 pins | 15.45 ms | 7.10 ms | **0.28 ms** |
+| 5 000 pins | 78.9 ms | 36.4 ms | **1.88 ms** |
+| 10 000 pins | 估算 ~150 ms | — | **4.79 ms** |
+
+曾尝试 trigram 倒排（构建 26 ms/5k、数 MB 内存），但它只把 1.9 ms 再降到约 1.0 ms，收益不抵复杂度，最终移除；倒排/FTS 留到 >50k 的真实需求。
+
+### 9.2 Agent API：76 ms → 1.2 ms
+
+API 原来每个请求都重新读盘、解码、解析日期、排序、编码。P1 增加两层缓存：
+
+- `LibraryFileStamp`（size + mtime 纳秒 + inode）+ 解码结果缓存：文件一变即失效；
+- `AgentResponseCache`：按「文件版本 + 请求 target」缓存已编码的 GET 响应，16 MB / 64 条 LRU；POST 写入改变文件版本后自动失效。
+
+| 端点 | 优化前 | 优化后 |
+|---|---:|---:|
+| `GET /api/v1/pins` | 76 ms | **1.2 ms** |
+| `GET /api/v1/library` | 30 ms | **1.4 ms** |
+
+154 项 API 冒烟测试全部通过，包含 POST 后读取新数据、CORS、HEAD、图片字节与路径穿越检查。
+
+### 9.3 观察粒度：详情不再带着网格重算
+
+`LibraryStore` 从 `ObservableObject` 迁移到 `@Observable`，并按属性追踪；同时把 RootView 里的三个浮层拆成 `DetailLayer`、`CaptureLayer`、`ToastLayer`，每个只观察自己需要的那一片状态。
+
+验证：在启动 3 s 后程序化打开详情，`LibraryView.body` 在 `openDetail` 之后**一次都没有重新求值**（此前打开详情会连带整个画廊重算）。这意味着详情、←/→ 切换、toast 都不再触发网格的 body/layout 工作。
+
+### 9.4 自动性能门禁
+
+新增 `scripts/perf-guard.sh`：
+
+```bash
+./scripts/perf-guard.sh              # 1 000 pins
+./scripts/perf-guard.sh --pins 5000  # 5 000 pins
+```
+
+脚本生成合成图库，以 `CANTA_BENCH_JSON=1` 运行 `Canta --bench`，断言 memo 读取、搜索、换画板、列分配、解码的预算；1k/5k 当前均 PASS。性能回归从「靠感觉」变成可阻断的检查。
+
+### 9.5 10k 规模实测
+
+| 指标 | 结果 |
+|---|---:|
+| 冷启动到窗口出现 | **0.82 s** |
+| 冷搜索查询 | 4.79 ms |
+| 换画板查询 | 1.31 ms |
+| 列分配 | 0.82 ms |
+| `library.json` 解码 | 101.7 ms（启动一次） |
+
+### 9.6 未做的 P1 项及原因
+
+- **NSCollectionView 渲染层**：方案里是「条件触发」。目前 10k 冷启动 0.82 s、数据层均达标，缺少滚动 p95 >20 ms 的测量证据；迁移到 AppKit 复用渲染属于高成本高风险项，先用 Instruments 在真实 10k 库上确认再决定。
+- **详情独立窗口**：层级隔离后打开详情已不重算网格，overlay 只做合成；独立窗口的收益不足以抵消焦点/键盘/关闭行为改造风险。
+- **回填进度提示、HUD**：属于可选打磨，不影响当前交互指标。
+
+---
+
+## 10. 后续计划
+
+| 优先级 | 事项 | 目标 / 状态 |
 |---|---|---|
-| P1 | 搜索 trigram / FTS 索引 | 5k 冷查询 36 ms → <16 ms |
-| P1 | `@Observable` 迁移 | 进一步缩小 LibraryView/Sidebar 的失效范围 |
-| P1 | `NSCollectionView` 复用渲染（条件触发） | 1 万+ 卡片滚动稳定 ≥55 fps |
-| P1 | API 内存快照 + 文件监听 | `GET /api/v1/pins` <2 ms |
+| P1 ✅ | 搜索字节扫描 + 防抖 | 5k 冷查询 **1.88 ms** |
+| P1 ✅ | `@Observable` + 呈现层隔离 | 打开详情不再重算网格 |
+| P1 ✅ | API 文件版本缓存 + 响应 LRU | `GET /api/v1/pins` **1.2 ms** |
+| P1 ⏸ | `NSCollectionView` 复用渲染（条件触发） | 待滚动 p95 证据 |
 | P2 | SQLite WAL、Rust 离线媒体 worker | 按方案第 5 节门槛评估 |
 | 持续 | Instruments 端到端 p95 门禁 | 点详情 ≤50 ms、换图 ≤16.7 ms、换画板 ≤40 ms |
 
@@ -260,11 +330,12 @@ CANTA_HOME=/tmp/canta-perf/library-1k ./dist/Canta.app/Contents/MacOS/Canta --be
 - 重写：`LibraryView.swift`（懒列网格）、`PinCard.swift`（值化 + Equatable）、`LibraryStore.swift`（快照/投影/持久化）
 - 修改：`Components.swift`（LibraryImage）、`SeedLoader.swift`（单次解码）、`CantaPaths.swift`（快速日期 + Cards 目录）、`ImageProcessor.swift`（640 档）、`PinDetailView.swift`（1200/原图、去材质）、`RootView.swift`（维护/flush）
 - 删除：`Views/MasonryLayout.swift`
+- P1 新增：`Sources/CantaAgentKit/AgentResponseCache.swift`、`scripts/perf-guard.sh`
 - 文档：`docs/PERFORMANCE_PLAN.md`（方案 + 实施记录）
 
 ### C. 已知限制
 
-1. 5k 搜索仍 36 ms，需 P1 索引；
+1. 滚动 p95 尚未自动化，`NSCollectionView` 迁移待 Instruments 证据；
 2. Agent 外部写与本地 debounce 写仍为 last-writer-wins（原有行为）；
 3. 旧库首次启动后台回填 `Cards/`，期间回退 1200 px 缩略图；
 4. 标题固定两行（`reservesSpace`）带来轻微视觉变化；
