@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif">
+  <defs>
+    <marker id="gray" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#989087"/></marker>
+    <marker id="red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#E60023"/></marker>
+    <marker id="amber" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#B7791F"/></marker>
+    <marker id="moss" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2D6A4F"/></marker>
+  </defs>
+
+  <rect width="1600" height="1080" fill="#FAF8F5"/>
+
+  <!-- Header -->
+  <circle cx="68" cy="60" r="4.5" fill="#E60023"/>
+  <text x="82" y="64" font-size="10.5" font-weight="700" letter-spacing="2.1" fill="#989087">LORA · AI ENRICHMENT / SEQUENCE</text>
+  <text x="64" y="116" font-size="42" font-weight="700" letter-spacing="-1.4" fill="#171412">一次补全，四段停顿，一次人的决定</text>
+  <text x="64" y="150" font-size="14.5" fill="#615C56">网络与模型都不直接落库。预览是唯一的写入门，写入永远可撤销。</text>
+  <text x="1536" y="64" font-size="10.5" font-weight="600" letter-spacing="1.4" fill="#989087" text-anchor="end">DESIGN NOTE 02 · 2026.11</text>
+
+  <!-- Participants -->
+  <g>
+    <rect x="100" y="190" width="180" height="64" rx="14" fill="#FFFFFF" stroke="#E9E4DC"/>
+    <text x="190" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">人</text>
+    <text x="190" y="236" font-size="8.5" fill="#989087" text-anchor="middle">点一次，审一次</text>
+
+    <rect x="350" y="190" width="180" height="64" rx="14" fill="#FFFFFF" stroke="#E9E4DC"/>
+    <text x="440" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">详情页</text>
+    <text x="440" y="236" font-size="8.5" fill="#989087" text-anchor="middle">SwiftUI · 不阻塞</text>
+
+    <rect x="600" y="190" width="180" height="64" rx="14" fill="#FBF3E4" stroke="#EEDFC4"/>
+    <text x="690" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">AIEnrichmentController</text>
+    <text x="690" y="236" font-size="8.5" fill="#8A7A62" text-anchor="middle">@MainActor · 状态与预览</text>
+
+    <rect x="850" y="190" width="180" height="64" rx="14" fill="#FCE9EC" stroke="#F6CDD4"/>
+    <text x="940" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">EnrichmentService</text>
+    <text x="940" y="236" font-size="8.5" fill="#C97F8C" text-anchor="middle">actor · 无 UI / 无写权限</text>
+
+    <rect x="1100" y="190" width="180" height="64" rx="14" fill="#EEF1FB" stroke="#D8DFF4"/>
+    <text x="1190" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">外部模型</text>
+    <text x="1190" y="236" font-size="8.5" fill="#6B7EA8" text-anchor="middle">用户自己的 Key</text>
+
+    <rect x="1350" y="190" width="180" height="64" rx="14" fill="#E8F2EC" stroke="#CFE5D8"/>
+    <text x="1440" y="218" font-size="12" font-weight="700" fill="#171412" text-anchor="middle">LibraryStore</text>
+    <text x="1440" y="236" font-size="8.5" fill="#527A67" text-anchor="middle">唯一写入路径</text>
+  </g>
+
+  <!-- Lifelines -->
+  <g stroke="#CFC7BC" stroke-width="1" stroke-dasharray="3 4">
+    <line x1="190" y1="254" x2="190" y2="900"/>
+    <line x1="440" y1="254" x2="440" y2="900"/>
+    <line x1="690" y1="254" x2="690" y2="900"/>
+    <line x1="940" y1="254" x2="940" y2="900"/>
+    <line x1="1190" y1="254" x2="1190" y2="900"/>
+    <line x1="1440" y1="254" x2="1440" y2="900"/>
+  </g>
+
+  <!-- Phase 1 -->
+  <rect x="16" y="286" width="1568" height="170" rx="14" fill="#F3EFE9" fill-opacity="0.55"/>
+  <rect x="16" y="286" width="5" height="170" rx="2.5" fill="#989087"/>
+  <text x="34" y="308" font-size="16" font-weight="700" fill="#615C56">01</text>
+  <text x="34" y="324" font-size="8.5" font-weight="600" fill="#989087">本地准备</text>
+  <text x="34" y="338" font-size="8" fill="#B8B0A6">0 成本</text>
+
+  <circle cx="108" cy="322" r="9" fill="#FFFFFF" stroke="#C9C1B7"/><text x="108" y="325.5" font-size="8" font-weight="700" fill="#615C56" text-anchor="middle">1</text>
+  <line x1="190" y1="322" x2="432" y2="322" stroke="#989087" stroke-width="1.3" marker-end="url(#gray)"/>
+  <text x="311" y="314" font-size="9" fill="#615C56" text-anchor="middle">点击「AI 补全」· ⌘G</text>
+
+  <circle cx="108" cy="356" r="9" fill="#FFFFFF" stroke="#C9C1B7"/><text x="108" y="359.5" font-size="8" font-weight="700" fill="#615C56" text-anchor="middle">2</text>
+  <line x1="440" y1="356" x2="682" y2="356" stroke="#989087" stroke-width="1.3" marker-end="url(#gray)"/>
+  <text x="561" y="348" font-size="9" fill="#615C56" text-anchor="middle">enrich(pinID, templateID)</text>
+
+  <circle cx="108" cy="390" r="9" fill="#FFFFFF" stroke="#C9C1B7"/><text x="108" y="393.5" font-size="8" font-weight="700" fill="#615C56" text-anchor="middle">3</text>
+  <line x1="690" y1="390" x2="932" y2="390" stroke="#989087" stroke-width="1.3" marker-end="url(#gray)"/>
+  <text x="811" y="382" font-size="9" fill="#615C56" text-anchor="middle">suggest(context, template)</text>
+
+  <circle cx="108" cy="426" r="9" fill="#FFFFFF" stroke="#C9C1B7"/><text x="108" y="429.5" font-size="8" font-weight="700" fill="#615C56" text-anchor="middle">4</text>
+  <path d="M940 426 L990 426 L990 440 L946 440" fill="none" stroke="#989087" stroke-width="1.2" marker-end="url(#gray)"/>
+  <text x="1000" y="437" font-size="8.5" fill="#8A8178">指纹命中 → 跳过请求</text>
+
+  <!-- Phase 2 -->
+  <rect x="16" y="462" width="1568" height="176" rx="14" fill="#FCE9EC" fill-opacity="0.5"/>
+  <rect x="16" y="462" width="5" height="176" rx="2.5" fill="#E60023"/>
+  <text x="34" y="484" font-size="16" font-weight="700" fill="#B8001C">02</text>
+  <text x="34" y="500" font-size="8.5" font-weight="600" fill="#C97F8C">网络请求</text>
+  <text x="34" y="514" font-size="8" fill="#D8A6B0">用户 Key</text>
+
+  <circle cx="108" cy="490" r="9" fill="#FFFFFF" stroke="#F0C9D1"/><text x="108" y="493.5" font-size="8" font-weight="700" fill="#B8001C" text-anchor="middle">5</text>
+  <path d="M940 490 L990 490 L990 504 L946 504" fill="none" stroke="#E60023" stroke-width="1.3" marker-end="url(#red)"/>
+  <text x="1000" y="501" font-size="8.5" fill="#B8001C">渲染模板 + 组装上下文</text>
+
+  <circle cx="108" cy="528" r="9" fill="#FFFFFF" stroke="#F0C9D1"/><text x="108" y="531.5" font-size="8" font-weight="700" fill="#B8001C" text-anchor="middle">6</text>
+  <line x1="940" y1="528" x2="1182" y2="528" stroke="#E60023" stroke-width="1.6" marker-end="url(#red)"/>
+  <text x="1061" y="520" font-size="9" fill="#B8001C" text-anchor="middle">POST /chat/completions · JSON</text>
+  <text x="1061" y="544" font-size="7.5" fill="#C97F8C" text-anchor="middle">HTTPS · 超时 60s · 429/5xx 退避 2 次</text>
+
+  <circle cx="108" cy="568" r="9" fill="#FFFFFF" stroke="#F0C9D1"/><text x="108" y="571.5" font-size="8" font-weight="700" fill="#B8001C" text-anchor="middle">7</text>
+  <line x1="1190" y1="568" x2="948" y2="568" stroke="#E60023" stroke-width="1.6" marker-end="url(#red)"/>
+  <text x="1069" y="560" font-size="9" fill="#B8001C" text-anchor="middle">200 · content + usage</text>
+
+  <circle cx="108" cy="608" r="9" fill="#FFFFFF" stroke="#F0C9D1"/><text x="108" y="611.5" font-size="8" font-weight="700" fill="#B8001C" text-anchor="middle">8</text>
+  <path d="M940 608 L990 608 L990 622 L946 622" fill="none" stroke="#E60023" stroke-width="1.3" marker-end="url(#red)"/>
+  <text x="1000" y="619" font-size="8.5" fill="#B8001C">解析 → 校验；失败修复 1 次</text>
+  <text x="1520" y="482" font-size="8" fill="#C97F8C" text-anchor="end">请求体不含图库索引、历史或其他 Pin</text>
+
+  <!-- Phase 3 -->
+  <rect x="16" y="644" width="1568" height="122" rx="14" fill="#FBF3E4" fill-opacity="0.6"/>
+  <rect x="16" y="644" width="5" height="122" rx="2.5" fill="#B7791F"/>
+  <text x="34" y="666" font-size="16" font-weight="700" fill="#8A5C12">03</text>
+  <text x="34" y="682" font-size="8.5" font-weight="600" fill="#A98245">预览</text>
+  <text x="34" y="696" font-size="8" fill="#C4A97F">人做决定</text>
+
+  <circle cx="108" cy="676" r="9" fill="#FFFFFF" stroke="#E8D5B4"/><text x="108" y="679.5" font-size="8" font-weight="700" fill="#8A5C12" text-anchor="middle">9</text>
+  <line x1="940" y1="676" x2="698" y2="676" stroke="#B7791F" stroke-width="1.4" marker-end="url(#amber)"/>
+  <text x="819" y="668" font-size="9" fill="#8A5C12" text-anchor="middle">Suggestion(description, tags, usage)</text>
+
+  <circle cx="108" cy="710" r="9" fill="#FFFFFF" stroke="#E8D5B4"/><text x="108" y="713.5" font-size="8" font-weight="700" fill="#8A5C12" text-anchor="middle">10</text>
+  <line x1="690" y1="710" x2="448" y2="710" stroke="#B7791F" stroke-width="1.4" marker-end="url(#amber)"/>
+  <text x="569" y="702" font-size="9" fill="#8A5C12" text-anchor="middle">打开预览 · 此时仍未写入</text>
+
+  <circle cx="108" cy="746" r="9" fill="#FFFFFF" stroke="#E8D5B4"/><text x="108" y="749.5" font-size="8" font-weight="700" fill="#8A5C12" text-anchor="middle">11</text>
+  <line x1="190" y1="746" x2="432" y2="746" stroke="#B7791F" stroke-width="1.4" marker-end="url(#amber)"/>
+  <text x="311" y="738" font-size="9" fill="#8A5C12" text-anchor="middle">逐项确认 / 编辑 / 换模板</text>
+  <text x="440" y="760" font-size="7.5" fill="#C4A97F">Esc 取消 · Return 应用 · ⌘R 重新生成</text>
+
+  <!-- Phase 4 -->
+  <rect x="16" y="772" width="1568" height="128" rx="14" fill="#E8F2EC" fill-opacity="0.6"/>
+  <rect x="16" y="772" width="5" height="128" rx="2.5" fill="#2D6A4F"/>
+  <text x="34" y="794" font-size="16" font-weight="700" fill="#1F4F3A">04</text>
+  <text x="34" y="810" font-size="8.5" font-weight="600" fill="#527A67">写入</text>
+  <text x="34" y="824" font-size="8" fill="#7FA18F">可撤销</text>
+
+  <circle cx="108" cy="806" r="9" fill="#FFFFFF" stroke="#CFE5D8"/><text x="108" y="809.5" font-size="8" font-weight="700" fill="#1F4F3A" text-anchor="middle">12</text>
+  <line x1="440" y1="806" x2="1432" y2="806" stroke="#2D6A4F" stroke-width="1.5" marker-end="url(#moss)"/>
+  <text x="936" y="798" font-size="9" fill="#1F4F3A" text-anchor="middle">updatePin { note, tags, ai } · 一次事务</text>
+
+  <circle cx="108" cy="840" r="9" fill="#FFFFFF" stroke="#CFE5D8"/><text x="108" y="843.5" font-size="8" font-weight="700" fill="#1F4F3A" text-anchor="middle">13</text>
+  <line x1="1440" y1="840" x2="448" y2="840" stroke="#2D6A4F" stroke-width="1.3" marker-end="url(#moss)"/>
+  <text x="944" y="832" font-size="9" fill="#1F4F3A" text-anchor="middle">library.json 落盘 + undo snapshot</text>
+
+  <circle cx="108" cy="876" r="9" fill="#FFFFFF" stroke="#CFE5D8"/><text x="108" y="879.5" font-size="8" font-weight="700" fill="#1F4F3A" text-anchor="middle">14</text>
+  <line x1="440" y1="876" x2="198" y2="876" stroke="#2D6A4F" stroke-width="1.3" marker-end="url(#moss)"/>
+  <text x="319" y="868" font-size="9" fill="#1F4F3A" text-anchor="middle">已应用 · 撤销（5 秒）</text>
+
+  <!-- state machine -->
+  <rect x="64" y="920" width="1472" height="126" rx="18" fill="#FFFFFF" stroke="#E9E4DC"/>
+  <text x="88" y="944" font-size="8.5" font-weight="700" letter-spacing="1.8" fill="#989087">STATE / 只有一个 reviewing 状态可以写库</text>
+
+  <g>
+    <rect x="88" y="960" width="168" height="42" rx="21" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="172" y="986" font-size="10" font-weight="600" fill="#615C56" text-anchor="middle">idle</text>
+
+    <rect x="300" y="960" width="168" height="42" rx="21" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="384" y="986" font-size="10" font-weight="600" fill="#615C56" text-anchor="middle">preparing</text>
+
+    <rect x="512" y="960" width="168" height="42" rx="21" fill="#FCE9EC" stroke="#F6CDD4"/>
+    <text x="596" y="986" font-size="10" font-weight="600" fill="#B8001C" text-anchor="middle">requesting</text>
+
+    <rect x="724" y="960" width="168" height="42" rx="21" fill="#FBF3E4" stroke="#EEDFC4"/>
+    <text x="808" y="986" font-size="10" font-weight="600" fill="#8A5C12" text-anchor="middle">reviewing</text>
+
+    <rect x="936" y="960" width="168" height="42" rx="21" fill="#E8F2EC" stroke="#CFE5D8"/>
+    <text x="1020" y="986" font-size="10" font-weight="600" fill="#1F4F3A" text-anchor="middle">applied</text>
+
+    <line x1="256" y1="981" x2="294" y2="981" stroke="#989087" stroke-width="1.2" marker-end="url(#gray)"/>
+    <line x1="468" y1="981" x2="506" y2="981" stroke="#989087" stroke-width="1.2" marker-end="url(#gray)"/>
+    <line x1="680" y1="981" x2="718" y2="981" stroke="#989087" stroke-width="1.2" marker-end="url(#gray)"/>
+    <line x1="892" y1="981" x2="930" y2="981" stroke="#989087" stroke-width="1.2" marker-end="url(#gray)"/>
+  </g>
+
+  <line x1="1104" y1="950" x2="1104" y2="1018" stroke="#E9E4DC"/>
+  <g fill="#615C56" font-size="9">
+    <text x="1124" y="968">预览前不写库：模型输出只是候选。</text>
+    <text x="1124" y="988">取消即丢弃：请求可取消，缓存不写脏数据。</text>
+    <text x="1124" y="1008">失败可重来：401/429/超时/解析失败都有明确出口。</text>
+  </g>
+</svg>

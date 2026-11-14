@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif">
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#171412" flood-opacity="0.05"/>
+    </filter>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#989087"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#E60023"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="1040" fill="#FAF8F5"/>
+
+  <!-- Header -->
+  <circle cx="68" cy="60" r="4.5" fill="#E60023"/>
+  <text x="82" y="64" font-size="10.5" font-weight="700" letter-spacing="2.1" fill="#989087">LORA · AI ENRICHMENT / SYSTEM MAP</text>
+  <text x="64" y="116" font-size="42" font-weight="700" letter-spacing="-1.4" fill="#171412">把外部模型放进一条可控的补全管线</text>
+  <text x="64" y="150" font-size="14.5" fill="#615C56">模型可替换、提示词可编辑、数据最小化；任何写入都要经过人。</text>
+  <text x="1536" y="64" font-size="10.5" font-weight="600" letter-spacing="1.4" fill="#989087" text-anchor="end">DESIGN NOTE 01 · 2026.11</text>
+
+  <!-- App container -->
+  <rect x="64" y="190" width="1040" height="690" rx="30" fill="#FFFFFF" stroke="#E9E4DC"/>
+  <circle cx="94" cy="220" r="4" fill="#E60023"/>
+  <text x="106" y="224" font-size="10" font-weight="700" letter-spacing="1.8" fill="#989087">LORA · MACOS APP / SWIFTUI</text>
+  <text x="1078" y="224" font-size="10" font-weight="500" letter-spacing="1.2" fill="#B8B0A6" text-anchor="end">LOCAL FIRST</text>
+
+  <!-- 01 Surfaces -->
+  <text x="90" y="252" font-size="10" font-weight="700" letter-spacing="1.6" fill="#989087">01 · 触点</text>
+  <!-- chips -->
+  <g>
+    <rect x="90" y="264" width="232" height="60" rx="14" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <circle cx="112" cy="294" r="9" fill="#FCE9EC"/>
+    <text x="112" y="298" font-size="10" fill="#E60023" text-anchor="middle">✦</text>
+    <text x="130" y="289" font-size="12" font-weight="650" fill="#171412">详情页 · AI 补全</text>
+    <text x="130" y="307" font-size="9.5" fill="#989087">主入口，单条生成与预览</text>
+  </g>
+  <g>
+    <rect x="334" y="264" width="232" height="60" rx="14" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <circle cx="356" cy="294" r="9" fill="#FBF3E4"/>
+    <text x="356" y="298" font-size="10" fill="#B7791F" text-anchor="middle">▦</text>
+    <text x="374" y="289" font-size="12" font-weight="650" fill="#171412">批量操作栏</text>
+    <text x="374" y="307" font-size="9.5" fill="#989087">P1 · 队列、进度、逐条审阅</text>
+  </g>
+  <g>
+    <rect x="578" y="264" width="232" height="60" rx="14" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <circle cx="600" cy="294" r="9" fill="#E8F2EC"/>
+    <text x="600" y="298" font-size="10" fill="#2D6A4F" text-anchor="middle">≡</text>
+    <text x="618" y="289" font-size="12" font-weight="650" fill="#171412">设置 · 模型与模板</text>
+    <text x="618" y="307" font-size="9.5" fill="#989087">连接、密钥、提示词、预算</text>
+  </g>
+  <g>
+    <rect x="822" y="264" width="232" height="60" rx="14" fill="#FFFFFF" stroke="#C9C1B7" stroke-dasharray="5 5"/>
+    <circle cx="844" cy="294" r="9" fill="#EEF1FB"/>
+    <text x="844" y="298" font-size="10" fill="#4569D4" text-anchor="middle">⌁</text>
+    <text x="862" y="289" font-size="12" font-weight="650" fill="#615C56">Agent API</text>
+    <text x="862" y="307" font-size="9.5" fill="#989087">P3 · 可选，默认关闭</text>
+  </g>
+
+  <!-- 02 Application -->
+  <text x="90" y="354" font-size="10" font-weight="700" letter-spacing="1.6" fill="#989087">02 · 应用层</text>
+  <g filter="url(#soft)">
+    <rect x="90" y="366" width="482" height="104" rx="16" fill="#FBF3E4" stroke="#EEDFC4"/>
+    <rect x="90" y="366" width="4" height="104" rx="2" fill="#B7791F"/>
+    <text x="112" y="392" font-size="13" font-weight="700" fill="#171412">AIEnrichmentController</text>
+    <text x="112" y="410" font-size="9.5" fill="#8A7A62">状态机 · 预览 · 应用 · 撤销</text>
+    <text x="112" y="432" font-size="9" font-family="'SF Mono', Menlo, monospace" fill="#B7791F">idle → preparing → requesting → reviewing</text>
+    <text x="552" y="392" font-size="9" font-weight="700" letter-spacing="1" fill="#B7791F" text-anchor="end">@Observable</text>
+  </g>
+  <g filter="url(#soft)">
+    <rect x="596" y="366" width="482" height="104" rx="16" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <rect x="596" y="366" width="4" height="104" rx="2" fill="#615C56"/>
+    <text x="618" y="392" font-size="13" font-weight="700" fill="#171412">LibraryStore</text>
+    <text x="618" y="410" font-size="9.5" fill="#8A8178">现有 Pin 写入路径，不新增旁路</text>
+    <text x="618" y="432" font-size="9" font-family="'SF Mono', Menlo, monospace" fill="#615C56">updatePin { note, tags, ai } · undo snapshot</text>
+    <text x="1058" y="392" font-size="9" font-weight="700" letter-spacing="1" fill="#989087" text-anchor="end">@MainActor</text>
+  </g>
+
+  <!-- 03 Engine -->
+  <text x="90" y="504" font-size="10" font-weight="700" letter-spacing="1.6" fill="#989087">03 · 补全引擎 · ACTOR</text>
+  <rect x="64" y="516" width="1040" height="248" rx="22" fill="#FCE9EC" fill-opacity="0.45" stroke="#F6CDD4"/>
+  <text x="90" y="542" font-size="9" font-weight="700" letter-spacing="1.5" fill="#C97F8C">ORCHESTRATION / 一次请求的完整生命周期</text>
+
+  <!-- four cards -->
+  <g>
+    <rect x="88" y="556" width="168" height="180" rx="14" fill="#FFFFFF" stroke="#F0D3D8" filter="url(#soft)"/>
+    <text x="104" y="578" font-size="8.5" font-weight="700" letter-spacing="1.2" fill="#989087">01 / CONTEXT</text>
+    <text x="104" y="600" font-size="12" font-weight="700" fill="#171412">上下文组装</text>
+    <text x="104" y="622" font-size="9" fill="#615C56">Pin 元数据</text>
+    <text x="104" y="638" font-size="9" fill="#615C56">OCR · 色彩 · 尺寸</text>
+    <text x="104" y="654" font-size="9" fill="#615C56">压缩图（可选）</text>
+    <rect x="104" y="674" width="70" height="18" rx="9" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="139" y="687" font-size="8" fill="#989087" text-anchor="middle">只读 · 本地</text>
+    <text x="104" y="718" font-size="8" fill="#B8B0A6" font-family="'SF Mono', Menlo, monospace">PinContext</text>
+  </g>
+  <g>
+    <rect x="272" y="556" width="168" height="180" rx="14" fill="#FFFFFF" stroke="#F0D3D8" filter="url(#soft)"/>
+    <text x="288" y="578" font-size="8.5" font-weight="700" letter-spacing="1.2" fill="#989087">02 / PROMPT</text>
+    <text x="288" y="600" font-size="12" font-weight="700" fill="#171412">模板渲染</text>
+    <text x="288" y="622" font-size="9" fill="#615C56">变量替换</text>
+    <text x="288" y="638" font-size="9" fill="#615C56">版本 + 预览</text>
+    <text x="288" y="654" font-size="9" fill="#615C56">内置 / 自定义</text>
+    <rect x="288" y="674" width="70" height="18" rx="9" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="323" y="687" font-size="8" fill="#989087" text-anchor="middle">纯函数 · 可测</text>
+    <text x="288" y="718" font-size="8" fill="#B8B0A6" font-family="'SF Mono', Menlo, monospace">render(template)</text>
+  </g>
+  <g>
+    <rect x="456" y="556" width="168" height="180" rx="14" fill="#FFFFFF" stroke="#F0D3D8" filter="url(#soft)"/>
+    <text x="472" y="578" font-size="8.5" font-weight="700" letter-spacing="1.2" fill="#989087">03 / REQUEST</text>
+    <text x="472" y="600" font-size="12" font-weight="700" fill="#171412">调用外部模型</text>
+    <text x="472" y="622" font-size="9" fill="#615C56">OpenAI-compatible</text>
+    <text x="472" y="638" font-size="9" fill="#615C56">超时 · 重试 · 取消</text>
+    <text x="472" y="654" font-size="9" fill="#615C56">429 / 5xx 退避</text>
+    <rect x="472" y="674" width="70" height="18" rx="9" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="507" y="687" font-size="8" fill="#989087" text-anchor="middle">密钥仅内存</text>
+    <text x="472" y="718" font-size="8" fill="#B8B0A6" font-family="'SF Mono', Menlo, monospace">POST /chat/completions</text>
+  </g>
+  <g>
+    <rect x="640" y="556" width="168" height="180" rx="14" fill="#FFFFFF" stroke="#F0D3D8" filter="url(#soft)"/>
+    <text x="656" y="578" font-size="8.5" font-weight="700" letter-spacing="1.2" fill="#989087">04 / VALIDATE</text>
+    <text x="656" y="600" font-size="12" font-weight="700" fill="#171412">解析与护栏</text>
+    <text x="656" y="622" font-size="9" fill="#615C56">提取 JSON</text>
+    <text x="656" y="638" font-size="9" fill="#615C56">长度 · 去重 · 语言</text>
+    <text x="656" y="654" font-size="9" fill="#615C56">失败修复一次</text>
+    <rect x="656" y="674" width="78" height="18" rx="9" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="695" y="687" font-size="8" fill="#989087" text-anchor="middle">不合法不写入</text>
+    <text x="656" y="718" font-size="8" fill="#B8B0A6" font-family="'SF Mono', Menlo, monospace">Suggestion?</text>
+  </g>
+
+  <!-- arrows between 4 cards -->
+  <line x1="256" y1="646" x2="270" y2="646" stroke="#989087" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="440" y1="646" x2="454" y2="646" stroke="#989087" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="624" y1="646" x2="638" y2="646" stroke="#989087" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- client panel -->
+  <g filter="url(#soft)">
+    <rect x="836" y="556" width="232" height="180" rx="14" fill="#FFFFFF" stroke="#F0D3D8"/>
+    <text x="854" y="578" font-size="8.5" font-weight="700" letter-spacing="1.2" fill="#989087">05 / CACHE + BUDGET + CLIENT</text>
+    <text x="854" y="600" font-size="12" font-weight="700" fill="#171412">缓存、预算、连接</text>
+    <text x="854" y="622" font-size="9" fill="#615C56">指纹命中 → 跳过请求</text>
+    <text x="854" y="638" font-size="9" fill="#615C56">每日调用上限 / 取消</text>
+    <text x="854" y="654" font-size="9" fill="#615C56">URLSession · TLS</text>
+    <rect x="854" y="672" width="92" height="18" rx="9" fill="#FCE9EC"/>
+    <text x="900" y="685" font-size="8" font-weight="600" fill="#B8001C" text-anchor="middle">预算守门员</text>
+    <text x="854" y="714" font-size="8" fill="#B8B0A6" font-family="'SF Mono', Menlo, monospace">cacheKey + dailyBudget</text>
+  </g>
+
+  <!-- engine to client arrow -->
+  <line x1="808" y1="646" x2="832" y2="646" stroke="#E60023" stroke-width="1.6" marker-end="url(#arrowRed)"/>
+
+  <!-- client to external arrow -->
+  <path d="M1068 646 L1104 646" stroke="#E60023" stroke-width="1.8" fill="none"/>
+  <path d="M1104 646 L1132 646" stroke="#E60023" stroke-width="1.8" fill="none" marker-end="url(#arrowRed)"/>
+  <text x="1104" y="632" font-size="8.5" font-weight="600" fill="#B8001C" text-anchor="middle">HTTPS</text>
+
+  <!-- 04 Data -->
+  <text x="90" y="792" font-size="10" font-weight="700" letter-spacing="1.6" fill="#989087">04 · 本地数据 / 全部可迁移</text>
+  <g>
+    <rect x="90" y="804" width="180" height="62" rx="12" fill="#E8F2EC" stroke="#CFE5D8"/>
+    <text x="105" y="826" font-size="10.5" font-weight="700" fill="#1F4F3A">Keychain</text>
+    <text x="105" y="844" font-size="8.5" fill="#527A67">API Key · 不进 JSON</text>
+  </g>
+  <g>
+    <rect x="282" y="804" width="180" height="62" rx="12" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="297" y="826" font-size="10.5" font-weight="700" fill="#171412">AI/config.json</text>
+    <text x="297" y="844" font-size="8.5" fill="#989087">模型 · 连接 · 预算</text>
+  </g>
+  <g>
+    <rect x="474" y="804" width="180" height="62" rx="12" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="489" y="826" font-size="10.5" font-weight="700" fill="#171412">AI/prompts.json</text>
+    <text x="489" y="844" font-size="8.5" fill="#989087">内置 + 自定义模板</text>
+  </g>
+  <g>
+    <rect x="666" y="804" width="180" height="62" rx="12" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="681" y="826" font-size="10.5" font-weight="700" fill="#171412">library.json</text>
+    <text x="681" y="844" font-size="8.5" fill="#989087">Pin.ai 溯源（可选字段）</text>
+  </g>
+  <g>
+    <rect x="858" y="804" width="180" height="62" rx="12" fill="#FAF8F5" stroke="#E9E4DC"/>
+    <text x="873" y="826" font-size="10.5" font-weight="700" fill="#171412">AI/cache.json</text>
+    <text x="873" y="844" font-size="8.5" fill="#989087">建议缓存 · 可随时清除</text>
+  </g>
+
+  <!-- External -->
+  <rect x="1136" y="190" width="400" height="690" rx="30" fill="#EEF1FB" stroke="#D8DFF4"/>
+  <circle cx="1166" cy="220" r="4" fill="#4569D4"/>
+  <text x="1178" y="224" font-size="10" font-weight="700" letter-spacing="1.8" fill="#6B7EA8">EXTERNAL / USER-OWNED</text>
+  <text x="1166" y="270" font-size="26" font-weight="700" fill="#171412">外部模型</text>
+  <text x="1166" y="294" font-size="10.5" fill="#6B7EA8">用户自己的账号，直连；不经过 Lora 服务器。</text>
+
+  <!-- provider chips -->
+  <g>
+    <rect x="1160" y="322" width="352" height="52" rx="12" fill="#FFFFFF" stroke="#C9D3EE"/>
+    <text x="1176" y="343" font-size="10" font-weight="700" fill="#171412">DeepSeek</text>
+    <text x="1496" y="343" font-size="8.5" fill="#4569D4" text-anchor="end">默认 · 文本</text>
+    <text x="1176" y="360" font-size="8.5" fill="#6B7EA8" font-family="'SF Mono', Menlo, monospace">deepseek-chat · /v1</text>
+  </g>
+  <g>
+    <rect x="1160" y="382" width="352" height="52" rx="12" fill="#FFFFFF" stroke="#C9D3EE"/>
+    <text x="1176" y="403" font-size="10" font-weight="700" fill="#171412">OpenAI-compatible</text>
+    <text x="1496" y="403" font-size="8.5" fill="#4569D4" text-anchor="end">任意兼容</text>
+    <text x="1176" y="420" font-size="8.5" fill="#6B7EA8" font-family="'SF Mono', Menlo, monospace">baseURL + model + key</text>
+  </g>
+  <g>
+    <rect x="1160" y="442" width="352" height="52" rx="12" fill="#FFFFFF" stroke="#C9D3EE"/>
+    <text x="1176" y="463" font-size="10" font-weight="700" fill="#171412">本地 Ollama</text>
+    <text x="1496" y="463" font-size="8.5" fill="#4569D4" text-anchor="end">离线</text>
+    <text x="1176" y="480" font-size="8.5" fill="#6B7EA8" font-family="'SF Mono', Menlo, monospace">127.0.0.1:11434/v1</text>
+  </g>
+
+  <!-- request block -->
+  <rect x="1160" y="520" width="352" height="126" rx="14" fill="#171412"/>
+  <text x="1178" y="544" font-size="8" font-weight="700" letter-spacing="1.4" fill="#8A8178">REQUEST · JSON MODE</text>
+  <text x="1178" y="568" font-size="9.5" fill="#F3EFE9" font-family="'SF Mono', Menlo, monospace">POST /chat/completions</text>
+  <text x="1178" y="586" font-size="9.5" fill="#C9C1B7" font-family="'SF Mono', Menlo, monospace">model · messages · temperature</text>
+  <text x="1178" y="604" font-size="9.5" fill="#C9C1B7" font-family="'SF Mono', Menlo, monospace">response_format: json_object</text>
+  <text x="1178" y="626" font-size="8.5" fill="#E60023" font-family="'SF Mono', Menlo, monospace">stream: false · max_tokens: 600</text>
+
+  <!-- response block -->
+  <rect x="1160" y="660" width="352" height="126" rx="14" fill="#FFFFFF" stroke="#C9D3EE"/>
+  <text x="1178" y="684" font-size="8" font-weight="700" letter-spacing="1.4" fill="#6B7EA8">RESPONSE · 只接受建议</text>
+  <text x="1178" y="707" font-size="9.5" fill="#171412" font-family="'SF Mono', Menlo, monospace">choices[0].message.content</text>
+  <text x="1178" y="725" font-size="9.5" fill="#2D6A4F" font-family="'SF Mono', Menlo, monospace">{ "description": "…",</text>
+  <text x="1178" y="743" font-size="9.5" fill="#2D6A4F" font-family="'SF Mono', Menlo, monospace">  "tags": ["…"] }</text>
+  <text x="1178" y="766" font-size="8.5" fill="#989087" font-family="'SF Mono', Menlo, monospace">usage: prompt / completion tokens</text>
+
+  <text x="1166" y="820" font-size="9" fill="#6B7EA8">DeepSeek 文本模型默认不传图；需要视觉时切换支持</text>
+  <text x="1166" y="836" font-size="9" fill="#6B7EA8">vision 的模型，或用本地 OCR + 色彩/尺寸补足。</text>
+  <rect x="1166" y="850" width="64" height="20" rx="10" fill="#FFFFFF" stroke="#C9D3EE"/>
+  <text x="1198" y="863" font-size="8" font-weight="600" fill="#4569D4" text-anchor="middle">TLS 1.2+</text>
+  <rect x="1238" y="850" width="92" height="20" rx="10" fill="#FFFFFF" stroke="#C9D3EE"/>
+  <text x="1284" y="863" font-size="8" font-weight="600" fill="#4569D4" text-anchor="middle">无 Lora 后端</text>
+
+  <!-- Trust boundary -->
+  <rect x="64" y="900" width="1472" height="100" rx="20" fill="#171412"/>
+  <text x="88" y="926" font-size="8.5" font-weight="700" letter-spacing="2" fill="#E60023">TRUST BOUNDARY / 每次生成只发送当前灵感的必要上下文</text>
+  <text x="88" y="952" font-size="10" font-weight="600" fill="#F3EFE9">会离开 Mac</text>
+  <g font-size="9.5" fill="#D8D0C7">
+    <rect x="176" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="198" y="952" text-anchor="middle">标题</text>
+    <rect x="226" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="248" y="952" text-anchor="middle">描述</text>
+    <rect x="276" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="298" y="952" text-anchor="middle">标签</text>
+    <rect x="326" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="348" y="952" text-anchor="middle">画板</text>
+    <rect x="376" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="398" y="952" text-anchor="middle">尺寸</text>
+    <rect x="426" y="939" width="44" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="448" y="952" text-anchor="middle">主色</text>
+    <rect x="476" y="939" width="80" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="516" y="952" text-anchor="middle">OCR（可选）</text>
+    <rect x="562" y="939" width="92" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="608" y="952" text-anchor="middle">压缩图（可选）</text>
+  </g>
+  <line x1="760" y1="918" x2="760" y2="982" stroke="#FFFFFF" stroke-opacity="0.14"/>
+  <text x="784" y="952" font-size="10" font-weight="600" fill="#F3EFE9">始终留在本地</text>
+  <g font-size="9.5" fill="#D8D0C7">
+    <rect x="884" y="939" width="96" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="932" y="952" text-anchor="middle">图库其余内容</text>
+    <rect x="986" y="939" width="60" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="1016" y="952" text-anchor="middle">原图</text>
+    <rect x="1052" y="939" width="64" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="1084" y="952" text-anchor="middle">API Key</text>
+    <rect x="1122" y="939" width="80" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.07" stroke="#FFFFFF" stroke-opacity="0.14"/><text x="1162" y="952" text-anchor="middle">调用历史</text>
+  </g>
+  <text x="784" y="976" font-size="8.5" fill="#8A8178">密钥只存在 macOS Keychain，渲染日志与错误信息全部脱敏。</text>
+</svg>

@@ -42,18 +42,24 @@ struct MasonryColumns<Card: View>: View {
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var store
-    @Environment(\.loraContentWidth) private var contentWidth
+    /// Width the content column was given by the window. It is the only
+    /// trustworthy source of width: measuring the grid would read back the
+    /// grid's own (stale) width, because its minimum width is the sum of its
+    /// columns.
+    var columnWidth: CGFloat
     @State private var showSortMenu = false
     @State private var sortHovering = false
-    @State private var gridWidth: CGFloat = 1080
+    /// Width the masonry lays itself out at. Held separately from the live
+    /// column width so a window drag does not invalidate every card for every
+    /// pixel; see `applyGridWidth`.
+    @State private var gridWidth: CGFloat = 0
     @State private var pendingDeleteID: UUID?
+    @State private var widthSettle = TaskSlot()
 
-    private struct GridWidthKey: PreferenceKey {
-        static var defaultValue: CGFloat = 0
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = max(value, nextValue())
-        }
-    }
+    /// Granularity while the window is being dragged. A drag only re-lays the
+    /// gallery out once per step; the frames in between keep their cached
+    /// sizes, and `scheduleWidthSettle` snaps to the exact width on release.
+    private static let liveResizeQuantum: CGFloat = 16
 
     var body: some View {
         libraryScroll
@@ -121,10 +127,6 @@ struct LibraryView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onPreferenceChange(GridWidthKey.self) { width in
-                guard width > 0, abs(width - gridWidth) > 0.5 else { return }
-                gridWidth = width
-            }
             .defaultScrollAnchor(.top)
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
@@ -134,6 +136,10 @@ struct LibraryView: View {
                         proxy.scrollTo("library-top", anchor: .top)
                     }
                 }
+            }
+            .onAppear { applyGridWidth(columnWidth) }
+            .onChange(of: columnWidth) { _, width in
+                applyGridWidth(width)
             }
             .onChange(of: store.currentListIdentity) { _, _ in
                 var transaction = Transaction()
@@ -149,21 +155,18 @@ struct LibraryView: View {
     }
 
     private var grid: some View {
-        // Prefer the exact main-column width. The gridWidth preference can
-        // trail behind a live window resize, which made the masonry keep the
-        // old column count for a moment (and could overflow into the sidebar).
-        let measuredWidth = contentWidth > 0 ? contentWidth : gridWidth
+        let measuredWidth = gridWidth > 0 ? gridWidth : columnWidth
         let available = max(measuredWidth - 68, 240)
         let columns = store.columns(forWidth: available)
         let spacing = store.cardColumnSpacing
-        let columnWidth = MasonryComposer.columnWidth(
+        let cardWidth = MasonryComposer.columnWidth(
             availableWidth: available,
             columns: max(columns.count, 1),
             spacing: spacing
         )
         return MasonryColumns(
             columns: columns,
-            columnWidth: columnWidth,
+            columnWidth: cardWidth,
             spacing: spacing,
             rowSpacing: 28
         ) { model in
@@ -181,14 +184,40 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 34)
         .padding(.bottom, 64)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: GridWidthKey.self,
-                    value: max(proxy.size.width - 68, 0)
-                )
-            }
-        )
+    }
+
+    /// Coarsens the width the masonry reacts to while the window is moving,
+    /// then snaps back to the exact width once it stops.
+    ///
+    /// A drag delivers a few dozen events per second; without this every one
+    /// of them changes `columnWidth`, which invalidates the layout cache of
+    /// every card in every column (the per-frame cost measured in
+    /// `docs/GALLERY_RESIZE_PERF.md`). Quantising to 16 pt leaves the cached
+    /// layout intact for the frames in between, so only one frame per step
+    /// pays for the relayout. `widthSettle.pending` is what tells a drag from
+    /// a settled relayout: it stays true while changes keep arriving.
+    private func applyGridWidth(_ raw: CGFloat) {
+        guard raw.isFinite, raw > 0 else { return }
+        let quantum = widthSettle.pending ? Self.liveResizeQuantum : 1
+        setGridWidth((raw / quantum).rounded(.down) * quantum)
+        scheduleWidthSettle(raw)
+    }
+
+    private func setGridWidth(_ width: CGFloat) {
+        guard abs(width - gridWidth) >= 0.5 else { return }
+        Perf.gridRelayouts &+= 1
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) { gridWidth = width }
+    }
+
+    /// One relayout at the exact width, 140 ms after the last change. This
+    /// removes the sub-quantum gap on the trailing edge and covers programmatic
+    /// resizes (the title-bar zoom animation), which never look like a drag.
+    private func scheduleWidthSettle(_ raw: CGFloat) {
+        widthSettle.schedule(delay: 140_000_000) {
+            setGridWidth(raw)
+        }
     }
 
     private var cardActions: PinCardActions {

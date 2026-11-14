@@ -6,6 +6,9 @@ struct RootView: View {
     @Environment(LibraryStore.self) private var store
     @Environment(\.openSettings) private var openSettings
     @State private var dropTargeted = false
+    /// The scroll-view warm-up is only useful while the app is starting; after
+    /// that it is a live subtree that every resize pass has to lay out.
+    @State private var prewarming = true
 
     var body: some View {
         ZStack {
@@ -24,36 +27,39 @@ struct RootView: View {
             }
             .ignoresSafeArea()
 
-            GeometryReader { geometry in
-                let sidebarWidth = LoraLayout.sidebarWidth
-                let contentWidth = max(geometry.size.width - sidebarWidth, 0)
-                HStack(spacing: 0) {
-                    // The sidebar still clears the traffic lights, so it keeps
-                    // the title-bar inset; the content column lifts into that
-                    // band (its top row shares the row with the window
-                    // controls) so the library starts at the window's top edge.
-                    SidebarView()
-                        .frame(width: sidebarWidth)
-                        .padding(.top, LoraLayout.titlebarInset)
+            // A fixed-width sidebar plus a content column pinned to the width
+            // the window gives it. The pin is not optional: the gallery's grid
+            // has a minimum width of its own (the sum of its columns), so
+            // without it a narrow window keeps the old, wide content, the
+            // column overflows instead of shrinking, and the gallery never
+            // sheds a column. Keeping the sidebar *outside* the reader means a
+            // drag still never re-evaluates the sidebar tree.
+            HStack(spacing: 0) {
+                // The sidebar still clears the traffic lights, so it keeps
+                // the title-bar inset; the content column lifts into that
+                // band (its top row shares the row with the window
+                // controls) so the library starts at the window's top edge.
+                SidebarView()
+                    .frame(width: LoraLayout.sidebarWidth)
+                    .padding(.top, LoraLayout.titlebarInset)
 
+                GeometryReader { geometry in
                     VStack(spacing: 0) {
                         TopBarView()
-                        content
+                        content(columnWidth: geometry.size.width)
                     }
-                    .frame(width: contentWidth, height: geometry.size.height, alignment: .topLeading)
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                     .clipped()
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
-                .environment(\.loraContentWidth, contentWidth)
-                // The only zoom target on the left edge: the empty title-bar
-                // strip above the brand, where the window controls live. It
-                // deliberately stops short of the sidebar's rows.
-                .overlay(alignment: .topLeading) {
-                    WindowZoomZone()
-                        .frame(width: sidebarWidth, height: LoraLayout.titlebarInset)
                 }
             }
             .ignoresSafeArea(edges: .top)
+            // The only zoom target on the left edge: the empty title-bar
+            // strip above the brand, where the window controls live. It
+            // deliberately stops short of the sidebar's rows.
+            .overlay(alignment: .topLeading) {
+                WindowZoomZone()
+                    .frame(width: LoraLayout.sidebarWidth, height: LoraLayout.titlebarInset)
+            }
 
             // Continuous sidebar edge: from the window's top edge all the way
             // down, so the strip and the sidebar read as one piece.
@@ -81,11 +87,17 @@ struct RootView: View {
         .focusEffectDisabled()
         .dismissTextFocusOnClickOutside()
         .background(WindowConfigurator().frame(width: 0, height: 0))
-        .background(DetailPrewarm())
+        .background {
+            if prewarming { DetailPrewarm() }
+        }
         .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $dropTargeted) { providers in
             DropReceiver.handle(providers: providers, store: store)
         }
         .task {
+            if ResizeBench.isRequested() {
+                await ResizeBench.run(store: store)
+                return
+            }
             if ProcessInfo.processInfo.arguments.contains("--bench") {
                 DataLayerBench.run(store: store)
                 NSApp.terminate(nil)
@@ -98,6 +110,11 @@ struct RootView: View {
                 store.startupError = nil
             }
             applyDemoModeIfNeeded()
+
+            // Keep the warm-up for the launch window only, then drop it out of
+            // the tree so it stops taking part in layout passes.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withTransaction(Transaction(animation: nil)) { prewarming = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             store.flushPersistenceAndWait()
@@ -173,12 +190,12 @@ struct RootView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(columnWidth: CGFloat) -> some View {
         if store.section == .agent {
             AgentAccessView()
                 .transition(.opacity)
         } else {
-            LibraryView()
+            LibraryView(columnWidth: columnWidth)
                 .transition(.opacity)
         }
     }

@@ -207,6 +207,7 @@ Lora 借用了 Pinterest 的自信——图片优先、留白充分、标志性�
 - `./scripts/build-app.sh release` 生成自包含的应用包。
 - `./scripts/perf-bench/run.sh` 复现优化前的数据层基线（对照用）；`Lora --bench` 在真实图库上打印当前实现的查询/编码/解码耗时。
 - `./scripts/perf-guard.sh --pins 5000` 运行数据层性能门禁（1k/5k 预算断言）。
+- `./scripts/resize-bench.sh --pins 1000` 复测拉伸窗口时的每帧布局耗时（release 构建，需要活跃的图形会话）；判据与实测数据见 `docs/GALLERY_RESIZE_PERF.md`。
 - Agent API 有一套黑盒冒烟测试，使用临时 fixture 图库：
 
   ```bash

@@ -171,8 +171,10 @@ struct PinCard: View, Equatable {
         .foregroundStyle(Color.white)
         .padding(.horizontal, 7)
         .frame(height: 21)
+        // A flat tint instead of `.ultraThinMaterial`: the material re-samples
+        // the backdrop whenever the card's size changes, which is every frame
+        // of a window resize, and the visual difference at this size is nil.
         .background(Capsule().fill(Color.black.opacity(0.56)))
-        .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
         .allowsHitTesting(false)
     }
@@ -188,7 +190,6 @@ struct PinCard: View, Equatable {
         .padding(.horizontal, 9)
         .frame(height: 24)
         .background(Capsule().fill(Color.black.opacity(0.55)))
-        .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
     }
 

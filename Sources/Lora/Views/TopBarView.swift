@@ -6,6 +6,8 @@ struct TopBarView: View {
     @FocusState private var searchFocused: Bool
     @State private var statusPulse = false
     @State private var statusHovering = false
+    @State private var searchHovering = false
+    @State private var clearHovering = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -57,7 +59,11 @@ struct TopBarView: View {
         HStack(spacing: 9) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchFocused ? Theme.ink : Theme.inkTertiary)
+                .foregroundStyle(
+                    searchFocused
+                        ? Theme.ink
+                        : (searchHovering ? Theme.inkSecondary : Theme.inkTertiary)
+                )
 
             TextField(T("Search pins, tags, boards, colors…"), text: searchTextBinding)
                 .textFieldStyle(.plain)
@@ -67,13 +73,18 @@ struct TopBarView: View {
                 .onSubmit { searchFocused = false }
 
             if store.searchText.isEmpty {
-                Text("⌘F")
-                    .font(Theme.mono(9.5, weight: .medium))
-                    .foregroundStyle(Theme.inkTertiary)
-                    .padding(.horizontal, 7)
-                    .frame(height: 21)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(Theme.paper.opacity(0.85)))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 1))
+                if !searchFocused {
+                    Text("⌘F")
+                        .font(Theme.mono(9.5, weight: .medium))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .padding(.horizontal, 7)
+                        .frame(height: 21)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(
+                            searchHovering ? Theme.parchmentDeep.opacity(0.75) : Theme.paper.opacity(0.85)
+                        ))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 1))
+                        .transition(.opacity)
+                }
             } else {
                 Button {
                     store.clearSearch()
@@ -83,9 +94,11 @@ struct TopBarView: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Theme.inkSecondary)
                         .frame(width: 18, height: 18)
-                        .background(Circle().fill(Theme.paper))
+                        .background(Circle().fill(clearHovering ? Theme.parchmentDeep : Theme.paper))
                 }
                 .buttonStyle(PointerPlainButtonStyle())
+                .onHover { clearHovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: clearHovering)
             }
         }
         .padding(.horizontal, 15)
@@ -93,13 +106,30 @@ struct TopBarView: View {
         .frame(height: LoraLayout.toolbarHeight)
         .background(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
-                .fill(Theme.parchment)
+                .fill(
+                    searchFocused
+                        ? Theme.paper
+                        : (searchHovering ? Theme.parchmentDeep.opacity(0.85) : Theme.parchment)
+                )
+                .shadow(
+                    color: .black.opacity(searchFocused ? 0.07 : (searchHovering ? 0.045 : 0)),
+                    radius: searchFocused ? 10 : 6,
+                    y: searchFocused ? 3 : 2
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
-                .strokeBorder(searchFocused ? Theme.ink.opacity(0.16) : Color.clear, lineWidth: 1)
+                .strokeBorder(
+                    searchFocused
+                        ? Theme.ink.opacity(0.24)
+                        : (searchHovering ? Theme.ink.opacity(0.14) : Color.clear),
+                    lineWidth: searchFocused ? 1.3 : 1
+                )
         )
+        .contentShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+        .onHover { searchHovering = $0 }
         .animation(.easeOut(duration: 0.16), value: searchFocused)
+        .animation(.easeOut(duration: 0.16), value: searchHovering)
     }
 
     private var statusPill: some View {

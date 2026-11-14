@@ -65,9 +65,13 @@ final class LibraryStore {
     @ObservationIgnored private var searchDebounceTask: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
 
+    /// Only the column *count* participates: the balance between columns is a
+    /// greedy walk over aspect ratios, so it does not need to be recomputed
+    /// for every pixel of a window resize. Keying by width used to turn every
+    /// resize event into an O(N) split plus a brand-new `columns` array, which
+    /// also forced `ForEach` to diff N identities per frame.
     private struct ColumnsKey: Hashable {
         var query: GalleryQuery
-        var width: CGFloat
         var columns: Int
     }
 
@@ -339,17 +343,19 @@ final class LibraryStore {
     }
 
     /// Column partitions for the masonry grid, balanced from aspect ratios
-    /// alone. Cached per query + measured width.
+    /// alone. Cached per query + column count, so a width change inside the
+    /// same column band reuses the partition instead of rebalancing N cards.
     func columns(
         forWidth width: CGFloat,
         spacing: CGFloat = 20,
         rowSpacing: CGFloat = 28
     ) -> [[PinCardModel]] {
         let count = MasonryComposer.columnCount(width: width, spacing: spacing)
-        let key = ColumnsKey(query: currentQuery, width: width.rounded(), columns: count)
+        let query = currentQuery
+        let key = ColumnsKey(query: query, columns: count)
         if let columnsMemo, columnsMemo.key == key { return columnsMemo.columns }
         let columns = MasonryComposer.split(
-            models: visibleCards,
+            models: projection.cards(for: query),
             columns: count,
             availableWidth: width,
             spacing: spacing,

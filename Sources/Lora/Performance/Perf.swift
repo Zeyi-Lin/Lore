@@ -13,6 +13,12 @@ enum Perf {
         return body()
     }
 
+    /// How many times the gallery committed a new layout width. A resize
+    /// sweep should touch this once per layout quantum rather than once per
+    /// point of width change; `--resize-bench` reads it as a load-independent
+    /// check on that behaviour.
+    nonisolated(unsafe) static var gridRelayouts = 0
+
     static func begin(_ name: StaticString) -> OSSignpostIntervalState {
         signposter.beginInterval(name)
     }
