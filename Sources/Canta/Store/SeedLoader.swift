@@ -33,40 +33,45 @@ enum SeedLoader {
         }
     }
 
-    /// Installs the designed sample library on first launch, or repairs an empty library
-    /// created before seeding. A hidden sentinel keeps an intentionally emptied library empty.
-    @discardableResult
-    static func installIfNeeded(root: URL) throws -> Bool {
+    /// Reads the library exactly once (the old flow decoded it in
+    /// `installIfNeeded` and then again in `LibraryStore.init`), installing the
+    /// designed sample library on first launch or when an empty library was
+    /// created before seeding. A hidden sentinel keeps an intentionally emptied
+    /// library empty.
+    static func loadOrInstall(root: URL) throws -> CantaLibrary {
         try CantaPaths.ensureDirectories(root: root)
         let fm = FileManager.default
         let libraryURL = CantaPaths.libraryFile(root: root)
         let seededMarker = root.appendingPathComponent(".canta-seeded")
 
         if fm.fileExists(atPath: libraryURL.path) {
-            let data = try? Data(contentsOf: libraryURL)
-            let existing = data.flatMap { try? CantaJSON.decoder.decode(CantaLibrary.self, from: $0) }
-            if let existing, !existing.pins.isEmpty {
+            let data = try Data(contentsOf: libraryURL)
+            let existing = try CantaJSON.makeDecoder().decode(CantaLibrary.self, from: data)
+            if !existing.pins.isEmpty {
                 if !fm.fileExists(atPath: seededMarker.path) {
                     try? Data().write(to: seededMarker, options: .atomic)
                 }
-                return false
+                return existing
             }
-            // Empty library: only seed if it has never been seeded before.
-            guard !fm.fileExists(atPath: seededMarker.path) else { return false }
+            if fm.fileExists(atPath: seededMarker.path) {
+                return existing
+            }
         }
 
         guard let seedDirectory = seedDirectory() else {
+            let empty = CantaLibrary()
             if !fm.fileExists(atPath: libraryURL.path) {
-                try CantaJSON.encoder.encode(CantaLibrary()).write(to: libraryURL, options: .atomic)
+                try CantaJSON.makeEncoder().encode(empty).write(to: libraryURL, options: .atomic)
             }
-            return false
+            return empty
         }
 
         let seedFile = seedDirectory.appendingPathComponent("seed.json")
         guard let data = try? Data(contentsOf: seedFile),
-              let seedLibrary = try? CantaJSON.decoder.decode(CantaLibrary.self, from: data) else {
-            try CantaJSON.encoder.encode(CantaLibrary()).write(to: libraryURL, options: .atomic)
-            return false
+              let seedLibrary = try? CantaJSON.makeDecoder().decode(CantaLibrary.self, from: data) else {
+            let empty = CantaLibrary()
+            try? CantaJSON.makeEncoder().encode(empty).write(to: libraryURL, options: .atomic)
+            return empty
         }
 
         var installed: [Pin] = []
@@ -98,15 +103,16 @@ enum SeedLoader {
         }
 
         guard !installed.isEmpty else {
+            let empty = CantaLibrary()
             if !fm.fileExists(atPath: libraryURL.path) {
-                try CantaJSON.encoder.encode(CantaLibrary()).write(to: libraryURL, options: .atomic)
+                try CantaJSON.makeEncoder().encode(empty).write(to: libraryURL, options: .atomic)
             }
-            return false
+            return empty
         }
 
         let library = CantaLibrary(version: 1, pins: installed)
-        try CantaJSON.encoder.encode(library).write(to: libraryURL, options: .atomic)
+        try CantaJSON.makeEncoder().encode(library).write(to: libraryURL, options: .atomic)
         try? Data().write(to: seededMarker, options: .atomic)
-        return true
+        return library
     }
 }

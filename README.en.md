@@ -133,7 +133,8 @@ Everything is plain files under:
 ~/Library/Application Support/Canta/
 ├── library.json      # pins + metadata
 ├── Images/           # original captures
-└── Thumbnails/       # 1200 px JPEG previews
+├── Thumbnails/       # 1200 px JPEG previews (detail / agent)
+└── Cards/            # 640 px JPEG grid thumbnails (generated on import; backfilled in the background for older libraries)
 ```
 
 `library.json` is the single source of truth and is re-read by the API on every request. The schema is documented in [docs/AGENT_API.md](docs/AGENT_API.md). Set `CANTA_HOME` to point the app at a different library for development.
@@ -170,6 +171,7 @@ Canta ships with **English** and **Simplified Chinese** interfaces. It follows t
 ## Verification
 
 - `./scripts/build-app.sh release` produces the self-contained app bundle.
+- `./scripts/perf-bench/run.sh` reproduces the pre-optimization data-layer baseline; `Canta --bench` prints query/encode/decode timings of the current implementation for a real library.
 - The Agent API has a black-box smoke suite with a temporary fixture library:
 
   ```bash

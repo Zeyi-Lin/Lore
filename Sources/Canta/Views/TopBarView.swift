@@ -32,13 +32,24 @@ struct TopBarView: View {
         }
     }
 
+    private var searchTextBinding: Binding<String> {
+        Binding(
+            get: { store.searchText },
+            set: { newValue in
+                withAnimation(.snappy(duration: 0.28)) {
+                    store.searchText = newValue
+                }
+            }
+        )
+    }
+
     private var searchField: some View {
         HStack(spacing: 9) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(searchFocused ? Theme.ink : Theme.inkTertiary)
 
-            TextField(T("Search pins, tags, boards…"), text: $store.searchText)
+            TextField(T("Search pins, tags, boards…"), text: searchTextBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(Theme.ink)
@@ -55,7 +66,7 @@ struct TopBarView: View {
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 1))
             } else {
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { store.searchText = "" }
+                    withAnimation(.snappy(duration: 0.28)) { store.searchText = "" }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))

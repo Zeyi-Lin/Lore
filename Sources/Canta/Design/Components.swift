@@ -246,40 +246,28 @@ struct SectionLabel: View {
 
 // MARK: - Image loading
 
-final class ImageCache: @unchecked Sendable {
-    static let shared = ImageCache()
-    private let cache = NSCache<NSString, NSImage>()
-
-    private init() {
-        cache.countLimit = 220
-    }
-
-    func image(for path: String) -> NSImage? {
-        cache.object(forKey: path as NSString)
-    }
-
-    func insert(_ image: NSImage, for path: String) {
-        cache.setObject(image, forKey: path as NSString)
-    }
-}
-
+/// Draws a decoded image from `ImageLoader`. Decoding happens off the main
+/// actor at the target pixel size; a missing first candidate (the 640 px
+/// `Cards/` derivative) falls through to the stored thumbnail/original.
 struct LibraryImage: View {
-    let path: String
+    var paths: [String]
+    var maxPixel: Int = 640
     var contentMode: ContentMode = .fill
     var placeholderIcon: String = "photo"
 
-    @State private var image: NSImage?
+    @State private var image: CGImage?
     @State private var failed = false
+
+    private var loadKey: String { "\(maxPixel)|" + paths.joined(separator: "|") }
 
     var body: some View {
         ZStack {
             Rectangle().fill(Theme.parchmentDeep)
             if let image {
-                Image(nsImage: image)
+                Image(decorative: image, scale: 2)
                     .resizable()
-                    .interpolation(.high)
+                    .interpolation(.medium)
                     .aspectRatio(contentMode: contentMode)
-                    .transition(.opacity)
             } else if failed {
                 VStack(spacing: 8) {
                     Image(systemName: "photo.badge.exclamationmark")
@@ -294,20 +282,13 @@ struct LibraryImage: View {
                     .foregroundStyle(Theme.inkTertiary.opacity(0.5))
             }
         }
-        .task(id: path) {
+        .task(id: loadKey) {
             image = nil
             failed = false
-            if let cached = ImageCache.shared.image(for: path) {
-                image = cached
-                return
-            }
-            let loaded = await Task.detached(priority: .userInitiated) { () -> NSImage? in
-                NSImage(contentsOfFile: path)
-            }.value
+            let loaded = await ImageLoader.shared.image(paths: paths, maxPixel: maxPixel)
             guard !Task.isCancelled else { return }
             if let loaded {
-                ImageCache.shared.insert(loaded, for: path)
-                withAnimation(.easeOut(duration: 0.18)) { image = loaded }
+                image = loaded
             } else {
                 failed = true
             }

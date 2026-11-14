@@ -19,8 +19,7 @@ struct PinDetailOverlay: View {
             let height = min(max(geo.size.height - 92, 540), 790)
 
             ZStack {
-                Color.black.opacity(isImageMode ? 0.86 : 0.42)
-                    .background(.ultraThinMaterial)
+                Color.black.opacity(isImageMode ? 0.86 : 0.46)
                     .ignoresSafeArea()
                     .onTapGesture {
                         if isImageMode {
@@ -62,6 +61,10 @@ struct PinDetailOverlay: View {
                 NSApp.keyWindow?.makeFirstResponder(nil)
             }
             installKeyMonitor()
+            store.prefetchNeighbors(around: pin)
+        }
+        .onChange(of: pin.id) { _, _ in
+            store.prefetchNeighbors(around: pin)
         }
         .onDisappear {
             if let keyMonitor {
@@ -98,7 +101,7 @@ struct PinDetailOverlay: View {
             RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.34), radius: 48, x: 0, y: 26)
+        .shadow(color: .black.opacity(0.30), radius: 30, x: 0, y: 18)
         .overlay(alignment: .topTrailing) {
             Button {
                 store.dismissDetail()
@@ -115,14 +118,13 @@ struct PinDetailOverlay: View {
             .offset(x: 13, y: -13)
             .help(T("Close"))
         }
-        .compositingGroup()
         .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
     }
 
     private var imageOnlyLayer: some View {
         GeometryReader { proxy in
             let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 130, height: proxy.size.height - 130))
-            LibraryImage(path: store.originalURL(for: pin).path, contentMode: .fit)
+            LibraryImage(paths: store.largeImageCandidates(for: pin), maxPixel: 0, contentMode: .fit)
                 .frame(width: fitted.width, height: fitted.height)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
@@ -240,7 +242,7 @@ struct PinDetailOverlay: View {
 
             GeometryReader { proxy in
                 let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 54, height: proxy.size.height - 54))
-                LibraryImage(path: store.originalURL(for: pin).path, contentMode: .fit)
+                LibraryImage(paths: store.detailImageCandidates(for: pin), maxPixel: 1200, contentMode: .fit)
                     .frame(width: fitted.width, height: fitted.height)
                     .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .overlay(

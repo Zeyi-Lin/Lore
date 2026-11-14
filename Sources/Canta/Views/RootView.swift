@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
 
 struct RootView: View {
@@ -56,12 +57,24 @@ struct RootView: View {
             DropReceiver.handle(providers: providers, store: store)
         }
         .task {
+            if ProcessInfo.processInfo.arguments.contains("--bench") {
+                DataLayerBench.run(store: store)
+                NSApp.terminate(nil)
+                return
+            }
             store.startAgentServerIfNeeded()
+            store.startBackgroundMaintenance()
             if let error = store.startupError {
                 store.showToast(error, icon: "exclamationmark.triangle")
                 store.startupError = nil
             }
             applyDemoModeIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            store.flushPersistenceAndWait()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            store.flushPersistence()
         }
         .onExitCommand {
             if store.selectedPin != nil {
@@ -71,7 +84,7 @@ struct RootView: View {
             } else if store.isSelectingPins {
                 store.endSelection()
             } else if !store.searchText.isEmpty {
-                store.searchText = ""
+                withAnimation(.snappy(duration: 0.28)) { store.searchText = "" }
             }
         }
         .animation(.easeOut(duration: 0.18), value: dropTargeted)

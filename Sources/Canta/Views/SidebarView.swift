@@ -116,7 +116,7 @@ struct SidebarView: View {
 
     private func boardRow(_ board: BoardSummary) -> some View {
         let selected = store.section == .all && store.selectedBoard == board.name
-        let representative = store.pins.first { $0.board.caseInsensitiveCompare(board.name) == .orderedSame }
+        let representative = store.representativePin(forBoard: board.name)
 
         return Button {
             store.select(board: board.name)
@@ -126,7 +126,7 @@ struct SidebarView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Theme.boardColor(board.name).opacity(0.14))
                     if let representative {
-                        LibraryImage(path: store.thumbnailURL(for: representative).path, contentMode: .fill)
+                        LibraryImage(paths: store.cardImageCandidates(for: representative), maxPixel: 64, contentMode: .fill)
                     } else {
                         Circle().fill(Theme.boardColor(board.name)).frame(width: 6, height: 6)
                     }

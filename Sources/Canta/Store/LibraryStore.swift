@@ -37,14 +37,33 @@ final class LibraryStore: ObservableObject {
     private var agentGeneration = 0
     private var toastTask: Task<Void, Never>?
 
-    static let suggestedBoards = ["Web dashboards", "Mobile flows", "Landing pages", "Editorial", "Unsorted"]
+    // Derived-data core. `snapshot` is replaced on every data mutation;
+    // `projection` memoises queries against it.
+    private let writer: LibraryWriter
+    private(set) var snapshot: LibrarySnapshot
+    private let projection: GalleryProjection
+    private var revision: UInt64
+    private var columnsMemo: (key: ColumnsKey, columns: [[PinCardModel]])?
+    private var recentCountMemo: (revision: UInt64, value: Int)?
+    private var didStartMaintenance = false
+    private var hasPendingWrite = false
+
+    private struct ColumnsKey: Hashable {
+        var query: GalleryQuery
+        var width: CGFloat
+        var columns: Int
+    }
+
 
     init(root: URL = CantaPaths.dataRoot) {
+        let resolvedRoot: URL
         if let debugHome = UserDefaults.standard.string(forKey: "canta.debugHome"), !debugHome.isEmpty {
-            self.root = URL(fileURLWithPath: debugHome, isDirectory: true)
+            resolvedRoot = URL(fileURLWithPath: debugHome, isDirectory: true)
         } else {
-            self.root = root
+            resolvedRoot = root
         }
+        self.root = resolvedRoot
+
         let defaults = UserDefaults.standard
         let storedPort = defaults.integer(forKey: Keys.agentPort)
         self.agentPort = UInt16(clamping: storedPort > 1024 ? storedPort : 4242)
@@ -55,23 +74,59 @@ final class LibraryStore: ObservableObject {
         }
         self.defaultBoard = defaults.string(forKey: Keys.defaultBoard) ?? "Unsorted"
 
+        let writer = LibraryWriter(
+            root: resolvedRoot,
+            fileURL: CantaPaths.libraryFile(root: resolvedRoot)
+        )
+        self.writer = writer
+
+        var library = CantaLibrary()
+        var loadError: String?
         do {
-            try CantaPaths.ensureDirectories(root: self.root)
-            _ = try SeedLoader.installIfNeeded(root: self.root)
-            let data = try Data(contentsOf: CantaPaths.libraryFile(root: self.root))
-            let library = try CantaJSON.decoder.decode(CantaLibrary.self, from: data)
-            self.pins = library.pins
+            // Single decode: seeding and loading share one read of library.json.
+            library = try SeedLoader.loadOrInstall(root: resolvedRoot)
         } catch {
-            self.pins = []
-            self.startupError = TF("Canta couldn't read your library. New pins will start a fresh one. (%@)", error.localizedDescription)
+            loadError = TF("Canta couldn't read your library. New pins will start a fresh one. (%@)", error.localizedDescription)
+        }
+
+        self.revision = 1
+        self.pins = library.pins
+        let snapshot = LibrarySnapshot(revision: 1, pins: library.pins)
+        self.snapshot = snapshot
+        self.projection = GalleryProjection(snapshot: snapshot, root: resolvedRoot)
+        self.startupError = loadError
+
+        writer.onError = { [weak self] message in
+            Task { @MainActor [weak self] in
+                self?.showToast(TF("Couldn't save the library: %@", message), icon: "exclamationmark.triangle")
+            }
         }
     }
 
     // MARK: - Derived collections
 
+    private var currentQuery: GalleryQuery {
+        GalleryQuery(
+            sectionRaw: section.rawValue,
+            board: selectedBoard?.trimmed.lowercased(),
+            filterRaw: filter.rawValue,
+            sortRaw: sort.rawValue,
+            needle: searchText.trimmed.lowercased(),
+            languageRaw: LanguageManager.shared.resolved.rawValue,
+            revision: revision
+        )
+    }
+
+    /// The pins visible for the current query. Memoised: the five reads that
+    /// used to happen per `LibraryView` body now cost a dictionary lookup.
+    var filteredPins: [Pin] { projection.visiblePins(for: currentQuery) }
+
+    /// Value projections consumed by the lazy grid; also memoised.
+    var visibleCards: [PinCardModel] { projection.cards(for: currentQuery) }
+
     var selectedPin: Pin? {
         guard let selectedPinID else { return nil }
-        return pins.first { $0.id == selectedPinID }
+        return snapshot.pin(id: selectedPinID)
     }
 
     var selectedPins: [Pin] {
@@ -79,103 +134,32 @@ final class LibraryStore: ObservableObject {
     }
 
     var allVisibleSelected: Bool {
-        !filteredPins.isEmpty && filteredPins.allSatisfy { selectedPinIDs.contains($0.id) }
+        let visible = filteredPins
+        return !visible.isEmpty && visible.allSatisfy { selectedPinIDs.contains($0.id) }
     }
 
     var selectedPinsAreFavorites: Bool {
-        !selectedPins.isEmpty && selectedPins.allSatisfy(\.isFavorite)
+        let chosen = selectedPins
+        return !chosen.isEmpty && chosen.allSatisfy(\.isFavorite)
     }
 
-    var filteredPins: [Pin] {
-        var result = pins
+    var boardSummaries: [BoardSummary] { projection.boardSummaries() }
 
-        switch section {
-        case .favorites:
-            result = result.filter(\.isFavorite)
-        case .recent:
-            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-            result = result.filter { $0.createdAt >= cutoff }
-        case .all, .agent:
-            break
-        }
+    var allBoardNames: [String] { projection.allBoardNames() }
 
-        if let selectedBoard {
-            result = result.filter { $0.board.caseInsensitiveCompare(selectedBoard) == .orderedSame }
-        }
+    var favoriteCount: Int { snapshot.favoriteCount }
 
-        switch filter {
-        case .all: break
-        case .screenshots: result = result.filter { $0.kind == .screenshot }
-        case .favorites: result = result.filter(\.isFavorite)
-        }
+    var screenshotCount: Int { snapshot.screenshotCount }
 
-        let needle = searchText.trimmed.lowercased()
-        if !needle.isEmpty {
-            let tokens = needle.split(separator: " ").map(String.init)
-            result = result.filter { pin in
-                let haystack = [
-                    pin.title,
-                    pin.note,
-                    pin.board,
-                    localizedBoard(pin.board),
-                    pin.sourceLabel ?? "",
-                    pin.tags.joined(separator: " "),
-                    pin.kind.label
-                ].joined(separator: " ").lowercased()
-                return tokens.allSatisfy { haystack.contains($0) }
-            }
-        }
-
-        switch sort {
-        case .recent:
-            result.sort { $0.createdAt > $1.createdAt }
-        case .oldest:
-            result.sort { $0.createdAt < $1.createdAt }
-        case .title:
-            result.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        }
-        return result
-    }
-
-    var boardSummaries: [BoardSummary] {
-        var counts: [String: Int] = [:]
-        for pin in pins {
-            let board = pin.board.trimmed.isEmpty ? "Unsorted" : pin.board
-            counts[board, default: 0] += 1
-        }
-        let orderedNames = Self.suggestedBoards.filter { counts[$0] != nil }
-        let extraNames = counts.keys.filter { !Self.suggestedBoards.contains($0) }.sorted()
-        return (orderedNames + extraNames).map { BoardSummary(name: $0, count: counts[$0] ?? 0) }
-    }
-
-    var allBoardNames: [String] {
-        var names = Self.suggestedBoards
-        for pin in pins where !names.contains(pin.board) && !pin.board.trimmed.isEmpty {
-            names.append(pin.board)
-        }
-        return names
-    }
-
-    var favoriteCount: Int { pins.filter(\.isFavorite).count }
-    var screenshotCount: Int { pins.filter { $0.kind == .screenshot }.count }
     var recentCount: Int {
+        if let recentCountMemo, recentCountMemo.revision == revision { return recentCountMemo.value }
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-        return pins.filter { $0.createdAt >= cutoff }.count
+        let value = pins.filter { $0.createdAt >= cutoff }.count
+        recentCountMemo = (revision, value)
+        return value
     }
 
-    var allTags: [(name: String, count: Int)] {
-        var counts: [String: Int] = [:]
-        for pin in pins {
-            for tag in pin.tags where !tag.trimmed.isEmpty {
-                counts[tag, default: 0] += 1
-            }
-        }
-        return counts.map { (name: $0.key, count: $0.value) }
-            .sorted { lhs, rhs in
-                if lhs.count == rhs.count { return lhs.name < rhs.name }
-                return lhs.count > rhs.count
-            }
-    }
+    var allTags: [(name: String, count: Int)] { projection.allTags() }
 
     var pageTitle: String {
         switch section {
@@ -214,14 +198,75 @@ final class LibraryStore: ObservableObject {
     var dataFolderPath: String { root.path }
     var libraryFileURL: URL { CantaPaths.libraryFile(root: root) }
 
+    func pin(id: UUID) -> Pin? { snapshot.pin(id: id) }
+
+    func representativePin(forBoard board: String) -> Pin? {
+        projection.representativePin(forBoard: board)
+    }
+
     func originalURL(for pin: Pin) -> URL { root.appendingPathComponent(pin.image) }
+
+    /// No `fileExists` here any more: a missing thumbnail makes the loader fall
+    /// back to the next candidate, so the file system is not hit from `body`.
     func thumbnailURL(for pin: Pin) -> URL {
         if let thumbnail = pin.thumbnail {
-            let url = root.appendingPathComponent(thumbnail)
-            if FileManager.default.fileExists(atPath: url.path) { return url }
+            return root.appendingPathComponent(thumbnail)
         }
         return originalURL(for: pin)
     }
+
+    /// Grid candidates: 640 px derivative → 1200 px thumbnail → original.
+    func cardImageCandidates(for pin: Pin) -> [String] {
+        let rootPath = root.path
+        var candidates: [String] = []
+        candidates.reserveCapacity(3)
+        candidates.append(rootPath + "/Cards/" + pin.id.uuidString + ".jpg")
+        if let thumbnail = pin.thumbnail {
+            candidates.append(rootPath + "/" + thumbnail)
+        }
+        candidates.append(rootPath + "/" + pin.image)
+        return candidates
+    }
+
+    /// Detail candidates: the 1200 px thumbnail first, the original as fallback.
+    func detailImageCandidates(for pin: Pin) -> [String] {
+        var candidates: [String] = []
+        if let thumbnail = pin.thumbnail {
+            candidates.append(root.path + "/" + thumbnail)
+        }
+        candidates.append(root.path + "/" + pin.image)
+        return candidates
+    }
+
+    /// Native-size original, used only by the large-image mode.
+    func largeImageCandidates(for pin: Pin) -> [String] {
+        [root.path + "/" + pin.image]
+    }
+
+    /// Column partitions for the masonry grid, balanced from aspect ratios
+    /// alone. Cached per query + measured width.
+    func columns(
+        forWidth width: CGFloat,
+        spacing: CGFloat = 20,
+        rowSpacing: CGFloat = 28
+    ) -> [[PinCardModel]] {
+        let count = MasonryComposer.columnCount(width: width, spacing: spacing)
+        let key = ColumnsKey(query: currentQuery, width: width.rounded(), columns: count)
+        if let columnsMemo, columnsMemo.key == key { return columnsMemo.columns }
+        let columns = MasonryComposer.split(
+            models: visibleCards,
+            columns: count,
+            availableWidth: width,
+            spacing: spacing,
+            rowSpacing: rowSpacing
+        )
+        self.columnsMemo = (key, columns)
+        return columns
+    }
+
+    /// Rows are the same height for every card because the title reserves two
+    /// lines; used by the grid's width math.
+    var cardColumnSpacing: CGFloat { 20 }
 
     // MARK: - Navigation
 
@@ -238,7 +283,11 @@ final class LibraryStore: ObservableObject {
 
     func select(board: String) {
         endSelection()
-        withAnimation(.snappy(duration: 0.28)) {
+        // Board switching should be immediate: no animated upward scroll or
+        // card reflow. Search remains the only gallery change we animate.
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
             section = .all
             selectedBoard = board
             filter = .all
@@ -250,9 +299,17 @@ final class LibraryStore: ObservableObject {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
             selectedPinID = pin.id
         }
+        prefetchNeighbors(around: pin)
+    }
+
+    func openDetail(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        openDetail(pin)
     }
 
     func dismissDetail() {
+        // Leaving the detail is a natural save point for debounced edits.
+        flushPersistence()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
             selectedPinID = nil
         }
@@ -264,32 +321,57 @@ final class LibraryStore: ObservableObject {
         let currentIndex = list.firstIndex(where: { $0.id == selectedPinID }) ?? -1
         let nextIndex = min(max(currentIndex + offset, 0), list.count - 1)
         guard nextIndex != currentIndex else { return }
+        let next = list[nextIndex]
         withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-            selectedPinID = list[nextIndex].id
+            selectedPinID = next.id
         }
+        prefetchNeighbors(around: next)
     }
 
     /// Re-reads the library after an external writer (the Agent API) changes it.
+    /// Decoding happens off the main actor; only the swap is done on main.
     func reloadFromDisk(announceNewPins: Bool = true) {
-        do {
-            let data = try Data(contentsOf: CantaPaths.libraryFile(root: root))
-            let library = try CantaJSON.decoder.decode(CantaLibrary.self, from: data)
-            let existingIDs = Set(pins.map(\.id))
-            let added = library.pins.filter { !existingIDs.contains($0.id) }
-            pins = library.pins
-            let validIDs = Set(pins.map(\.id))
-            if let selectedPinID, !validIDs.contains(selectedPinID) {
-                self.selectedPinID = nil
+        let url = CantaPaths.libraryFile(root: root)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let data = try? Data(contentsOf: url),
+                  let library = try? CantaJSON.makeDecoder().decode(CantaLibrary.self, from: data) else {
+                return
             }
-            selectedPinIDs.formIntersection(validIDs)
-            if announceNewPins, !added.isEmpty {
-                let message = added.count == 1
-                    ? TF("An agent added %ld pin", added.count)
-                    : TF("An agent added %ld pins", added.count)
-                showToast(message, icon: "sparkles")
+            await MainActor.run { [weak self] in
+                self?.applyExternalReload(library, announceNewPins: announceNewPins)
             }
-        } catch {
-            // Keep the in-memory library if the external write was transient.
+        }
+    }
+
+    private func applyExternalReload(_ library: CantaLibrary, announceNewPins: Bool) {
+        let existingIDs = Set(pins.map(\.id))
+        let added = library.pins.filter { !existingIDs.contains($0.id) }
+        pins = library.pins
+        refreshSnapshot()
+        let validIDs = Set(pins.map(\.id))
+        if let selectedPinID, !validIDs.contains(selectedPinID) {
+            self.selectedPinID = nil
+        }
+        selectedPinIDs.formIntersection(validIDs)
+        if !added.isEmpty {
+            let root = self.root
+            Task.detached(priority: .utility) {
+                let fm = FileManager.default
+                for pin in added {
+                    var source = root.appendingPathComponent(pin.image)
+                    if let thumbnail = pin.thumbnail {
+                        let candidate = root.appendingPathComponent(thumbnail)
+                        if fm.fileExists(atPath: candidate.path) { source = candidate }
+                    }
+                    _ = ImageProcessor.writeCardThumbnail(sourcePath: source.path, root: root, id: pin.id)
+                }
+            }
+        }
+        if announceNewPins, !added.isEmpty {
+            let message = added.count == 1
+                ? TF("An agent added %ld pin", added.count)
+                : TF("An agent added %ld pins", added.count)
+            showToast(message, icon: "sparkles")
         }
     }
 
@@ -346,7 +428,8 @@ final class LibraryStore: ObservableObject {
             showToast(favorite ? T("Saved to favorites") : T("Removed from favorites"), icon: favorite ? "heart.fill" : "heart")
             return
         }
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.25)
         let message = favorite
             ? TF("%ld pins added to favorites", changed)
             : TF("%ld pins removed from favorites", changed)
@@ -368,7 +451,8 @@ final class LibraryStore: ObservableObject {
             pins[index].updatedAt = Date()
             changed += 1
         }
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.1)
         showToast(TF("%ld pins moved to %@", changed, localizedBoard(clean)), icon: "folder")
         endSelection()
     }
@@ -383,10 +467,13 @@ final class LibraryStore: ObservableObject {
             if let thumbnail = pin.thumbnail {
                 try? fm.removeItem(at: root.appendingPathComponent(thumbnail))
             }
+            try? fm.removeItem(at: CantaPaths.cardsDirectory(root: root)
+                .appendingPathComponent("\(pin.id.uuidString).jpg"))
         }
         pins.removeAll { ids.contains($0.id) }
         if let selectedPinID, ids.contains(selectedPinID) { self.selectedPinID = nil }
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.1)
         showToast(TF("%ld pins deleted", targets.count), icon: "trash")
         endSelection()
     }
@@ -404,17 +491,18 @@ final class LibraryStore: ObservableObject {
     // MARK: - Mutations
 
     func updatePin(id: UUID, _ mutate: (inout Pin) -> Void) {
-        guard let index = pins.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = snapshot.indexByID[id] else { return }
         var pin = pins[index]
         mutate(&pin)
         pin.updatedAt = Date()
         pins[index] = pin
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.45)
     }
 
     func toggleFavorite(_ pin: Pin) {
         updatePin(id: pin.id) { $0.isFavorite.toggle() }
-        let favorite = pins.first(where: { $0.id == pin.id })?.isFavorite ?? false
+        let favorite = self.pin(id: pin.id)?.isFavorite ?? false
         showToast(favorite ? T("Saved to favorites") : T("Removed from favorites"), icon: favorite ? "heart.fill" : "heart")
     }
 
@@ -444,9 +532,12 @@ final class LibraryStore: ObservableObject {
         if let thumbnail = pin.thumbnail {
             try? fm.removeItem(at: root.appendingPathComponent(thumbnail))
         }
+        try? fm.removeItem(at: CantaPaths.cardsDirectory(root: root)
+            .appendingPathComponent("\(pin.id.uuidString).jpg"))
         pins.removeAll { $0.id == pin.id }
         if selectedPinID == pin.id { selectedPinID = nil }
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.1)
         showToast(T("Pin deleted"), icon: "trash")
     }
 
@@ -505,7 +596,8 @@ final class LibraryStore: ObservableObject {
         }
 
         pins.append(contentsOf: created)
-        persist()
+        refreshSnapshot()
+        persist(debounce: 0.05)
         revealFreshlyAdded(board: targetBoard)
 
         let localizedTargetBoard = localizedBoard(targetBoard)
@@ -548,7 +640,8 @@ final class LibraryStore: ObservableObject {
                 kind: .screenshot
             )
             pins.append(pin)
-            persist()
+            refreshSnapshot()
+            persist(debounce: 0.05)
             revealFreshlyAdded(board: targetBoard)
             showToast(TF("Screenshot added to %@", localizedBoard(targetBoard)), icon: "pin.fill")
         } catch {
@@ -630,6 +723,38 @@ final class LibraryStore: ObservableObject {
             filter = .all
             searchText = ""
         }
+    }
+
+    // MARK: - Id-based actions (cards carry values, not the store)
+
+    func toggleFavorite(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        toggleFavorite(pin)
+    }
+
+    func copyAgentSnippet(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        copyAgentSnippet(for: pin)
+    }
+
+    func copyImage(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        copyImage(pin)
+    }
+
+    func openOriginal(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        openOriginal(pin)
+    }
+
+    func revealPin(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        revealPin(pin)
+    }
+
+    func openSource(id: UUID) {
+        guard let pin = pin(id: id) else { return }
+        openSource(pin)
     }
 
     // MARK: - Sharing / clipboard
@@ -715,10 +840,12 @@ final class LibraryStore: ObservableObject {
     }
 
     func copyImage(_ pin: Pin) {
-        guard let image = NSImage(contentsOf: thumbnailURL(for: pin)) else {
+        let candidates = [thumbnailURL(for: pin)] + [originalURL(for: pin)]
+        guard let loaded = candidates.lazy.compactMap({ NSImage(contentsOf: $0) }).first else {
             showToast(T("Couldn't load that image"), icon: "exclamationmark.triangle")
             return
         }
+        let image = loaded
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects([image])
@@ -848,14 +975,61 @@ final class LibraryStore: ObservableObject {
         }
     }
 
-    private func persist() {
-        do {
-            try CantaPaths.ensureDirectories(root: root)
-            let library = CantaLibrary(version: 1, pins: pins)
-            let data = try CantaJSON.encoder.encode(library)
-            try data.write(to: CantaPaths.libraryFile(root: root), options: .atomic)
-        } catch {
-            showToast(T("Couldn't save the library"), icon: "exclamationmark.triangle")
+    /// Debounced, off-main write. Callers pass a longer window for typing and
+    /// a short one for destructive operations.
+    private func persist(debounce: TimeInterval = 0.4) {
+        hasPendingWrite = true
+        writer.schedule(pins: pins, debounce: debounce)
+    }
+
+    /// Fire-and-forget flush; used when leaving an editing context.
+    func flushPersistence() {
+        guard hasPendingWrite else { return }
+        hasPendingWrite = false
+        writer.flush(pins: pins)
+    }
+
+    /// Bounded blocking flush; used on app termination.
+    func flushPersistenceAndWait() {
+        guard hasPendingWrite else { return }
+        hasPendingWrite = false
+        writer.flushAndWait(pins: pins)
+    }
+
+    private func refreshSnapshot() {
+        revision &+= 1
+        let snapshot = LibrarySnapshot(revision: revision, pins: pins)
+        self.snapshot = snapshot
+        projection.update(snapshot: snapshot)
+        columnsMemo = nil
+        recentCountMemo = nil
+    }
+
+    /// One-time background generation of 640 px grid derivatives for libraries
+    /// created before `Cards/` existed.
+    func startBackgroundMaintenance() {
+        guard !didStartMaintenance else { return }
+        didStartMaintenance = true
+        let root = self.root
+        let pins = self.pins
+        Task.detached(priority: .utility) {
+            await CardThumbnailBackfill.run(root: root, pins: pins)
+        }
+    }
+
+    /// Warm the neighbouring detail images so ←/→ is a cache hit.
+    func prefetchNeighbors(around pin: Pin, radius: Int = 1) {
+        let list = filteredPins
+        guard list.count > 1, let index = list.firstIndex(where: { $0.id == pin.id }) else { return }
+        var requests: [(paths: [String], maxPixel: Int)] = []
+        for offset in -radius...radius where offset != 0 {
+            let neighborIndex = index + offset
+            guard neighborIndex >= 0, neighborIndex < list.count else { continue }
+            requests.append((paths: detailImageCandidates(for: list[neighborIndex]), maxPixel: 1200))
+        }
+        guard !requests.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            await ImageLoader.shared.prefetch(requests)
         }
     }
 

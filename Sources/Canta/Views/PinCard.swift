@@ -1,11 +1,33 @@
 import SwiftUI
 import AppKit
 
-struct PinCard: View {
-    let pin: Pin
+/// Card actions are passed in as values so `PinCard` does not observe the
+/// store. They are intentionally excluded from `Equatable`: recreating them
+/// must not force every visible card to rebuild.
+struct PinCardActions {
+    var open: (UUID) -> Void
+    var toggleSelection: (UUID) -> Void
+    var toggleFavorite: (UUID) -> Void
+    var copySnippet: (UUID) -> Void
+    var copyImage: (UUID) -> Void
+    var moveToBoard: (UUID, String) -> Void
+    var openOriginal: (UUID) -> Void
+    var reveal: (UUID) -> Void
+    var openSource: (UUID) -> Void
+    var boardNames: () -> [String]
+}
 
-    @EnvironmentObject private var store: LibraryStore
+struct PinCard: View, Equatable {
+    let model: PinCardModel
+    let isSelected: Bool
+    let isSelecting: Bool
+    let actions: PinCardActions
+
     @State private var hovering = false
+
+    static func == (lhs: PinCard, rhs: PinCard) -> Bool {
+        lhs.model == rhs.model && lhs.isSelected == rhs.isSelected && lhs.isSelecting == rhs.isSelecting
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -14,28 +36,32 @@ struct PinCard: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if store.isSelectingPins {
-                store.toggleSelection(pin.id)
+            if isSelecting {
+                actions.toggleSelection(model.id)
             } else {
-                store.openDetail(pin)
+                actions.open(model.id)
             }
         }
         .onHover { value in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                hovering = value
-            }
+            guard hovering != value else { return }
+            withAnimation(.easeOut(duration: 0.16)) { hovering = value }
         }
         .contextMenu { contextMenu }
-        .scaleEffect(hovering && !store.isSelectingPins ? 1.006 : 1)
-        .shadow(color: .black.opacity(hovering && !store.isSelectingPins ? 0.12 : 0), radius: 20, x: 0, y: 10)
+        .scaleEffect(hovering && !isSelecting ? 1.004 : 1)
+        .shadow(
+            color: .black.opacity(hovering && !isSelecting ? 0.10 : 0),
+            radius: hovering ? 10 : 0,
+            x: 0,
+            y: 4
+        )
         .pointerCursor()
     }
 
     private var image: some View {
         Color.clear
-            .aspectRatio(pin.aspectRatio, contentMode: .fit)
+            .aspectRatio(model.aspectRatio, contentMode: .fit)
             .overlay {
-                LibraryImage(path: store.thumbnailURL(for: pin).path, contentMode: .fill)
+                LibraryImage(paths: model.imageCandidates, maxPixel: 640, contentMode: .fill)
             }
             .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
             .overlay {
@@ -44,10 +70,10 @@ struct PinCard: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                    .strokeBorder(store.isSelectingPins && isSelected ? Theme.red : Color.clear, lineWidth: 3)
+                    .strokeBorder(isSelecting && isSelected ? Theme.red : Color.clear, lineWidth: 3)
             }
             .overlay(alignment: .topLeading) {
-                if store.isSelectingPins {
+                if isSelecting {
                     selectionBadge
                         .padding(10)
                         .transition(.scale(scale: 0.7).combined(with: .opacity))
@@ -56,22 +82,18 @@ struct PinCard: View {
             .overlay(alignment: .topTrailing) {
                 saveButton
                     .padding(10)
-                    .opacity(store.isSelectingPins ? 0 : (hovering ? 1 : 0))
+                    .opacity(isSelecting ? 0 : (hovering ? 1 : 0))
                     .scaleEffect(hovering ? 1 : 0.9, anchor: .topTrailing)
-                    .allowsHitTesting(!store.isSelectingPins)
+                    .allowsHitTesting(!isSelecting)
             }
             .overlay(alignment: .bottomLeading) {
                 metadataPill
                     .padding(10)
-                    .opacity(store.isSelectingPins ? 0 : (hovering ? 1 : 0))
+                    .opacity(isSelecting ? 0 : (hovering ? 1 : 0))
                     .offset(y: hovering ? 0 : 5)
             }
-            .opacity(store.isSelectingPins && !isSelected ? 0.86 : 1)
+            .opacity(isSelecting && !isSelected ? 0.86 : 1)
             .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-    }
-
-    private var isSelected: Bool {
-        store.selectedPinIDs.contains(pin.id)
     }
 
     private var selectionBadge: some View {
@@ -95,14 +117,12 @@ struct PinCard: View {
 
     private var saveButton: some View {
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                store.toggleFavorite(pin)
-            }
+            actions.toggleFavorite(model.id)
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: pin.isFavorite ? "heart.fill" : "heart")
+                Image(systemName: model.isFavorite ? "heart.fill" : "heart")
                     .font(.system(size: 11, weight: .bold))
-                Text(pin.isFavorite ? T("Saved") : T("Save"))
+                Text(model.isFavorite ? T("Saved") : T("Save"))
                     .font(.system(size: 11.5, weight: .bold))
             }
             .foregroundStyle(Color.white)
@@ -112,14 +132,14 @@ struct PinCard: View {
             .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
         }
         .buttonStyle(PressableStyle())
-        .help(pin.isFavorite ? T("Remove from favorites") : T("Save to favorites"))
+        .help(model.isFavorite ? T("Remove from favorites") : T("Save to favorites"))
     }
 
     private var metadataPill: some View {
         HStack(spacing: 6) {
-            Image(systemName: pin.kind.icon)
+            Image(systemName: model.kindIcon)
                 .font(.system(size: 9, weight: .semibold))
-            Text(pin.pixelLabel)
+            Text(model.pixelLabel)
                 .font(Theme.mono(9.5, weight: .medium))
         }
         .foregroundStyle(Color.white)
@@ -132,22 +152,21 @@ struct PinCard: View {
 
     private var caption: some View {
         VStack(alignment: .leading, spacing: 3.5) {
-            Text(pin.title)
+            Text(model.title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)
                 .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 5) {
                 Circle()
-                    .fill(Theme.boardColor(pin.board))
+                    .fill(Theme.boardColor(model.board))
                     .frame(width: 5.5, height: 5.5)
-                Text(localizedBoard(pin.board))
+                Text(model.boardLabel)
                     .lineLimit(1)
                 Text("·")
-                Text(pin.pixelLabel)
-                if pin.isFavorite {
+                Text(model.pixelLabel)
+                if model.isFavorite {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 8))
                         .foregroundStyle(Theme.red)
@@ -161,19 +180,19 @@ struct PinCard: View {
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button(T("Open pin")) { store.openDetail(pin) }
-        Button(pin.isFavorite ? T("Remove from favorites") : T("Add to favorites")) {
-            store.toggleFavorite(pin)
+        Button(T("Open pin")) { actions.open(model.id) }
+        Button(model.isFavorite ? T("Remove from favorites") : T("Add to favorites")) {
+            actions.toggleFavorite(model.id)
         }
         Divider()
-        Button(T("Copy agent snippet")) { store.copyAgentSnippet(for: pin) }
-        Button(T("Copy image")) { store.copyImage(pin) }
+        Button(T("Copy agent snippet")) { actions.copySnippet(model.id) }
+        Button(T("Copy image")) { actions.copyImage(model.id) }
         Menu(T("Move to board")) {
-            ForEach(store.allBoardNames, id: \.self) { board in
+            ForEach(actions.boardNames(), id: \.self) { board in
                 Button {
-                    store.movePin(pin.id, toBoard: board)
+                    actions.moveToBoard(model.id, board)
                 } label: {
-                    if board == pin.board {
+                    if board == model.board {
                         Label(localizedBoard(board), systemImage: "checkmark")
                     } else {
                         Text(localizedBoard(board))
@@ -182,10 +201,10 @@ struct PinCard: View {
             }
         }
         Divider()
-        Button(T("Open original")) { store.openOriginal(pin) }
-        Button(T("Reveal in Finder")) { store.revealPin(pin) }
-        if pin.sourceURL != nil {
-            Button(T("Open source page")) { store.openSource(pin) }
+        Button(T("Open original")) { actions.openOriginal(model.id) }
+        Button(T("Reveal in Finder")) { actions.reveal(model.id) }
+        if model.hasSource {
+            Button(T("Open source page")) { actions.openSource(model.id) }
         }
     }
 }

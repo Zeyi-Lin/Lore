@@ -1,8 +1,56 @@
 import SwiftUI
 
+/// Lazy Pinterest-style masonry: one `LazyVStack` per column. Columns are
+/// balanced once from aspect ratios (see `MasonryComposer`), so the grid no
+/// longer instantiates or measures every card up front.
+struct MasonryColumns<Card: View>: View {
+    let columns: [[PinCardModel]]
+    let columnWidth: CGFloat
+    let spacing: CGFloat
+    let rowSpacing: CGFloat
+    private let card: (PinCardModel) -> Card
+
+    init(
+        columns: [[PinCardModel]],
+        columnWidth: CGFloat,
+        spacing: CGFloat,
+        rowSpacing: CGFloat,
+        @ViewBuilder card: @escaping (PinCardModel) -> Card
+    ) {
+        self.columns = columns
+        self.columnWidth = columnWidth
+        self.spacing = spacing
+        self.rowSpacing = rowSpacing
+        self.card = card
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: spacing) {
+            ForEach(columns.indices, id: \.self) { index in
+                LazyVStack(spacing: rowSpacing) {
+                    ForEach(columns[index]) { model in
+                        card(model)
+                            .frame(width: columnWidth)
+                    }
+                }
+                .frame(width: columnWidth)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct LibraryView: View {
     @EnvironmentObject private var store: LibraryStore
     @State private var showSortMenu = false
+    @State private var gridWidth: CGFloat = 1080
+
+    private struct GridWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
 
     var body: some View {
         libraryScroll
@@ -41,43 +89,99 @@ struct LibraryView: View {
                         .padding(.top, 23)
                         .padding(.bottom, 21)
 
-                    if store.filteredPins.isEmpty {
-                        EmptyStateView(mode: store.pins.isEmpty ? .emptyLibrary : .noResults)
-                            .padding(.horizontal, 34)
-                            .padding(.top, 8)
-                    } else {
-                        MasonryLayout(
-                            minColumnWidth: 238,
-                            maxColumns: 5,
-                            columnSpacing: 20,
-                            rowSpacing: 28
-                        ) {
-                            ForEach(store.filteredPins) { pin in
-                                PinCard(pin: pin)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                            }
+                    Group {
+                        if store.visibleCards.isEmpty {
+                            EmptyStateView(mode: store.pins.isEmpty ? .emptyLibrary : .noResults)
+                                .padding(.horizontal, 34)
+                                .padding(.top, 8)
+                                .transition(.opacity)
+                        } else {
+                            grid
                         }
-                        .padding(.horizontal, 34)
-                        .padding(.bottom, 64)
-                        .animation(.snappy(duration: 0.32), value: store.currentListIdentity)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.84), value: store.pins.count)
                     }
+                    .animation(.snappy(duration: 0.30), value: store.searchText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onPreferenceChange(GridWidthKey.self) { width in
+                guard width > 0, abs(width - gridWidth) > 0.5 else { return }
+                gridWidth = width
             }
             .defaultScrollAnchor(.top)
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                    proxy.scrollTo("library-top", anchor: .top)
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        proxy.scrollTo("library-top", anchor: .top)
+                    }
                 }
             }
             .onChange(of: store.currentListIdentity) { _, _ in
-                proxy.scrollTo("library-top", anchor: .top)
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    proxy.scrollTo("library-top", anchor: .top)
+                }
                 if store.isSelectingPins {
                     store.clearSelection()
                 }
             }
         }
+    }
+
+    private var grid: some View {
+        let available = max(gridWidth, 240)
+        let columns = store.columns(forWidth: available)
+        let spacing = store.cardColumnSpacing
+        let columnWidth = MasonryComposer.columnWidth(
+            availableWidth: available,
+            columns: max(columns.count, 1),
+            spacing: spacing
+        )
+        return MasonryColumns(
+            columns: columns,
+            columnWidth: columnWidth,
+            spacing: spacing,
+            rowSpacing: 28
+        ) { model in
+            PinCard(
+                model: model,
+                isSelected: store.selectedPinIDs.contains(model.id),
+                isSelecting: store.isSelectingPins,
+                actions: cardActions
+            )
+            .equatable()
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                removal: .opacity.combined(with: .scale(scale: 0.94))
+            ))
+        }
+        .padding(.horizontal, 34)
+        .padding(.bottom, 64)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: GridWidthKey.self,
+                    value: max(proxy.size.width - 68, 0)
+                )
+            }
+        )
+    }
+
+    private var cardActions: PinCardActions {
+        PinCardActions(
+            open: { store.openDetail(id: $0) },
+            toggleSelection: { store.toggleSelection($0) },
+            toggleFavorite: { store.toggleFavorite(id: $0) },
+            copySnippet: { store.copyAgentSnippet(id: $0) },
+            copyImage: { store.copyImage(id: $0) },
+            moveToBoard: { store.movePin($0, toBoard: $1) },
+            openOriginal: { store.openOriginal(id: $0) },
+            reveal: { store.revealPin(id: $0) },
+            openSource: { store.openSource(id: $0) },
+            boardNames: { store.allBoardNames }
+        )
     }
 
     private var header: some View {
@@ -132,13 +236,13 @@ struct LibraryView: View {
     private var filterBar: some View {
         HStack(spacing: 8) {
             FilterChip(title: T("All"), count: store.pins.count, isSelected: store.filter == .all) {
-                withAnimation(.easeOut(duration: 0.18)) { store.filter = .all }
+                store.filter = .all
             }
             FilterChip(title: T("Screenshots"), count: store.screenshotCount, isSelected: store.filter == .screenshots) {
-                withAnimation(.easeOut(duration: 0.18)) { store.filter = .screenshots }
+                store.filter = .screenshots
             }
             FilterChip(title: T("Favorites"), count: store.favoriteCount, isSelected: store.filter == .favorites) {
-                withAnimation(.easeOut(duration: 0.18)) { store.filter = .favorites }
+                store.filter = .favorites
             }
 
             Rectangle()
@@ -148,7 +252,7 @@ struct LibraryView: View {
 
             if let board = store.selectedBoard {
                 Button {
-                    withAnimation(.easeOut(duration: 0.2)) { store.selectedBoard = nil }
+                    store.selectedBoard = nil
                 } label: {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.boardColor(board)).frame(width: 6, height: 6)
@@ -167,7 +271,7 @@ struct LibraryView: View {
                 .buttonStyle(PointerPlainButtonStyle())
                 .help(T("Clear board filter"))
             } else {
-                Text(TF("%ld shown", store.filteredPins.count))
+                Text(TF("%ld shown", store.visibleCards.count))
                     .font(Theme.mono(10.5, weight: .medium))
                     .foregroundStyle(Theme.inkTertiary)
                     .padding(.leading, 2)
@@ -196,8 +300,8 @@ struct LibraryView: View {
         }
         .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
-        .disabled(store.filteredPins.isEmpty)
-        .opacity(store.filteredPins.isEmpty ? 0.45 : 1)
+        .disabled(store.visibleCards.isEmpty)
+        .opacity(store.visibleCards.isEmpty ? 0.45 : 1)
         .help(T("Select pins"))
     }
 
@@ -227,7 +331,7 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(PinSort.allCases) { sort in
                     Button {
-                        withAnimation(.snappy(duration: 0.24)) { store.sort = sort }
+                        store.sort = sort
                         showSortMenu = false
                     } label: {
                         HStack(spacing: 8) {

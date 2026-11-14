@@ -97,6 +97,14 @@ enum ImageProcessor {
                 paletteSource = thumbnail
             }
         }
+
+        // Card-sized derivative for the gallery grid. Not represented in
+        // library.json: the path is derived from the pin id.
+        if let card = makeThumbnail(from: source, maxPixel: 640) ?? paletteSource {
+            let destination = CantaPaths.cardsDirectory(root: root)
+                .appendingPathComponent("\(id.uuidString).jpg")
+            _ = writeJPEG(card, to: destination)
+        }
         if paletteSource == nil {
             paletteSource = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -115,6 +123,20 @@ enum ImageProcessor {
             colors: colors.isEmpty ? ["#E60023", "#171412", "#FAF8F5"] : colors,
             kind: kind
         )
+    }
+
+    /// Regenerates the 640 px grid derivative for an existing pin.
+    @discardableResult
+    static func writeCardThumbnail(sourcePath: String, root: URL, id: UUID) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(
+            URL(fileURLWithPath: sourcePath) as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else { return false }
+        guard let card = makeThumbnail(from: source, maxPixel: 640) else { return false }
+        try? CantaPaths.ensureDirectories(root: root)
+        let destination = CantaPaths.cardsDirectory(root: root)
+            .appendingPathComponent("\(id.uuidString).jpg")
+        return writeJPEG(card, to: destination)
     }
 
     static func pngData(fromTIFF data: Data) -> Data? {

@@ -134,7 +134,8 @@ swift build --disable-sandbox --manifest-cache local --cache-path .build/spm-cac
 ~/Library/Application Support/Canta/
 ├── library.json      # 灵感与元数据
 ├── Images/           # 原始截图
-└── Thumbnails/       # 1200px JPEG 缩略图
+├── Thumbnails/       # 1200px JPEG 缩略图（详情/Agent）
+└── Cards/            # 640px JPEG 网格缩略图（导入时生成，旧库首次启动后台补齐）
 ```
 
 `library.json` 是唯一数据源，API 每次请求都会重新读取。字段定义见 [docs/AGENT_API.md](docs/AGENT_API.md)。开发时可通过 `CANTA_HOME` 指向其他图库。
@@ -171,6 +172,7 @@ Canta 借用了 Pinterest 的自信——图片优先、留白充分、标志性
 ## 验证
 
 - `./scripts/build-app.sh release` 生成自包含的应用包。
+- `./scripts/perf-bench/run.sh` 复现优化前的数据层基线（对照用）；`Canta --bench` 在真实图库上打印当前实现的查询/编码/解码耗时。
 - Agent API 有一套黑盒冒烟测试，使用临时 fixture 图库：
 
   ```bash
