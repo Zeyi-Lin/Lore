@@ -15,6 +15,9 @@ final class HTTPServer {
     var onFailure: ((String) -> Void)?
     /// Invoked for every fully parsed request.
     var handler: Handler?
+    /// Returns how many body bytes a route wants buffered before dispatch.
+    /// Return 0 for routes that answer from the head alone (GET/HEAD/etc).
+    var bodyLimitProvider: ((HTTPRequestHead) -> Int)?
 
     private let queue = DispatchQueue(label: "com.canta.agent-server.listener")
     private let queueKey = DispatchSpecificKey<Void>()
@@ -109,7 +112,12 @@ final class HTTPServer {
         }
         stateLock.unlock()
 
-        let httpConnection = HTTPConnection(connection: connection, queue: connectionQueue, handler: handler)
+        let httpConnection = HTTPConnection(
+            connection: connection,
+            queue: connectionQueue,
+            handler: handler,
+            bodyLimitProvider: bodyLimitProvider
+        )
         let identifier = ObjectIdentifier(httpConnection)
         stateLock.lock()
         connections[identifier] = httpConnection
@@ -129,22 +137,31 @@ final class HTTPServer {
 // MARK: - Connection
 
 /// Handles a single HTTP/1.1 request/response exchange. One request per
-/// connection; every response advertises `Connection: close`.
+/// connection; every response advertises "Connection: close".
 final class HTTPConnection {
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let handler: HTTPServer.Handler?
-    private let timeout: TimeInterval = 10
+    private let bodyLimitProvider: ((HTTPRequestHead) -> Int)?
+    private let requestTimeout: TimeInterval = 20
 
     private var buffer = Data()
+    private var parsedHead: HTTPRequestHead?
+    private var bodyStartOffset = 0
     private var finished = false
     private var timeoutWorkItem: DispatchWorkItem?
     var onClose: (() -> Void)?
 
-    init(connection: NWConnection, queue: DispatchQueue, handler: HTTPServer.Handler?) {
+    init(
+        connection: NWConnection,
+        queue: DispatchQueue,
+        handler: HTTPServer.Handler?,
+        bodyLimitProvider: ((HTTPRequestHead) -> Int)?
+    ) {
         self.connection = connection
         self.queue = queue
         self.handler = handler
+        self.bodyLimitProvider = bodyLimitProvider
     }
 
     func start() {
@@ -176,7 +193,7 @@ final class HTTPConnection {
             self?.close()
         }
         timeoutWorkItem = item
-        queue.asyncAfter(deadline: .now() + timeout, execute: item)
+        queue.asyncAfter(deadline: .now() + requestTimeout, execute: item)
     }
 
     private func receive() {
@@ -185,30 +202,75 @@ final class HTTPConnection {
             if let data, !data.isEmpty {
                 self.buffer.append(data)
             }
-            switch HTTPRequestParser.parse(buffer: self.buffer) {
-            case .request(let request):
-                let response = self.handler?(request) ?? HTTPResponse.error(status: 500, code: "server_unavailable", message: "No request handler is installed.")
-                self.send(response, includeBody: !request.isHead)
-            case .failure(let error):
-                self.send(HTTPResponse.error(status: error.status, code: error.code, message: error.message), includeBody: true)
-            case .incomplete:
-                if isComplete || error != nil {
-                    if self.buffer.isEmpty {
-                        self.close()
-                    } else {
-                        self.send(HTTPResponse.error(status: 400, code: "bad_request", message: "The connection was closed before a complete HTTP request was received."), includeBody: true)
-                    }
+            self.advance(receiveComplete: isComplete, receiveError: error)
+        }
+    }
+
+    /// Drives the head/body state machine over the bytes received so far.
+    private func advance(receiveComplete: Bool, receiveError: Error?) {
+        if let head = parsedHead {
+            finishOrWaitForBody(head, receiveComplete: receiveComplete, receiveError: receiveError)
+            return
+        }
+        switch HTTPRequestParser.parseHead(buffer) {
+        case .incomplete:
+            if receiveComplete || receiveError != nil {
+                if buffer.isEmpty {
+                    close()
                 } else {
-                    self.receive()
+                    fail(APIError(status: 400, code: "bad_request", message: "The connection was closed before a complete HTTP request head was received."))
                 }
+            } else {
+                receive()
+            }
+        case .failure(let error):
+            fail(error)
+        case .head(let head, let bodyStart):
+            parsedHead = head
+            bodyStartOffset = bodyStart
+            let limit = bodyLimitProvider?(head) ?? 0
+            if limit <= 0 {
+                // This route answers from the head alone; any body is ignored.
+                complete(head, body: Data())
+            } else if head.contentLength > limit {
+                fail(APIError(status: 413, code: "request_body_too_large", message: "Request bodies on this endpoint are limited to \(limit) bytes."))
+            } else {
+                finishOrWaitForBody(head, receiveComplete: receiveComplete, receiveError: receiveError)
             }
         }
     }
 
-    private func send(_ response: HTTPResponse, includeBody: Bool) {
+    private func finishOrWaitForBody(_ head: HTTPRequestHead, receiveComplete: Bool, receiveError: Error?) {
+        let available = buffer.count - bodyStartOffset
+        if available >= head.contentLength {
+            let start = buffer.index(buffer.startIndex, offsetBy: bodyStartOffset)
+            let end = buffer.index(start, offsetBy: head.contentLength)
+            complete(head, body: Data(buffer[start..<end]))
+        } else if receiveComplete || receiveError != nil {
+            fail(APIError(status: 400, code: "bad_request", message: "The connection was closed before the complete request body was received."))
+        } else {
+            receive()
+        }
+    }
+
+    private func complete(_ head: HTTPRequestHead, body: Data) {
         guard !finished else { return }
         timeoutWorkItem?.cancel()
         timeoutWorkItem = nil
+        let request = HTTPRequest(head: head, body: body)
+        let response = handler?(request) ?? HTTPResponse.error(status: 500, code: "server_unavailable", message: "No request handler is installed.")
+        send(response, includeBody: !request.isHead)
+    }
+
+    private func fail(_ error: APIError) {
+        guard !finished else { return }
+        timeoutWorkItem?.cancel()
+        timeoutWorkItem = nil
+        send(HTTPResponse.error(status: error.status, code: error.code, message: error.message), includeBody: true)
+    }
+
+    private func send(_ response: HTTPResponse, includeBody: Bool) {
+        guard !finished else { return }
         let data = response.serialized(includingBody: includeBody)
         connection.send(content: data, completion: .contentProcessed { [weak self] _ in
             self?.close()

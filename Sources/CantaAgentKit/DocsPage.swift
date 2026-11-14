@@ -11,7 +11,7 @@ enum DocsPage {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Canta Agent API — local design library for coding agents</title>
-<meta name="description" content="Canta exposes a loopback-only HTTP API for browsing pinned UI screenshots, metadata, palettes, and images. Built for coding agents that replicate designs.">
+<meta name="description" content="Canta exposes a loopback-only HTTP API for browsing pinned UI screenshots, metadata, palettes, and images — and for agents to add new references. Built for coding agents that replicate designs.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23E60023'/%3E%3Crect x='14' y='20' width='30' height='24' rx='5' fill='white'/%3E%3Ccircle cx='45' cy='23' r='6' fill='%23161412'/%3E%3C/svg%3E">
 <style>
 :root {
@@ -81,7 +81,7 @@ h1 {
   font-weight: 800;
 }
 h1 .accent { color: var(--accent); }
-.lede { font-size: clamp(1.02rem, 1.6vw, 1.2rem); color: var(--muted); max-width: 640px; margin: 0 0 30px; }
+.lede { font-size: clamp(1.02rem, 1.6vw, 1.2rem); color: var(--muted); max-width: 680px; margin: 0 0 30px; }
 .lede strong { color: var(--ink); font-weight: 650; }
 .base-url {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
@@ -95,7 +95,7 @@ h1 .accent { color: var(--accent); }
 .section { padding: 52px 0 8px; scroll-margin-top: 84px; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 8px; }
 h2 { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: -0.03em; margin: 0; font-weight: 750; }
-.section-sub { color: var(--muted); margin: 0 0 26px; max-width: 720px; }
+.section-sub { color: var(--muted); margin: 0 0 26px; max-width: 760px; }
 h3 { font-size: 1.02rem; margin: 0 0 8px; letter-spacing: -0.01em; font-weight: 700; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
@@ -120,6 +120,7 @@ td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: t
 tr:last-child td { border-bottom: 0; }
 td code, .inline-code { background: var(--soft); border: 1px solid var(--line); border-radius: 7px; padding: 2px 7px; font-size: 12.5px; white-space: nowrap; }
 .method { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--accent); background: var(--accent-soft); border: 1px solid #f6c9d0; border-radius: 999px; padding: 3px 9px; }
+.method-post { color: #1a56b8; background: #eaf1fd; border-color: #c8dafb; }
 .muted { color: var(--muted); }
 .two-col { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 22px; align-items: start; }
 .list { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14.5px; }
@@ -164,7 +165,7 @@ footer strong { color: var(--ink); }
   <section class="hero">
     <p class="eyebrow"><span class="dot"></span> Running locally on 127.0.0.1:\(port) · API v1</p>
     <h1>Your design library,<br><span class="accent">available to your agents.</span></h1>
-    <p class="lede">Canta serves every pinned screenshot as <strong>metadata plus a real image stream</strong>, over a loopback-only HTTP API. Point Claude Code, Codex, Cursor, or any local script at it to pull layout references, palettes, and design notes before writing UI code. The library is re-read on every request, so what you see in the app is what the API returns.</p>
+    <p class="lede">Canta serves every pinned screenshot as <strong>metadata plus a real image stream</strong>, over a loopback-only HTTP API. Point Claude Code, Codex, Cursor, or any local script at it to pull layout references, palettes, and design notes before writing UI code. The library is re-read on every request, so what you see in the app is what the API returns. Agents can also add pins with <code>POST /api/v1/pins</code> — raw image bytes or JSON base64 — and Canta saves the image, thumbnail, and metadata into the library.</p>
     <div class="base-url">
       <span class="label">Base URL</span>
       <code id="base-url">\(baseURL)</code>
@@ -172,6 +173,7 @@ footer strong { color: var(--ink); }
     </div>
     <div class="hero-meta">
       <span class="pill">Bound to loopback only</span>
+      <span class="pill">Agent ingest via POST</span>
       <span class="pill">No auth required</span>
       <span class="pill">Fresh library per request</span>
       <span class="pill">Offline — no external assets</span>
@@ -180,7 +182,7 @@ footer strong { color: var(--ink); }
 
   <section class="section" id="quickstart">
     <div class="section-head"><h2>Quickstart</h2></div>
-    <p class="section-sub">Four requests get an agent from "is Canta running?" to a design brief with reference images.</p>
+    <p class="section-sub">Six requests get an agent from "is Canta running?" to a design brief with reference images — including adding new references from an agent workflow.</p>
     <div class="grid">
       <article class="card">
         <h3><span class="step">1</span>Check the server</h3>
@@ -214,12 +216,33 @@ footer strong { color: var(--ink); }
           <pre id="snip-image"><code>curl -s -o reference.png "\(baseURL)/api/v1/pins/&lt;pin-id&gt;/image?variant=original"</code></pre>
         </div>
       </article>
+      <article class="card">
+        <h3><span class="step">5</span>Add a pin (JSON)</h3>
+        <p>Send base64 image bytes plus optional metadata. Data URI prefixes are accepted; tags are trimmed, lower-cased, and de-duplicated.</p>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-create-json">Copy</button></div>
+          <pre id="snip-create-json"><code>B64=$(base64 -i shot.png)
+curl -s -X POST "\(baseURL)/api/v1/pins" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\\"imageBase64\\\": \\\"$B64\\\", \\\"title\\\": \\\"Checkout flow\\\", \\\"board\\\": \\\"Mobile flows\\\", \\\"tags\\\": [\\\"mobile\\\", \\\"checkout\\\"]}" | jq</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <h3><span class="step">6</span>Add a pin (raw image)</h3>
+        <p>Stream the file directly with an <span class="inline-code">image/*</span> Content-Type and metadata as query parameters. Great for large screenshots; 20 MiB limit.</p>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-create-raw">Copy</button></div>
+          <pre id="snip-create-raw"><code>curl -s -X POST --data-binary @shot.png \\
+  -H "Content-Type: image/png" \\
+  "\(baseURL)/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" | jq</code></pre>
+        </div>
+      </article>
     </div>
   </section>
 
   <section class="section" id="endpoints">
     <div class="section-head"><h2>Endpoints</h2></div>
-    <p class="section-sub">All endpoints are read-only and support <span class="inline-code">GET</span>, <span class="inline-code">HEAD</span>, and CORS preflight <span class="inline-code">OPTIONS</span>. JSON errors always use the same envelope.</p>
+    <p class="section-sub">Read endpoints support <span class="inline-code">GET</span>, <span class="inline-code">HEAD</span>, and CORS preflight <span class="inline-code">OPTIONS</span>; <span class="inline-code">POST /api/v1/pins</span> creates a pin. JSON errors always use the same envelope.</p>
     <div class="table-wrap">
       <table>
         <thead>
@@ -229,6 +252,7 @@ footer strong { color: var(--ink); }
           <tr><td><span class="method">GET</span></td><td><code>/health</code></td><td><code>application/json</code></td><td>Health, bound port, current pin count. Alias: <code>/api/v1/health</code>.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/library</code></td><td><code>application/json</code></td><td>Full enriched library: stats, boards, tags, and every pin.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins</code></td><td><code>application/json</code></td><td>Filtered, sorted, paginated pin list with <span class="inline-code">count</span>, <span class="inline-code">total</span>, <span class="inline-code">offset</span>, <span class="inline-code">limit</span>.</td></tr>
+          <tr><td><span class="method method-post">POST</span></td><td><code>/api/v1/pins</code></td><td><code>application/json</code></td><td>Add a pin: JSON <span class="inline-code">imageBase64</span> body, or raw <span class="inline-code">image/*</span> body with metadata query parameters. Returns <span class="inline-code">201</span> and a <span class="inline-code">Location</span> header.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}</code></td><td><code>application/json</code></td><td>A single enriched pin, or a 404 JSON error.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}/image</code></td><td><code>image/png</code> · <code>image/jpeg</code> · …</td><td>Raw image bytes. <span class="inline-code">variant=original|thumb</span>, defaults to original.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/boards</code></td><td><code>application/json</code></td><td>Board names with pin counts.</td></tr>
@@ -252,22 +276,22 @@ footer strong { color: var(--ink); }
         <h3>Find dark dashboard references</h3>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-filter">Copy</button></div>
-          <pre id="ex-filter"><code>curl -s "\(baseURL)/api/v1/pins?board=Web%20dashboards&tag=dark&sort=recent&limit=10" \
+          <pre id="ex-filter"><code>curl -s "\(baseURL)/api/v1/pins?board=Web%20dashboards&tag=dark&sort=recent&limit=10" \\
   | jq '.pins[] | {id, title, colors, imageURL}'</code></pre>
         </div>
         <h3 style="margin-top:22px">Read the full library as one file</h3>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-library">Copy</button></div>
-          <pre id="ex-library"><code>curl -s \(baseURL)/api/v1/library \
+          <pre id="ex-library"><code>curl -s \(baseURL)/api/v1/library \\
   | jq '{stats, boards, pins: [.pins[] | {title, imageURL}]}'</code></pre>
         </div>
         <h3 style="margin-top:22px">Save every favorite image</h3>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-download">Copy</button></div>
           <pre id="ex-download"><code>mkdir -p canta-references
-curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \
-  | jq -r '.pins[] | [.id, .imageURL] | @tsv' \
-  | while IFS=$'\t' read -r id url; do
+curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \\
+  | jq -r '.pins[] | [.id, .imageURL] | @tsv' \\
+  | while IFS=$'\\t' read -r id url; do
       curl -s -o "canta-references/$id.png" "$url"
     done</code></pre>
         </div>
@@ -297,13 +321,30 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \
         <div class="note" style="margin-top:18px">
           <strong>Image URLs are absolute.</strong> Every <span class="inline-code">imageURL</span> and <span class="inline-code">thumbnailURL</span> is built from the port the server actually bound, so agents can fetch images directly without guessing the base URL.
         </div>
+        <h3 style="margin-top:22px">Add a pin from a raw image</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-create-raw">Copy</button></div>
+          <pre id="ex-create-raw"><code>curl -s -X POST --data-binary @shot.png \\
+  -H "Content-Type: image/png" \\
+  "\(baseURL)/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" \\
+  | jq '{id, title, board, imageURL, thumbnailURL}'</code></pre>
+        </div>
+        <h3 style="margin-top:22px">Add a pin from JSON base64</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-create-json">Copy</button></div>
+          <pre id="ex-create-json"><code>B64=$(base64 -i shot.png)
+curl -s -X POST "\(baseURL)/api/v1/pins" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\\"imageBase64\\\": \\\"$B64\\\", \\\"title\\\": \\\"Checkout flow\\\", \\\"board\\\": \\\"Mobile flows\\\", \\\"tags\\\": [\\\"mobile\\\", \\\"checkout\\\"], \\\"favorite\\\": true}" \\
+  | jq '{id, title, width, height, colors, imageURL}'</code></pre>
+        </div>
       </div>
     </div>
   </section>
 
   <section class="section" id="data-model">
     <div class="section-head"><h2>Pin data model</h2></div>
-    <p class="section-sub">An enriched pin contains every field the app persists, plus two absolute URLs. The API never exposes filesystem paths.</p>
+    <p class="section-sub">An enriched pin contains every field the app persists, plus two absolute URLs. The API never exposes filesystem paths. Uploaded pins store the original image under <span class="inline-code">Images/</span> and a max-1200px JPEG thumbnail under <span class="inline-code">Thumbnails/</span>.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
@@ -321,7 +362,7 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \
           <tr><td><code>tags</code></td><td><code>string[]</code></td><td>Lower-case filter labels.</td></tr>
           <tr><td><code>board</code></td><td><code>string</code></td><td>Board the pin belongs to.</td></tr>
           <tr><td><code>sourceURL</code>, <code>sourceLabel</code></td><td><code>string | null</code></td><td>Original inspiration URL and label, when known.</td></tr>
-          <tr><td><code>colors</code></td><td><code>string[]</code></td><td>Dominant palette as <code>#RRGGBB</code> strings.</td></tr>
+          <tr><td><code>colors</code></td><td><code>string[]</code></td><td>Dominant palette as <code>#RRGGBB</code> strings (up to 5).</td></tr>
           <tr><td><code>favorite</code></td><td><code>boolean</code></td><td>Whether the pin is marked as a favorite.</td></tr>
           <tr><td><code>kind</code></td><td><code>string</code></td><td>Pin kind, e.g. <code>screenshot</code>.</td></tr>
         </tbody>
@@ -349,6 +390,7 @@ pinned UI screenshots. Use it before writing UI code.
 - Pin:         GET /api/v1/pins/{id}
 - Image:       GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:     GET /api/v1/library
+- Add pin:     POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata)
 - Discovery:   GET /openapi.json and GET /llms.txt
 
 Fetch /api/v1/context first, choose 1-2 reference pins, inspect their
@@ -363,15 +405,15 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
           <p>"Query Canta's design context for the board Web dashboards, pick the two most relevant references, and build the analytics overview page in SwiftUI. Match the spacing, type scale, and colour palette of the references, not just the layout."</p>
         </div>
         <div class="prompt">
-          <span class="prompt-label">Match a screenshot</span>
-          <p>"Use Canta to find pins matching 'onboarding'. Read each pin's imageURL and design note, then implement the empty-state screen so it looks like the same product family."</p>
+          <span class="prompt-label">Capture into the library</span>
+          <p>"Use Canta to add this screenshot to the Mobile flows board with the tags checkout and onboarding, then fetch its imageURL and use it as the reference for the empty-state screen."</p>
         </div>
         <div class="prompt">
           <span class="prompt-label">Extract a palette</span>
           <p>"List Canta pins tagged editorial, read their colors and thumbnails, and produce a consistent four-colour palette with hex values and suggested usage."</p>
         </div>
         <div class="note">
-          <strong>Tip:</strong> the API is read-only and local. The agent only needs <span class="inline-code">curl</span> (or any HTTP client) and access to <span class="inline-code">127.0.0.1</span>.
+          <strong>Tip:</strong> the API is local. Read endpoints are read-only, and <span class="inline-code">POST /api/v1/pins</span> lets an agent add references it captured. The agent only needs <span class="inline-code">curl</span> (or any HTTP client) and access to <span class="inline-code">127.0.0.1</span>.
         </div>
       </div>
     </div>
@@ -379,7 +421,7 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
 
   <section class="section" id="errors">
     <div class="section-head"><h2>Errors</h2></div>
-    <p class="section-sub">Every non-2xx response is JSON with a stable error code and a human-readable message. HTTP status codes used: 400, 404, 405, 500.</p>
+    <p class="section-sub">Every non-2xx response is JSON with a stable error code and a human-readable message. HTTP status codes used: 400, 404, 405, 413, 415, 500.</p>
     <div class="two-col">
       <div class="snippet">
         <div class="snippet-head"><span class="snippet-label">error envelope</span><button class="copy" type="button" data-copy="err-shape">Copy</button></div>
@@ -394,10 +436,12 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
         <table>
           <thead><tr><th>Status</th><th>Codes</th></tr></thead>
           <tbody>
-            <tr><td><code>400</code></td><td><code>bad_request</code>, <code>invalid_parameter</code>, <code>invalid_percent_encoding</code>, <code>invalid_content_length</code>, <code>request_header_too_large</code>, <code>unsupported_http_version</code></td></tr>
+            <tr><td><code>400</code></td><td><code>bad_request</code>, <code>invalid_parameter</code>, <code>invalid_percent_encoding</code>, <code>invalid_content_length</code>, <code>request_header_too_large</code>, <code>unsupported_http_version</code>, <code>invalid_json</code>, <code>missing_image</code>, <code>invalid_image_data</code>, <code>invalid_metadata</code></td></tr>
             <tr><td><code>404</code></td><td><code>not_found</code>, <code>pin_not_found</code>, <code>image_not_found</code></td></tr>
             <tr><td><code>405</code></td><td><code>method_not_allowed</code> — includes an <code>Allow</code> header</td></tr>
-            <tr><td><code>500</code></td><td><code>library_unavailable</code>, <code>library_corrupt</code>, <code>internal_error</code></td></tr>
+            <tr><td><code>413</code></td><td><code>request_body_too_large</code> — upload bodies are limited to 20 MiB</td></tr>
+            <tr><td><code>415</code></td><td><code>unsupported_media_type</code> — send <code>application/json</code> or an <code>image/*</code> body</td></tr>
+            <tr><td><code>500</code></td><td><code>library_unavailable</code>, <code>library_corrupt</code>, <code>storage_failure</code>, <code>internal_error</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -409,10 +453,11 @@ Do not invent image URLs; always use the absolute URLs from the API.</code></pre
     <ul class="list">
       <li><strong>Loopback only.</strong> The listener binds to <span class="inline-code">127.0.0.1</span>; it is not reachable from other devices on the network.</li>
       <li><strong>No authentication.</strong> Any local process can read the library. That is the intended contract for a local design tool; avoid port-forwarding or proxying the API.</li>
-      <li><strong>Read-only.</strong> There are no mutating endpoints, no cookies, and no session state.</li>
+      <li><strong>Single write endpoint.</strong> <span class="inline-code">POST /api/v1/pins</span> validates images with ImageIO, writes assets inside the library root, and appends to <span class="inline-code">library.json</span> atomically. Read endpoints remain read-only; there are no cookies or session state.</li>
+      <li><strong>Local writes only.</strong> Any process that can reach loopback can add pins. Do not port-forward or proxy the API; it is designed for trusted local workflows.</li>
       <li><strong>Path-safe image serving.</strong> Only files referenced by pin entries and resolvable inside the library root are streamed. Absolute paths, dot-segment escapes, and symlinks that leave the root return a 404 JSON error.</li>
-      <li><strong>Fresh reads.</strong> <span class="inline-code">library.json</span> is decoded on every request, so edits made in the app appear immediately without restarting the server.</li>
-      <li><strong>Connection handling.</strong> One request per connection, <span class="inline-code">Connection: close</span>, a 32&nbsp;KB request-head limit, and correct <span class="inline-code">Content-Length</span> on every response.</li>
+      <li><strong>Fresh reads.</strong> <span class="inline-code">library.json</span> is decoded on every request, so edits made in the app or through the API appear immediately without restarting the server.</li>
+      <li><strong>Connection handling.</strong> One request per connection, <span class="inline-code">Connection: close</span>, a 32&nbsp;KB request-head limit, a 20&nbsp;MiB upload limit on <span class="inline-code">POST /api/v1/pins</span>, and correct <span class="inline-code">Content-Length</span> on every response.</li>
     </ul>
   </section>
 </main>

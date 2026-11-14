@@ -108,6 +108,77 @@ extension Date {
 
 // MARK: - Reusable surfaces
 
+// MARK: - Pointer cursor
+
+/// Tracks every hoverable control currently under the pointer so nested
+/// controls cannot reset the cursor for their parent.
+final class CursorManager {
+    static let shared = CursorManager()
+    private var tokens: Set<UUID> = []
+
+    private init() {}
+
+    func insert(_ token: UUID) {
+        tokens.insert(token)
+        NSCursor.pointingHand.set()
+    }
+
+    func remove(_ token: UUID) {
+        tokens.remove(token)
+        if tokens.isEmpty {
+            NSCursor.arrow.set()
+        }
+    }
+}
+
+struct PointerCursorModifier: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var token = UUID()
+    @State private var active = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                if hovering && isEnabled {
+                    activate()
+                } else {
+                    deactivate()
+                }
+            }
+            .onDisappear { deactivate() }
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { deactivate() }
+            }
+    }
+
+    private func activate() {
+        guard !active else { return }
+        active = true
+        CursorManager.shared.insert(token)
+    }
+
+    private func deactivate() {
+        guard active else { return }
+        active = false
+        CursorManager.shared.remove(token)
+    }
+}
+
+extension View {
+    func pointerCursor() -> some View {
+        modifier(PointerCursorModifier())
+    }
+}
+
+/// Equivalent to `.buttonStyle(PointerPlainButtonStyle())`, plus a pointing-hand cursor.
+struct PointerPlainButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .pointerCursor()
+    }
+}
+
 struct PressableStyle: ButtonStyle {
     var scale: CGFloat = 0.97
     func makeBody(configuration: Configuration) -> some View {
@@ -115,6 +186,7 @@ struct PressableStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? scale : 1)
             .opacity(configuration.isPressed ? 0.86 : 1)
             .animation(.spring(response: 0.28, dampingFraction: 0.7), value: configuration.isPressed)
+            .pointerCursor()
     }
 }
 
@@ -153,6 +225,7 @@ struct IconButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+            .pointerCursor()
     }
 }
 

@@ -134,6 +134,7 @@ struct PinDetailOverlay: View {
                 .onTapGesture(count: 2) {
                     withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
                 }
+                .pointerCursor()
         }
         .ignoresSafeArea()
     }
@@ -251,6 +252,7 @@ struct PinDetailOverlay: View {
                     .onTapGesture(count: 2) {
                         withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
                     }
+                    .pointerCursor()
             }
             .padding(27)
 
@@ -390,7 +392,7 @@ struct PinDetailOverlay: View {
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
         .popover(isPresented: $showBoardMenu, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
@@ -421,7 +423,7 @@ struct PinDetailOverlay: View {
                                 .fill(board.caseInsensitiveCompare(pin.board) == .orderedSame ? Theme.parchment : Color.clear)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                 }
                 Divider()
                 Button {
@@ -436,7 +438,7 @@ struct PinDetailOverlay: View {
                         .frame(height: 30)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PointerPlainButtonStyle())
             }
             .padding(6)
             .frame(width: 210)
@@ -470,6 +472,7 @@ struct PinDetailOverlay: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
+        .pointerCursor()
         .help(T("More actions"))
     }
 
@@ -492,7 +495,7 @@ struct PinDetailOverlay: View {
                         } label: {
                             Text(sourceLabel).underline()
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PointerPlainButtonStyle())
                     } else {
                         Text(sourceLabel)
                     }
@@ -518,7 +521,7 @@ struct PinDetailOverlay: View {
                         newBoardName = ""
                         showNewBoardField = false
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.red)
                     Button {
@@ -528,7 +531,7 @@ struct PinDetailOverlay: View {
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Theme.inkTertiary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                 }
             }
         }
@@ -608,7 +611,7 @@ struct PinDetailOverlay: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                     .help(TF("Copy %@", hex))
                 }
             }
@@ -659,7 +662,7 @@ struct PinDetailOverlay: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline, lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PointerPlainButtonStyle())
 
             HStack(spacing: 7) {
                 SmallPillButton(title: T("Copy snippet"), icon: "doc.on.doc") {
@@ -735,7 +738,7 @@ struct PinDetailOverlay: View {
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.inkSecondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PointerPlainButtonStyle())
 
             Button {
                 store.revealPin(pin)
@@ -744,7 +747,7 @@ struct PinDetailOverlay: View {
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.inkSecondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PointerPlainButtonStyle())
 
             Spacer()
 
@@ -755,7 +758,7 @@ struct PinDetailOverlay: View {
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Theme.red)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PointerPlainButtonStyle())
         }
         .padding(.top, 2)
     }
@@ -816,7 +819,7 @@ struct SmallPillButton: View {
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .onHover { hovering = $0 }
     }
 }

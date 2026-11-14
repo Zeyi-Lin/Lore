@@ -60,7 +60,7 @@ struct BatchActionBar: View {
                             .frame(height: 31)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PointerPlainButtonStyle())
                     }
                 }
                 .padding(6)
@@ -163,7 +163,7 @@ private struct BatchBarButton: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.35)

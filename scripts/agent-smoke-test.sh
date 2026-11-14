@@ -230,8 +230,10 @@ echo "    listening on $BASE"
 
 echo "==> Running HTTP smoke checks"
 python3 - "$BASE" "$FIXTURE" "$LIBRARY" <<'PY'
+import base64
 import json
 import os
+import socket
 import sys
 import urllib.error
 import urllib.request
@@ -256,8 +258,11 @@ def record(label, ok, detail=""):
         print("    FAIL  " + label + (("  (" + detail + ")") if detail else ""))
 
 
-def request(path, method="GET"):
-    req = urllib.request.Request(base + path, method=method)
+def request(path, method="GET", data=None, content_type=None):
+    headers = {}
+    if content_type:
+        headers["Content-Type"] = content_type
+    req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
             return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
@@ -410,6 +415,125 @@ record("CORS allow methods", "GET" in headers.get("access-control-allow-methods"
 status, headers, body = request("/health")
 record("GET CORS header", headers.get("access-control-allow-origin") == "*", headers.get("access-control-allow-origin", ""))
 record("GET connection close", headers.get("connection") == "close", headers.get("connection", ""))
+
+print("  [ingest]")
+
+def parse_created(status_label, status, headers, body):
+    record(status_label, status == 201, str(status))
+    try:
+        payload = json.loads(body)
+    except Exception:
+        payload = None
+    record(status_label + " valid JSON", payload is not None, body[:200].decode("utf-8", "replace"))
+    return payload if isinstance(payload, dict) else {}
+
+
+b64 = base64.b64encode(png).decode("ascii")
+json_body = json.dumps({
+    "imageBase64": "data:image/png;base64," + b64,
+    "mimeType": "image/png",
+    "title": "Agent upload",
+    "note": "Added by the smoke test.",
+    "board": "Web dashboards",
+    "tags": ["Agent", "SMOKE", "agent"],
+    "sourceLabel": "Smoke test",
+    "favorite": True,
+}).encode("utf-8")
+status, headers, body = request("/api/v1/pins", method="POST", data=json_body, content_type="application/json")
+created = parse_created("POST JSON -> 201", status, headers, body)
+created_id = created.get("id", "")
+record("created pin has uuid", bool(created_id), str(created_id))
+record("created Location header", headers.get("location") == "/api/v1/pins/" + created_id, headers.get("location", ""))
+record("created tags normalized", created.get("tags") == ["agent", "smoke"], str(created.get("tags")))
+record("created board persisted", created.get("board") == "Web dashboards", str(created.get("board")))
+record("created favorite persisted", created.get("favorite") is True, str(created.get("favorite")))
+record("created dimensions", created.get("width") == 1 and created.get("height") == 1, str((created.get("width"), created.get("height"))))
+record("created imageURL absolute", str(created.get("imageURL", "")).startswith(base + "/api/v1/pins/"), str(created.get("imageURL")))
+record("created colors non-empty", isinstance(created.get("colors"), list) and len(created.get("colors")) > 0, str(created.get("colors")))
+
+status, headers, image_body = request("/api/v1/pins/" + created_id + "/image")
+record("created original image", status == 200 and image_body == png and headers.get("content-type") == "image/png", str(status))
+status, headers, thumb_body = request("/api/v1/pins/" + created_id + "/image?variant=thumb")
+record("created thumbnail jpeg", status == 200 and headers.get("content-type") == "image/jpeg" and thumb_body[:2] == b"\xff\xd8", str(status))
+
+library_after = json.loads(request("/api/v1/library")[2])
+record("library grows after JSON upload", library_after.get("stats", {}).get("pins") == 8, str(library_after.get("stats", {}).get("pins")))
+record("new pin present in library", any(pin.get("id") == created_id for pin in library_after.get("pins", [])))
+
+status, headers, body = request(
+    "/api/v1/pins?title=Raw%20smoke&note=Raw%20upload&board=Editorial&tags=RAW,editorial&sourceLabel=Smoke&favorite=false",
+    method="POST",
+    data=jpeg,
+    content_type="image/jpeg",
+)
+raw_created = parse_created("POST raw -> 201", status, headers, body)
+raw_id = raw_created.get("id", "")
+record("raw upload title", raw_created.get("title") == "Raw smoke", str(raw_created.get("title")))
+record("raw upload board", raw_created.get("board") == "Editorial", str(raw_created.get("board")))
+record("raw upload tags", raw_created.get("tags") == ["raw", "editorial"], str(raw_created.get("tags")))
+record("raw upload sourceLabel", raw_created.get("sourceLabel") == "Smoke", str(raw_created.get("sourceLabel")))
+status, headers, image_body = request("/api/v1/pins/" + raw_id + "/image")
+record("raw upload image bytes", status == 200 and image_body == jpeg and headers.get("content-type") == "image/jpeg", str(status))
+
+status, headers, body = request("/api/v1/pins", method="POST", data=png, content_type="image/png")
+default_created = parse_created("POST raw defaults -> 201", status, headers, body)
+record("default title", str(default_created.get("title", "")).startswith("Agent capture"), str(default_created.get("title")))
+record("default board", default_created.get("board") == "Unsorted", str(default_created.get("board")))
+record("default sourceLabel", default_created.get("sourceLabel") == "Agent API", str(default_created.get("sourceLabel")))
+record("default kind", default_created.get("kind") == "screenshot", str(default_created.get("kind")))
+
+status, headers, body = request("/api/v1/pins", method="POST", data=b"{ not valid json", content_type="application/json")
+record("invalid JSON -> 400 invalid_json", status == 400 and b"invalid_json" in body, str(status))
+status, headers, body = request("/api/v1/pins", method="POST", data=b'{"title":"no image"}', content_type="application/json")
+record("missing image -> 400 missing_image", status == 400 and b"missing_image" in body, str(status))
+status, headers, body = request("/api/v1/pins", method="POST", data=b'{"imageBase64":"not base64!!!"}', content_type="application/json")
+record("invalid base64 -> 400 invalid_image_data", status == 400 and b"invalid_image_data" in body, str(status))
+non_image_json = json.dumps({"imageBase64": base64.b64encode(b"hello world").decode("ascii")}).encode("utf-8")
+status, headers, body = request("/api/v1/pins", method="POST", data=non_image_json, content_type="application/json")
+record("non-image base64 -> 400 invalid_image_data", status == 400 and b"invalid_image_data" in body, str(status))
+status, headers, body = request("/api/v1/pins", method="POST", data=b"not an image", content_type="text/plain")
+record("unsupported content type -> 415", status == 415 and b"unsupported_media_type" in body, str(status))
+status, headers, body = request("/api/v1/pins", method="POST", data=b"", content_type="image/png")
+record("empty raw body -> 400 missing_image", status == 400 and b"missing_image" in body, str(status))
+
+status, headers, body = request("/api/v1/library", method="POST", data=b"", content_type="application/json")
+record("POST read-only path -> 405", status == 405 and b"method_not_allowed" in body, str(status))
+record("405 lists read methods", "GET" in headers.get("allow", ""), headers.get("allow", ""))
+status, headers, body = request("/api/v1/pins", method="OPTIONS")
+record("OPTIONS pins allows POST", "POST" in headers.get("allow", ""), headers.get("allow", ""))
+record("CORS advertises POST", "POST" in headers.get("access-control-allow-methods", ""), headers.get("access-control-allow-methods", ""))
+status, headers, body = request("/api/v1/library", method="OPTIONS")
+record("OPTIONS library excludes POST", "POST" not in headers.get("allow", ""), headers.get("allow", ""))
+
+raw_head = (
+    "POST /api/v1/pins HTTP/1.1\r\n"
+    "Host: 127.0.0.1\r\n"
+    "Content-Type: image/png\r\n"
+    "Content-Length: 20971521\r\n"
+    "\r\n"
+).encode("ascii")
+sock = socket.create_connection(("127.0.0.1", port), timeout=10)
+sock.sendall(raw_head)
+try:
+    sock.shutdown(socket.SHUT_WR)
+except OSError:
+    pass
+chunks = []
+while True:
+    chunk = sock.recv(65536)
+    if not chunk:
+        break
+    chunks.append(chunk)
+sock.close()
+oversize_response = b"".join(chunks)
+record(
+    "oversized upload -> 413 request_body_too_large",
+    b" 413 " in oversize_response.split(b"\r\n")[0] and b"request_body_too_large" in oversize_response,
+    oversize_response[:160].decode("utf-8", "replace"),
+)
+
+final_library = json.loads(request("/api/v1/library")[2])
+record("final library has 10 pins", final_library.get("stats", {}).get("pins") == 10, str(final_library.get("stats", {}).get("pins")))
 
 print("")
 if failures:

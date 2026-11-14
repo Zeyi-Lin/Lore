@@ -269,6 +269,30 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    /// Re-reads the library after an external writer (the Agent API) changes it.
+    func reloadFromDisk(announceNewPins: Bool = true) {
+        do {
+            let data = try Data(contentsOf: CantaPaths.libraryFile(root: root))
+            let library = try CantaJSON.decoder.decode(CantaLibrary.self, from: data)
+            let existingIDs = Set(pins.map(\.id))
+            let added = library.pins.filter { !existingIDs.contains($0.id) }
+            pins = library.pins
+            let validIDs = Set(pins.map(\.id))
+            if let selectedPinID, !validIDs.contains(selectedPinID) {
+                self.selectedPinID = nil
+            }
+            selectedPinIDs.formIntersection(validIDs)
+            if announceNewPins, !added.isEmpty {
+                let message = added.count == 1
+                    ? TF("An agent added %ld pin", added.count)
+                    : TF("An agent added %ld pins", added.count)
+                showToast(message, icon: "sparkles")
+            }
+        } catch {
+            // Keep the in-memory library if the external write was transient.
+        }
+    }
+
     // MARK: - Batch selection
 
     func beginSelection() {
@@ -746,6 +770,12 @@ final class LibraryStore: ObservableObject {
                 self.agentStatus = status
             }
         }
+        server.onLibraryChanged = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.agentGeneration == generation else { return }
+                self.reloadFromDisk(announceNewPins: true)
+            }
+        }
         agentServer = server
         agentStatus = .starting
         server.start()
@@ -754,6 +784,7 @@ final class LibraryStore: ObservableObject {
     func stopAgentServer() {
         agentGeneration += 1
         agentServer?.onStatusChange = nil
+        agentServer?.onLibraryChanged = nil
         agentServer?.stop()
         agentServer = nil
         agentStatus = .stopped

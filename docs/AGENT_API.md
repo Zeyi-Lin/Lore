@@ -1,6 +1,6 @@
 # Canta Agent API
 
-Canta is a macOS visual library for design screenshots. The **Canta Agent API** exposes that library over a read-only, loopback-only HTTP service so coding agents — Claude Code, Codex, Cursor, or any local script — can discover pinned references, read their metadata, and fetch the actual images before writing UI code.
+Canta is a macOS visual library for design screenshots. The **Canta Agent API** exposes that library over a loopback-only HTTP service so coding agents — Claude Code, Codex, Cursor, or any local script — can discover pinned references, read their metadata, fetch the actual images, and add new references they captured. Read endpoints are read-only; `POST /api/v1/pins` is the single write endpoint.
 
 The API is embedded in the Canta app (via **CantaAgentKit**) and starts automatically with the app. It binds to **127.0.0.1 only**, never requires authentication, and re-reads the library from disk on every request, so what you see in Canta is exactly what an agent gets.
 
@@ -10,7 +10,8 @@ The API is embedded in the Canta app (via **CantaAgentKit**) and starts automati
 | API version | `v1` |
 | Server implementation | `CantaAgentKit 1.0.0` (Network.framework, HTTP/1.1) |
 | Data source | `<libraryRoot>/library.json` plus `Images/` and `Thumbnails/` |
-| Access | Read-only, loopback-only, no authentication |
+| Access | Loopback-only, no authentication |
+| Writes | `POST /api/v1/pins` only (JSON base64 or raw image body; 20 MiB limit) |
 | Human docs | `GET /docs` (offline HTML page served by the API) |
 | Machine-readable | `GET /openapi.json` (OpenAPI 3.1), `GET /llms.txt` |
 
@@ -40,7 +41,22 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?limit=5&sort=recent" \
 curl -s "http://127.0.0.1:4242/api/v1/context?board=Web%20dashboards"
 ```
 
-**5. Open the documentation.** Visit `http://127.0.0.1:4242/docs`, which includes curl examples, the full endpoint table, and copy-paste blocks for agent instruction files.
+**5. Add a pin from a screenshot.** Either stream the raw image bytes, or send JSON with `imageBase64`:
+
+```bash
+# Raw image form — metadata in query parameters
+curl -s -X POST --data-binary @shot.png \
+  -H "Content-Type: image/png" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" | jq
+
+# JSON base64 form (data URI prefixes are accepted)
+B64=$(base64 -i shot.png)
+curl -s -X POST "http://127.0.0.1:4242/api/v1/pins" \
+  -H "Content-Type: application/json" \
+  -d "{\"imageBase64\": \"$B64\", \"title\": \"Checkout flow\", \"board\": \"Mobile flows\", \"tags\": [\"mobile\", \"checkout\"]}" | jq
+```
+
+**6. Open the documentation.** Visit `http://127.0.0.1:4242/docs`, which includes curl examples, the full endpoint table, and copy-paste blocks for agent instruction files.
 
 > `jq` is optional but recommended for exploring responses. Install it with `brew install jq` if needed.
 
@@ -60,7 +76,7 @@ curl -s "http://127.0.0.1:4242/api/v1/context?board=Web%20dashboards"
 
 ## Endpoints
 
-All endpoints are **read-only**, accept **GET** and **HEAD**, and answer **OPTIONS** for CORS preflight. Every response includes `Connection: close` and CORS headers.
+Read endpoints accept **GET** and **HEAD**; `POST /api/v1/pins` accepts **POST**. Every path answers **OPTIONS** for CORS preflight, and every response includes `Connection: close` and CORS headers.
 
 | Method | Path | Response type | Purpose |
 | --- | --- | --- | --- |
@@ -68,6 +84,7 @@ All endpoints are **read-only**, accept **GET** and **HEAD**, and answer **OPTIO
 | GET | `/api/v1/health` | JSON | Versioned alias of `/health` |
 | GET | `/api/v1/library` | JSON | Complete enriched library: stats, boards, tags, every pin |
 | GET | `/api/v1/pins` | JSON | Filtered, sorted, paginated pin list |
+| POST | `/api/v1/pins` | JSON | Add a pin from a JSON base64 payload or a raw image body (20 MiB limit) |
 | GET | `/api/v1/pins/{id}` | JSON | One enriched pin by UUID |
 | GET | `/api/v1/pins/{id}/image` | Raw image bytes | Original image or thumbnail |
 | GET | `/api/v1/boards` | JSON | Board names with pin counts |
@@ -167,6 +184,70 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?q=onboarding"
 ```
 
 Invalid values (non-integer `limit`, out-of-range `limit`, negative `offset`, unknown `sort`, non-boolean `favorite`) return `400 invalid_parameter` rather than silently falling back.
+
+### POST /api/v1/pins
+
+Creates a pin and persists it to the library. Both request forms are limited to a **20 MiB** request body.
+
+**Form 1 — JSON with base64** (`Content-Type: application/json`, optional charset):
+
+```json
+{
+  "imageBase64": "data:image/png;base64,iVBORw0KGgo...",
+  "mimeType": "image/png",
+  "title": "Checkout flow",
+  "note": "Three-step checkout captured from a design review.",
+  "board": "Mobile flows",
+  "tags": ["mobile", "checkout"],
+  "sourceURL": "https://example.com/checkout",
+  "sourceLabel": "Claude Code",
+  "kind": "screenshot",
+  "favorite": false
+}
+```
+
+`imageBase64` is required. A `data:<mime>;base64,` prefix is accepted, and the embedded media type is used when `mimeType` is omitted. All metadata fields are optional.
+
+```bash
+B64=$(base64 -i shot.png)
+curl -s -X POST "http://127.0.0.1:4242/api/v1/pins" \
+  -H "Content-Type: application/json" \
+  -d "{\"imageBase64\": \"$B64\", \"title\": \"Checkout flow\", \"board\": \"Mobile flows\", \"tags\": [\"mobile\", \"checkout\"]}" | jq
+```
+
+**Form 2 — raw image body** (`Content-Type: image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/heic`, `image/tiff`, `image/bmp`, `image/avif`, …). Metadata is passed as query parameters:
+
+```bash
+curl -s -X POST --data-binary @shot.png \
+  -H "Content-Type: image/png" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Checkout%20flow&note=Captured%20from%20the%20app&board=Mobile%20flows&tags=mobile,checkout&sourceLabel=Claude%20Code&favorite=true" | jq
+```
+
+Metadata fields and defaults:
+
+| Field | JSON form | Raw form | Default |
+| --- | --- | --- | --- |
+| `title` | `title` | `?title=` | `Agent capture · YYYY-MM-DD HH:MM` (UTC) |
+| `note` | `note` | `?note=` | empty string |
+| `board` | `board` | `?board=` | `Unsorted` |
+| `tags` | `tags` array | `?tags=` comma-separated | empty array |
+| `sourceURL` | `sourceURL` | `?sourceURL=` | `null` |
+| `sourceLabel` | `sourceLabel` | `?sourceLabel=` | `Agent API` |
+| `kind` | `kind` | `?kind=` | `screenshot` |
+| `favorite` | `favorite` boolean | `?favorite=` | `false` |
+
+Processing and response:
+
+- The image is validated and decoded with ImageIO. Unsupported, corrupt, or non-image payloads return `400 invalid_image_data`; a body with no image returns `400 missing_image`.
+- The original bytes are written to `<libraryRoot>/Images/<uuid>.<ext>`; a JPEG thumbnail (max 1200 px on the longest side) is written to `<libraryRoot>/Thumbnails/<uuid>.jpg`.
+- Pixel dimensions, `fileSize`, timestamps, and up to five dominant palette colours are computed and stored.
+- Tags are trimmed, lower-cased, and de-duplicated.
+- The pin is appended to `library.json`, which is rewritten atomically as pretty-printed, sorted JSON. Existing pins and fields are preserved.
+- Success returns `201 Created`, the enriched pin JSON, and a `Location: /api/v1/pins/{id}` header. The same pin is immediately available from every read endpoint.
+- If anything fails, partially written image files are removed and the library is left unchanged. A missing or corrupt library returns the usual `500 library_unavailable` / `500 library_corrupt`.
+- Unsupported `Content-Type` values return `415 unsupported_media_type`; declared bodies over 20 MiB return `413 request_body_too_large`.
+- In the app, `CantaAgentServer.onLibraryChanged` fires once after the atomic write so the UI can reload.
+- `POST` is accepted on `/api/v1/pins` only. On read-only paths it returns `405 method_not_allowed` with an `Allow` header listing the supported methods.
 
 ### GET /api/v1/pins/{id}
 
@@ -315,20 +396,22 @@ Every non-2xx response is JSON with a stable machine-readable code and a human-r
 
 | Status | Codes | When |
 | --- | --- | --- |
-| 400 | `bad_request`, `invalid_parameter`, `invalid_percent_encoding`, `invalid_utf8`, `invalid_content_length`, `request_header_too_large`, `request_body_too_large`, `unsupported_http_version`, `unsupported_transfer_encoding` | Malformed request or invalid query values |
+| 400 | `bad_request`, `invalid_parameter`, `invalid_percent_encoding`, `invalid_utf8`, `invalid_content_length`, `request_header_too_large`, `request_body_too_large`, `unsupported_http_version`, `unsupported_transfer_encoding`, `invalid_json`, `missing_image`, `invalid_image_data`, `invalid_metadata` | Malformed request, invalid query values, or an unusable upload payload |
 | 404 | `not_found`, `pin_not_found`, `image_not_found` | Unknown route/pin/image, including blocked traversal attempts |
-| 405 | `method_not_allowed` | Method other than GET, HEAD, or OPTIONS; response includes `Allow` |
-| 500 | `library_unavailable`, `library_corrupt`, `internal_error` | Library file missing/unreadable or invalid JSON |
+| 405 | `method_not_allowed` | Method not supported by the path; response includes `Allow` |
+| 413 | `request_body_too_large` | Upload body exceeds the 20 MiB limit |
+| 415 | `unsupported_media_type` | Upload is neither `application/json` nor an `image/*` body |
+| 500 | `library_unavailable`, `library_corrupt`, `storage_failure`, `internal_error` | Library file missing/unreadable/invalid, or assets could not be persisted |
 
-HTTP status codes used: **400, 404, 405, 500** (plus `204` for `OPTIONS` and `200` for successful requests).
+HTTP status codes used: **400, 404, 405, 413, 415, 500** (plus `204` for `OPTIONS`, `200` for successful reads, and `201` for successful creation).
 
 ---
 
 ## HTTP behavior
 
-- **CORS:** every response includes `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`, and `Access-Control-Allow-Headers: Accept, Content-Type, Origin`. Preflight `OPTIONS` returns `204` with `Allow`.
+- **CORS:** every response includes `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET, HEAD, OPTIONS, POST`, and `Access-Control-Allow-Headers: Accept, Content-Type, Origin`. Preflight `OPTIONS` returns `204` with a path-specific `Allow` header (POST is listed only for `/api/v1/pins`).
 - **HEAD:** supported on every endpoint. Headers (including `Content-Length`) match the corresponding GET; the body is omitted.
-- **Connections:** one request per connection; every response sends `Connection: close` and a correct `Content-Length`. Request heads are capped at 32 KB; bodies are ignored/limited to 1 MB (the API is read-only).
+- **Connections:** one request per connection; every response sends `Connection: close` and a correct `Content-Length`. Request heads are capped at 32 KB. Only `POST /api/v1/pins` waits for a request body (up to 20 MiB, validated against `Content-Length`); read endpoints answer from the head alone. Chunked transfer encoding is rejected with `400 unsupported_transfer_encoding`.
 - **URL encoding:** query keys and values are percent-decoded (`+` means space); malformed percent escapes return `400 invalid_percent_encoding`. Path dot-segments (`.` / `..`) are rejected as `404 not_found`.
 - **Caching:** JSON responses send `Cache-Control: no-store`; images and docs send `Cache-Control: no-cache` so edits in Canta are visible immediately.
 - **Headers:** every response includes `Server: CantaAgentKit/1.0.0`, an RFC 1123 `Date`, and `X-Content-Type-Options: nosniff`. SVG images also send a restrictive `Content-Security-Policy`.
@@ -345,8 +428,9 @@ Add this block to `AGENTS.md` (Codex), `CLAUDE.md` (Claude Code), or a Cursor ru
 ```markdown
 ## Canta design reference API
 
-Canta runs a read-only HTTP API on loopback at http://127.0.0.1:4242.
-It serves the user's pinned UI screenshots as JSON metadata plus image streams.
+Canta runs a local HTTP API on loopback at http://127.0.0.1:4242.
+It serves the user's pinned UI screenshots as JSON metadata plus image streams
+and can add new pins from images you capture.
 
 - Health:   GET /health
 - Context:  GET /api/v1/context?board=&tag=   (markdown, paste into your prompt)
@@ -354,6 +438,7 @@ It serves the user's pinned UI screenshots as JSON metadata plus image streams.
 - Pin:      GET /api/v1/pins/{id}
 - Image:    GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:  GET /api/v1/library
+- Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB)
 - Docs:     GET /docs            OpenAPI: GET /openapi.json    Index: GET /llms.txt
 
 Before writing UI code, fetch /api/v1/context (optionally filtered by board or tag),
@@ -368,6 +453,7 @@ API; do not invent URLs or guess pin IDs.
 - *"Use Canta to find pins matching 'onboarding'. Read each pin's imageURL and design note, then implement the empty-state screen so it belongs to the same product family."*
 - *"List Canta pins tagged editorial. Read their colors and thumbnails, and propose a consistent four-colour palette with hex values and usage notes."*
 - *"Before restyling the settings screen, pull Canta pins on the board Mobile flows and summarize the common navigation patterns."*
+- *"Capture the current Figma frame and add it to Canta with POST /api/v1/pins, tagged 'checkout' on the Mobile flows board, then use its imageURL as the reference for the implementation."*
 
 ### Useful jq recipes
 
@@ -391,6 +477,12 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?favorite=true&limit=200" \
 
 # One pin with everything
 curl -s http://127.0.0.1:4242/api/v1/pins/<pin-id> | jq
+
+# Upload a screenshot and print the created pin
+curl -s -X POST --data-binary @shot.png \
+  -H "Content-Type: image/png" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout" \
+  | jq '{id, title, width, height, imageURL}'
 ```
 
 ### Worked example: build a page from the library
@@ -415,7 +507,8 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 
 - **Loopback only.** The listener binds to `127.0.0.1` and is unreachable from other machines or network interfaces.
 - **No authentication by design.** Any process running as the local user can read the library. This is the intended contract for a local design tool; do not port-forward, reverse-proxy, or otherwise expose the API beyond the Mac.
-- **Read-only.** No mutating endpoints, cookies, or session state.
+- **One write endpoint.** `POST /api/v1/pins` validates images with ImageIO, writes assets inside the library root, and updates `library.json` atomically. All other endpoints are read-only; there are no cookies or session state.
+- **Local writes only.** Any process that can reach loopback can add pins to the library. Do not port-forward, reverse-proxy, or otherwise expose the API beyond the Mac.
 - **No filesystem leakage.** Responses contain library-relative image paths (which are part of the documented schema) and absolute loopback URLs; the configured library root is never exposed. Image serving rejects absolute paths, dot-segment escapes, and symlinks that leave the library root.
 - **Hardened parsing.** Request-head size cap, Content-Length validation, percent-encoding validation, and one-request-per-connection semantics.
 
@@ -432,7 +525,10 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 | `404 image_not_found` | The pin has no image or its image file is missing | Re-import the image in Canta |
 | `pinCount` is 0 but the app shows pins | The app's library root differs from the API's `libraryRoot` | Ensure the app started the server with its own data root |
 | `400 invalid_parameter` | Invalid `limit`, `offset`, `sort`, or `favorite` value | Use documented values; see the parameters table |
-| `405 method_not_allowed` | Tried POST/PUT/DELETE | The API is read-only; use GET |
+| `405 method_not_allowed` | Tried POST/PUT/DELETE on a read-only path | Only `POST /api/v1/pins` is writable; read endpoints accept GET/HEAD |
+| `413 request_body_too_large` | Upload body exceeds 20 MiB | Downscale the screenshot or upload the original via a smaller format/quality |
+| `415 unsupported_media_type` | Upload used a non-JSON, non-image Content-Type | Send `application/json` with `imageBase64`, or a raw image body with `image/png`/`image/jpeg`/… |
+| `400 invalid_image_data` | Base64 did not decode to an image, or the bytes are not a supported image | Verify the file opens as PNG/JPEG/WebP/GIF/HEIC/TIFF/BMP/AVIF |
 | Browser CORS error | Custom browser code without preflight | Send an `OPTIONS` preflight; CORS headers are always present |
 
 ---
@@ -443,6 +539,7 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 - `version` (currently `1.0.0`) identifies the CantaAgentKit implementation and may change independently of the API generation.
 - Changes within `v1` are additive: new optional fields or endpoints may appear, but existing fields, status codes, and semantics stay compatible. Clients should ignore unknown JSON fields.
 - `generatedAt` in `/api/v1/library` indicates when the snapshot was produced; the library itself is read fresh on every request.
+- `POST /api/v1/pins` is additive within `v1`: clients that only read the library keep working unchanged. It is the only mutating endpoint.
 - `/openapi.json` is authoritative for the current machine-readable contract.
 
 ---
@@ -453,8 +550,8 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 
 | Path | Contents |
 | --- | --- |
-| `Sources/CantaAgentKit/` | Embedded HTTP server, router, library model, docs/OpenAPI/llms content |
-| `Tests/CantaAgentKitTests/` | 35 Swift Testing tests (ephemeral ports, temporary library roots) |
+| `Sources/CantaAgentKit/` | Embedded HTTP server, router, library model, image ingest pipeline, docs/OpenAPI/llms content |
+| `Tests/CantaAgentKitTests/` | 49 Swift Testing tests (ephemeral ports, temporary library roots) |
 | `docs/AGENT_API.md` | This document |
 | `scripts/agent-smoke-test.sh` | Builds the kit and black-box tests a live server against a temp fixture library |
 
@@ -487,7 +584,7 @@ swift test --disable-sandbox --manifest-cache local \
 
 > If a CLT-only machine builds the test bundle but does not execute it with plain `swift test`, that is an environment limitation (no XCTest harness), not an API defect. Use the smoke test below as the authoritative end-to-end verification in that case.
 
-The suite covers: health and alias, library JSON shape and enrichment, stats/boards/tags, search/filter/sort/pagination, invalid parameters, pin detail, image streaming and thumbnails, HEAD metadata, thumbnail fallback, docs/OpenAPI/llms.txt presence, CORS and OPTIONS, 405/404 handling, malformed and oversized raw HTTP requests, dot-segment rejection, path-traversal and symlink escapes, library reload and corrupt/missing-library errors, lifecycle (start/stop/restart, port conflict), and concurrent request handling.
+The suite covers: health and alias, library JSON shape and enrichment, stats/boards/tags, search/filter/sort/pagination, invalid parameters, pin detail, image streaming and thumbnails, HEAD metadata, thumbnail fallback, docs/OpenAPI/llms.txt presence, CORS and OPTIONS, 405/404 handling, malformed and oversized raw HTTP requests, dot-segment rejection, path-traversal and symlink escapes, library reload and corrupt/missing-library errors, lifecycle (start/stop/restart, port conflict), concurrent request handling, and the full image-ingest surface: JSON and raw uploads, metadata persistence, thumbnail capping, invalid base64/missing image/unsupported media type, oversized-rejection via Content-Length, atomic append and preserved existing pins, orphan cleanup, `onLibraryChanged` firing, and concurrent uploads.
 
 ### Smoke test
 
@@ -496,7 +593,7 @@ The suite covers: health and alias, library JSON shape and enrichment, stats/boa
 ./scripts/agent-smoke-test.sh --tests  # also run the Swift Testing suite
 ```
 
-The script builds `CantaAgentKit` (and a temporary standalone harness), writes a fixture library to a temporary directory, starts the server on an ephemeral port, and runs 114 black-box checks covering health, library, filters, pin detail, images/thumbnails, HEAD, CORS, OPTIONS, 405/404, traversal protection, docs, OpenAPI, and llms.txt. It prints `PASS`/`FAIL` lines and exits non-zero on failure (`SMOKE TEST PASSED: 114 checks` on success). Requirements: `swift` and `python3`; it never reads the real Canta library.
+The script builds `CantaAgentKit` (and a temporary standalone harness), writes a fixture library to a temporary directory, starts the server on an ephemeral port, and runs 154 black-box checks covering health, library, filters, pin detail, images/thumbnails, HEAD, CORS, OPTIONS, 405/404, traversal protection, docs, OpenAPI, llms.txt, and the ingest flow: JSON and raw uploads, metadata/tags/board persistence, image and thumbnail verification, default metadata, invalid JSON/base64/media type, oversized-rejection, POST-to-read-only-path 405s, and CORS/OPTIONS advertising POST. It prints `PASS`/`FAIL` lines and exits non-zero on failure (`SMOKE TEST PASSED: 154 checks` on success). Requirements: `swift` and `python3`; it never reads the real Canta library.
 
 ### How the app wires it
 
@@ -507,6 +604,10 @@ let server = CantaAgentServer(
 server.onStatusChange = { status in
     // called on a background queue; hop to main for UI updates
 }
+server.onLibraryChanged = {
+    // called on a background queue after POST /api/v1/pins wrote library.json;
+    // reload the app's in-memory library here
+}
 server.start()   // returns immediately
 // ...
 server.stop()    // releases the listening socket
@@ -514,5 +615,6 @@ server.stop()    // releases the listening socket
 
 - `config.port` defaults to `4242`; `0` requests an ephemeral port.
 - `onStatusChange` receives `.starting`, `.running(port:)`, `.failed(message)`, and `.stopped` on a background queue.
+- `onLibraryChanged` fires once per successful `POST /api/v1/pins` after the atomic library write, and is the app's cue to reload pins without polling.
 - `status`, `runningPort`, `baseURL`, and `isRunning` are thread-safe conveniences for the UI.
 - The app's data root is `~/Library/Application Support/Canta` (overridable with the `CANTA_HOME` environment variable), containing `library.json`, `Images/`, and `Thumbnails/`.

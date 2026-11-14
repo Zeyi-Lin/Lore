@@ -4,6 +4,7 @@ import Foundation
 /// surfaces, and offline documentation pages.
 struct AgentRouter {
     let store: LibraryStore
+    let ingestor: LibraryIngestor
     let portProvider: () -> UInt16
 
     // MARK: - Routing
@@ -27,15 +28,17 @@ struct AgentRouter {
     func handle(_ request: HTTPRequest) -> HTTPResponse {
         do {
             let route = try route(for: request)
+            let allow = allowedMethods(for: route)
+            let allowHeader = allow.joined(separator: ", ")
             if request.method == "OPTIONS" {
-                return HTTPResponse.empty(status: 204, headers: ["Allow": "GET, HEAD, OPTIONS"])
+                return HTTPResponse.empty(status: 204, headers: ["Allow": allowHeader])
             }
-            guard request.method == "GET" || request.method == "HEAD" else {
+            guard allow.contains(request.method) else {
                 return HTTPResponse.error(
                     status: 405,
                     code: "method_not_allowed",
-                    message: "\(request.method) is not supported by this endpoint. Use GET, HEAD, or OPTIONS.",
-                    extraHeaders: ["Allow": "GET, HEAD, OPTIONS"]
+                    message: "\(request.method) is not supported by this endpoint. Allowed methods: \(allowHeader).",
+                    extraHeaders: ["Allow": allowHeader]
                 )
             }
             return try respond(to: route, request: request)
@@ -43,6 +46,8 @@ struct AgentRouter {
             var headers: [String: String] = [:]
             if error.status == 405 { headers["Allow"] = "GET, HEAD, OPTIONS" }
             return HTTPResponse.error(status: error.status, code: error.code, message: error.message, extraHeaders: headers)
+        } catch let error as PinIngestError {
+            return Self.response(for: error)
         } catch let error as LibraryStoreError {
             switch error {
             case .unavailable(let message):
@@ -54,6 +59,43 @@ struct AgentRouter {
             }
         } catch {
             return HTTPResponse.error(status: 500, code: "internal_error", message: "The Agent API could not complete this request.")
+        }
+    }
+
+    /// Methods accepted by each route. The pins collection is the only route
+    /// with a write method.
+    private func allowedMethods(for route: Route) -> [String] {
+        switch route {
+        case .pins:
+            return ["GET", "HEAD", "OPTIONS", "POST"]
+        default:
+            return ["GET", "HEAD", "OPTIONS"]
+        }
+    }
+
+    /// Body buffering policy used by the HTTP connection. Only pin creation
+    /// waits for a body; read endpoints answer from the head immediately.
+    func maxBodyBytes(for head: HTTPRequestHead) -> Int {
+        guard head.method == "POST", head.pathSegments == ["api", "v1", "pins"] else {
+            return 0
+        }
+        return CantaAgentAPI.maxUploadBytes
+    }
+
+    private static func response(for error: PinIngestError) -> HTTPResponse {
+        switch error {
+        case .malformedJSON(let message):
+            return .error(status: 400, code: "invalid_json", message: message)
+        case .missingImage(let message):
+            return .error(status: 400, code: "missing_image", message: message)
+        case .invalidImageData(let message):
+            return .error(status: 400, code: "invalid_image_data", message: message)
+        case .invalidMetadata(let message):
+            return .error(status: 400, code: "invalid_metadata", message: message)
+        case .unsupportedMediaType(let message):
+            return .error(status: 415, code: "unsupported_media_type", message: message)
+        case .storageFailure(let message):
+            return .error(status: 500, code: "storage_failure", message: message)
         }
     }
 
@@ -142,6 +184,9 @@ struct AgentRouter {
             ))
 
         case .pins:
+            if request.method == "POST" {
+                return try createPin(from: request, baseURL: baseURL)
+            }
             let query = try pinQuery(from: request)
             let filtered = LibraryStore.searchPins(in: try store.loadLibrary().pins, matching: query)
             let total = filtered.count
@@ -209,6 +254,136 @@ struct AgentRouter {
             )
             return .markdown(markdown)
         }
+    }
+
+    // MARK: - Pin ingestion
+
+    private func createPin(from request: HTTPRequest, baseURL: String) throws -> HTTPResponse {
+        let newPin = try parseNewPinRequest(from: request)
+        let pin = try ingestor.createPin(newPin)
+        let location = "/api/v1/pins/" + PercentCoding.encodePathSegment(pin.id)
+        return .json(pin.enriched(baseURL: baseURL), status: 201, extraHeaders: ["Location": location])
+    }
+
+    private func parseNewPinRequest(from request: HTTPRequest) throws -> NewPinRequest {
+        let contentType = request.contentType
+        if contentType == "application/json" {
+            return try parseJSONPinRequest(from: request)
+        }
+        if let contentType, contentType.hasPrefix("image/") {
+            return try parseRawPinRequest(from: request, declaredMimeType: contentType)
+        }
+        if contentType == nil || contentType == "application/octet-stream" {
+            return try parseRawPinRequest(from: request, declaredMimeType: nil)
+        }
+        throw PinIngestError.unsupportedMediaType(
+            "Content-Type \"\(contentType ?? "")\" is not supported. Send application/json with imageBase64, or a raw image body with an image/* Content-Type."
+        )
+    }
+
+    private func parseJSONPinRequest(from request: HTTPRequest) throws -> NewPinRequest {
+        guard !request.body.isEmpty else {
+            throw PinIngestError.missingImage("The JSON request body is empty; imageBase64 is required.")
+        }
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: request.body)
+        } catch {
+            throw PinIngestError.malformedJSON("The request body is not valid JSON.")
+        }
+        guard let dictionary = object as? [String: Any] else {
+            throw PinIngestError.malformedJSON("The JSON request body must be an object.")
+        }
+        guard let imageBase64 = dictionary["imageBase64"] as? String else {
+            throw PinIngestError.missingImage("The JSON request body must contain an imageBase64 string.")
+        }
+        var declaredMimeType = try optionalString(dictionary["mimeType"], field: "mimeType")
+        var base64 = imageBase64.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base64.lowercased().hasPrefix("data:") {
+            guard let commaIndex = base64.firstIndex(of: ",") else {
+                throw PinIngestError.invalidImageData("The imageBase64 data URI is malformed.")
+            }
+            let header = String(base64[base64.startIndex..<commaIndex]).lowercased()
+            base64 = String(base64[base64.index(after: commaIndex)...])
+            if declaredMimeType == nil, header.hasSuffix(";base64") {
+                let mimeStart = header.index(header.startIndex, offsetBy: 5)
+                let mimeEnd = header.index(header.endIndex, offsetBy: -7)
+                let mime = String(header[mimeStart..<mimeEnd]).trimmingCharacters(in: .whitespaces)
+                if !mime.isEmpty { declaredMimeType = mime }
+            }
+        }
+        if let declaredMimeType, !declaredMimeType.lowercased().hasPrefix("image/") {
+            throw PinIngestError.unsupportedMediaType("mimeType \"\(declaredMimeType)\" is not an image media type.")
+        }
+        guard let data = Data(base64Encoded: base64, options: [.ignoreUnknownCharacters]), !data.isEmpty else {
+            throw PinIngestError.invalidImageData("imageBase64 did not decode to any image bytes.")
+        }
+        return NewPinRequest(
+            imageData: data,
+            declaredMimeType: declaredMimeType,
+            title: try optionalString(dictionary["title"], field: "title"),
+            note: try optionalString(dictionary["note"], field: "note"),
+            board: try optionalString(dictionary["board"], field: "board"),
+            tags: try stringArray(dictionary["tags"], field: "tags"),
+            sourceURL: try optionalString(dictionary["sourceURL"], field: "sourceURL"),
+            sourceLabel: try optionalString(dictionary["sourceLabel"], field: "sourceLabel"),
+            kind: try optionalString(dictionary["kind"], field: "kind"),
+            favorite: try optionalBool(dictionary["favorite"], field: "favorite")
+        )
+    }
+
+    private func parseRawPinRequest(from request: HTTPRequest, declaredMimeType: String?) throws -> NewPinRequest {
+        guard !request.body.isEmpty else {
+            throw PinIngestError.missingImage("The raw image request body is empty.")
+        }
+        let tags = (stringParameter(request, "tags") ?? "").split(separator: ",").map(String.init)
+        return NewPinRequest(
+            imageData: request.body,
+            declaredMimeType: declaredMimeType,
+            title: stringParameter(request, "title"),
+            note: stringParameter(request, "note"),
+            board: stringParameter(request, "board"),
+            tags: tags,
+            sourceURL: stringParameter(request, "sourceURL"),
+            sourceLabel: stringParameter(request, "sourceLabel"),
+            kind: stringParameter(request, "kind"),
+            favorite: try booleanParameter(request, name: "favorite")
+        )
+    }
+
+    private func optionalString(_ value: Any?, field: String) throws -> String? {
+        guard let value else { return nil }
+        guard let string = value as? String else {
+            throw PinIngestError.invalidMetadata("\"\(field)\" must be a string.")
+        }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func stringArray(_ value: Any?, field: String) throws -> [String] {
+        guard let value else { return [] }
+        guard let array = value as? [Any] else {
+            throw PinIngestError.invalidMetadata("\"\(field)\" must be an array of strings.")
+        }
+        var result: [String] = []
+        result.reserveCapacity(array.count)
+        for item in array {
+            guard let string = item as? String else {
+                throw PinIngestError.invalidMetadata("\"\(field)\" must contain only strings.")
+            }
+            result.append(string)
+        }
+        return result
+    }
+
+    private func optionalBool(_ value: Any?, field: String) throws -> Bool? {
+        guard let value else { return nil }
+        if let number = value as? NSNumber {
+            let intValue = number.intValue
+            if intValue == 0 || intValue == 1 { return intValue == 1 }
+        }
+        if let bool = value as? Bool { return bool }
+        throw PinIngestError.invalidMetadata("\"\(field)\" must be a boolean.")
     }
 
     // MARK: - Query parsing

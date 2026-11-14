@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 import Darwin
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import CantaAgentKit
 
 // MARK: - Failures and result types
@@ -56,7 +59,12 @@ struct HTTPResult {
 
 @discardableResult
 func expectJSON(_ result: HTTPResult, _ label: String = "") throws -> [String: Any] {
-    #expect(result.status == 200, "\(label) expected HTTP 200, got \(result.status): \(result.text.prefix(400))")
+    try expectJSONStatus(result, status: 200, label)
+}
+
+@discardableResult
+func expectJSONStatus(_ result: HTTPResult, status: Int, _ label: String = "") throws -> [String: Any] {
+    #expect(result.status == status, "\(label) expected HTTP \(status), got \(result.status): \(result.text.prefix(400))")
     #expect(result.header("content-type")?.contains("application/json") == true, "\(label) expected a JSON content type")
     return try result.jsonObject()
 }
@@ -125,13 +133,28 @@ final class HTTPClient {
         try request(path, method: "OPTIONS")
     }
 
-    func request(_ path: String, method: String) throws -> HTTPResult {
+    func postJSON(_ path: String, body: Any) throws -> HTTPResult {
+        let data = try JSONSerialization.data(withJSONObject: body)
+        return try request(path, method: "POST", body: data, contentType: "application/json")
+    }
+
+    func postRaw(_ path: String, body: Data, contentType: String) throws -> HTTPResult {
+        try request(path, method: "POST", body: body, contentType: contentType)
+    }
+
+    func request(_ path: String, method: String, body: Data? = nil, contentType: String? = nil) throws -> HTTPResult {
         guard let url = URL(string: baseURL + path) else {
             throw TestFailure.invalidURL(baseURL + path)
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let body {
+            request.httpBody = body
+        }
+        if let contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
         let semaphore = DispatchSemaphore(value: 0)
         let box = LockedBox<Result<HTTPResult, Error>>()
         let task = session.dataTask(with: request) { data, response, error in
@@ -382,6 +405,53 @@ enum Fixture {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try text.write(to: root.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
     }
+
+    /// Generates a PNG with three vertical colour bands (red, green, blue),
+    /// used to exercise image validation, dimensions, thumbnails, and palettes.
+    static func makePNG(width: Int = 120, height: Int = 80) -> Data {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            fatalError("Could not create a CGContext for the fixture image")
+        }
+        let bandWidth = CGFloat(width) / 3.0
+        context.setFillColor(CGColor(red: 0.9, green: 0.1, blue: 0.15, alpha: 1.0))
+        context.fill(CGRect(x: 0, y: 0, width: bandWidth, height: CGFloat(height)))
+        context.setFillColor(CGColor(red: 0.1, green: 0.6, blue: 0.3, alpha: 1.0))
+        context.fill(CGRect(x: bandWidth, y: 0, width: bandWidth, height: CGFloat(height)))
+        context.setFillColor(CGColor(red: 0.12, green: 0.2, blue: 0.65, alpha: 1.0))
+        context.fill(CGRect(x: bandWidth * 2, y: 0, width: CGFloat(width) - bandWidth * 2, height: CGFloat(height)))
+        guard let image = context.makeImage() else {
+            fatalError("Could not render the fixture image")
+        }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else {
+            fatalError("Could not create a PNG destination")
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            fatalError("Could not encode the fixture PNG")
+        }
+        return Data(referencing: output)
+    }
+
+    /// Decodes image dimensions from in-memory bytes, for thumbnail assertions.
+    static func imageDimensions(_ data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            return nil
+        }
+        return (width, height)
+    }
 }
 
 // MARK: - Scenario
@@ -403,11 +473,29 @@ final class StatusRecorder: @unchecked Sendable {
     }
 }
 
+final class LibraryChangeRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func record() {
+        lock.lock()
+        value += 1
+        lock.unlock()
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 final class AgentAPIScenario {
     let baseDirectory: URL
     let libraryRoot: URL
     let server: CantaAgentServer
     let recorder: StatusRecorder
+    let libraryChanges: LibraryChangeRecorder
     let port: UInt16
     let client: HTTPClient
 
@@ -420,13 +508,18 @@ final class AgentAPIScenario {
             try Fixture.writeLibrary(pins: pins ?? Fixture.defaultPins(), to: root)
         }
         let recorder = StatusRecorder()
+        let libraryChanges = LibraryChangeRecorder()
         let server = CantaAgentServer(config: AgentServerConfig(port: requestedPort, libraryRoot: root))
         server.onStatusChange = { [recorder] status in
             recorder.record(status)
         }
+        server.onLibraryChanged = { [libraryChanges] in
+            libraryChanges.record()
+        }
         self.baseDirectory = base
         self.libraryRoot = root
         self.recorder = recorder
+        self.libraryChanges = libraryChanges
         self.server = server
         server.start()
         let boundPort = try TestPaths.waitForRunning(server)
@@ -490,6 +583,7 @@ class RunningServerSuite {
     var port: UInt16 { scenario.port }
     var root: URL { scenario.libraryRoot }
     var baseURL: String { scenario.baseURL }
+    var libraryChanges: LibraryChangeRecorder { scenario.libraryChanges }
 }
 
 // MARK: - Paths and ports

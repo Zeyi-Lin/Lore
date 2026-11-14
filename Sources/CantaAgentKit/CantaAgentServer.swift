@@ -40,6 +40,11 @@ public final class CantaAgentServer {
     /// Called on a background queue whenever lifecycle state changes.
     public var onStatusChange: (@Sendable (AgentServerStatus) -> Void)?
 
+    /// Called once on a background queue after a successful POST /api/v1/pins
+    /// atomically appended a pin to library.json. The app can use this to
+    /// reload its in-memory library without polling the file.
+    public var onLibraryChanged: (@Sendable () -> Void)?
+
     private let stateLock = NSLock()
     private var storedStatus: AgentServerStatus = .stopped
     private var storedBoundPort: UInt16?
@@ -139,6 +144,17 @@ public final class CantaAgentServer {
         takeActiveServer()?.stop()
 
         let store = LibraryStore(root: config.libraryRoot)
+        let ingestor = LibraryIngestor(root: config.libraryRoot)
+        ingestor.onLibraryChanged = { [weak self] in
+            self?.emitLibraryChanged()
+        }
+        let router = AgentRouter(
+            store: store,
+            ingestor: ingestor,
+            portProvider: { [weak self] in
+                self?.runningPort ?? self?.config.port ?? 0
+            }
+        )
         let server: HTTPServer
         do {
             server = try HTTPServer(port: config.port)
@@ -147,14 +163,11 @@ public final class CantaAgentServer {
             return
         }
 
-        server.handler = { [weak self] request in
-            guard let self else {
-                return HTTPResponse.error(status: 500, code: "server_unavailable", message: "The Agent API is shutting down.")
-            }
-            let router = AgentRouter(store: store, portProvider: { [weak self] in
-                self?.runningPort ?? self?.config.port ?? 0
-            })
-            return router.handle(request)
+        server.handler = { request in
+            router.handle(request)
+        }
+        server.bodyLimitProvider = { head in
+            router.maxBodyBytes(for: head)
         }
         server.onReady = { [weak self, weak server] port in
             guard let self, let server else { return }
@@ -231,6 +244,13 @@ public final class CantaAgentServer {
         guard let callback = onStatusChange else { return }
         callbackQueue.async {
             callback(status)
+        }
+    }
+
+    private func emitLibraryChanged() {
+        guard let callback = onLibraryChanged else { return }
+        callbackQueue.async {
+            callback()
         }
     }
 }

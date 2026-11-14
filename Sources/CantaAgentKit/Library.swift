@@ -12,11 +12,13 @@ public enum CantaAgentAPI {
     public static let version = "1.0.0"
     /// Default loopback port used by the Canta app.
     public static let defaultPort: UInt16 = 4242
+    /// Maximum accepted request body for image ingestion (20 MiB).
+    public static let maxUploadBytes = 20 * 1024 * 1024
 }
 
 // MARK: - Library file model
 
-struct CantaLibraryFile: Decodable {
+struct CantaLibraryFile: Codable {
     var version: Int
     var pins: [CantaPinRecord]
 
@@ -28,6 +30,12 @@ struct CantaLibraryFile: Decodable {
     init(version: Int = 1, pins: [CantaPinRecord]) {
         self.version = version
         self.pins = pins
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(pins, forKey: .pins)
     }
 
     init(from decoder: Decoder) throws {
@@ -44,7 +52,7 @@ struct CantaLibraryFile: Decodable {
 /// A pin exactly as persisted by the Canta app in library.json. All fields are
 /// preserved for API output; only \`id\` is strictly required, so the kit can
 /// tolerate additive schema changes from newer app versions.
-struct CantaPinRecord: Decodable {
+struct CantaPinRecord: Codable {
     let id: String
     let title: String
     let note: String
@@ -93,6 +101,27 @@ struct CantaPinRecord: Decodable {
         colors = Self.stringArray(container, .colors)
         favorite = (try? container.decode(Bool.self, forKey: .favorite)) ?? false
         kind = Self.string(container, .kind, default: "screenshot")
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(note, forKey: .note)
+        try container.encode(image, forKey: .image)
+        try container.encode(thumbnail, forKey: .thumbnail)
+        try container.encode(width, forKey: .width)
+        try container.encode(height, forKey: .height)
+        try container.encode(fileSize, forKey: .fileSize)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(board, forKey: .board)
+        try container.encode(sourceURL, forKey: .sourceURL)
+        try container.encode(sourceLabel, forKey: .sourceLabel)
+        try container.encode(colors, forKey: .colors)
+        try container.encode(favorite, forKey: .favorite)
+        try container.encode(kind, forKey: .kind)
     }
 
     init(

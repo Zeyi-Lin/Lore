@@ -110,7 +110,7 @@ struct SidebarView: View {
                     .fill(selected ? Theme.parchmentDeep : (hoveredNav == section ? Theme.parchmentDeep.opacity(0.5) : Color.clear))
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .onHover { hovering in hoveredNav = hovering ? section : (hoveredNav == section ? nil : hoveredNav) }
     }
 
@@ -153,7 +153,7 @@ struct SidebarView: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .onHover { hovering in hoveredBoard = hovering ? board.name : (hoveredBoard == board.name ? nil : hoveredBoard) }
     }
 
@@ -242,7 +242,8 @@ struct SidebarView: View {
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(Theme.parchmentDeep))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PointerPlainButtonStyle())
+            .pointerCursor()
             .help(T("Settings"))
         }
     }

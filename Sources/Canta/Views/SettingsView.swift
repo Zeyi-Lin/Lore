@@ -33,6 +33,7 @@ struct SettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .frame(width: 280)
+                        .pointerCursor()
                     }
                 }
 
@@ -52,6 +53,7 @@ struct SettingsView: View {
                             .toggleStyle(.switch)
                             .controlSize(.small)
                             .tint(Theme.red)
+                            .pointerCursor()
                         }
 
                         HStack(spacing: 8) {
@@ -73,12 +75,12 @@ struct SettingsView: View {
                                     store.showToast(T("Port must be 1024–65535"), icon: "exclamationmark.triangle")
                                 }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PointerPlainButtonStyle())
                             .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(Theme.red)
                             Spacer()
                             Button(T("Restart")) { store.restartAgentServer() }
-                                .buttonStyle(.plain)
+                                .buttonStyle(PointerPlainButtonStyle())
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(Theme.inkSecondary)
                         }
@@ -91,7 +93,7 @@ struct SettingsView: View {
                             Spacer()
                         }
 
-                        Text(T("Serves the library on 127.0.0.1 only. Read-only, no authentication required for local agents."))
+                        Text(T("Serves and accepts images on 127.0.0.1 only. No authentication required for local agents."))
                             .font(.system(size: 9.5))
                             .foregroundStyle(Theme.inkTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,6 +143,7 @@ struct SettingsView: View {
                             .menuIndicator(.hidden)
                             .focusable(false)
                             .fixedSize()
+                            .pointerCursor()
                         }
 
                         Hairline()
@@ -158,7 +161,7 @@ struct SettingsView: View {
                             }
                             Spacer()
                             Button(T("Reveal")) { store.openDataFolder() }
-                                .buttonStyle(.plain)
+                                .buttonStyle(PointerPlainButtonStyle())
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(Theme.inkSecondary)
                         }

@@ -20,10 +20,11 @@ Canta 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinteres
 - **快速收录**：拖入文件、粘贴剪贴板（⇧⌘V），或截取屏幕区域（⇧⌘2）。
 - **属于参考的 Pinterest**：平衡的瀑布流画廊，悬停收藏、画板、搜索、最近添加与收藏夹。
 - **有用的元数据**：可编辑标题、设计笔记、标签、画板、来源、尺寸、文件大小、主色板与时间。
-- **默认对 Agent 友好**：只读本地 API 提供增强 JSON、原图/缩略图流、Markdown 设计上下文、OpenAPI 3.1、`llms.txt`，以及应用内文档页。
+- **默认对 Agent 友好**：本地 API 提供增强 JSON、原图/缩略图流、Markdown 设计上下文、OpenAPI 3.1、`llms.txt`，以及应用内文档页；Agent 也可以反向写入图片。
 - **本地且私密**：图片和元数据始终留在这台 Mac 上，服务只绑定 `127.0.0.1`。
 - **批量整理**：进入选择模式后可一次收藏、移动画板、复制 Agent 上下文或删除多张卡片。
 - **大图与键盘浏览**：详情支持只看图片的大图模式；← → 切换上一张/下一张，Esc 返回。
+- **手型光标细节**：卡片、按钮、菜单、开关等所有可点击元素统一使用手型光标。
 - **中英双语**：默认跟随 macOS 系统语言，可在设置中随时切换中文或 English。
 
 ## 快速收录
@@ -69,6 +70,16 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true"
 # 获取可直接粘贴给 Agent 的 Markdown 设计上下文
 curl -s http://127.0.0.1:4242/api/v1/context
 
+# 让 Agent 直接添加一张图片（原始图片上传）
+curl -X POST "http://127.0.0.1:4242/api/v1/pins?title=Agent%20capture&board=Unsorted" \
+  -H "Content-Type: image/png" \
+  --data-binary @screenshot.png
+
+# 或者使用 JSON + base64
+curl -X POST http://127.0.0.1:4242/api/v1/pins \
+  -H "Content-Type: application/json" \
+  -d '{"imageBase64":"...","title":"Agent capture","tags":["landing","dark"]}'
+
 # 打开文档站
 open http://127.0.0.1:4242/docs
 ```
@@ -81,6 +92,7 @@ open http://127.0.0.1:4242/docs
 - `/openapi.json` — OpenAPI 3.1 规范
 - `/llms.txt` — 供机器读取的索引
 - `/api/v1/context` — 用于提示词的 Markdown 设计上下文
+- `POST /api/v1/pins` — Agent 添加图片（原始图片或 JSON base64）
 
 服务可以在侧栏的 **Agent 访问** 或 **设置** 中停止、重启或更换端口。`/docs` 是应用内的一等界面：
 
@@ -165,9 +177,9 @@ Canta 借用了 Pinterest 的自信——图片优先、留白充分、标志性
   ./scripts/agent-smoke-test.sh
   ```
 
-  脚本会在临时端口启动真实服务，覆盖所有端点族、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护。
-- `Tests/CantaAgentKitTests` 中有 35 个 Swift Testing 用例。在本机纯 Command Line Tools 环境下编译通过，但缺少 XCTest runner 无法执行；因此上述 smoke test 是本地权威验证。
-- 截图可复现：`./scripts/screenshot-app.sh gallery|agent|capture|detail`，支持 `SCREENSHOT_LANG=en|zh`。
+  脚本会在临时端口启动真实服务，覆盖所有端点族、JSON/原始图片上传、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护（共 154 项检查）。
+- `Tests/CantaAgentKitTests` 中有 49 个 Swift Testing 用例。在本机纯 Command Line Tools 环境下编译通过，但缺少 XCTest runner 无法执行；因此上述 smoke test 是本地权威验证。
+- 截图可复现：`./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`，支持 `SCREENSHOT_LANG=en|zh`。
 
 ## 状态
 

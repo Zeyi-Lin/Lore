@@ -63,7 +63,7 @@ struct TopBarView: View {
                         .frame(width: 18, height: 18)
                         .background(Circle().fill(Theme.paper))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PointerPlainButtonStyle())
             }
         }
         .padding(.horizontal, 15)
@@ -108,7 +108,7 @@ struct TopBarView: View {
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .focusable(false)
         .help(T("Open Agent access"))
         .onAppear {

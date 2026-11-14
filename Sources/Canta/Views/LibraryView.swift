@@ -60,6 +60,7 @@ struct LibraryView: View {
                         .padding(.horizontal, 34)
                         .padding(.bottom, 64)
                         .animation(.snappy(duration: 0.32), value: store.currentListIdentity)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.84), value: store.pins.count)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,7 +164,7 @@ struct LibraryView: View {
                     .background(Capsule().fill(Theme.parchmentDeep))
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PointerPlainButtonStyle())
                 .help(T("Clear board filter"))
             } else {
                 Text(TF("%ld shown", store.filteredPins.count))
@@ -193,7 +194,7 @@ struct LibraryView: View {
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
         .disabled(store.filteredPins.isEmpty)
         .opacity(store.filteredPins.isEmpty ? 0.45 : 1)
@@ -220,7 +221,7 @@ struct LibraryView: View {
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .focusEffectDisabled()
         .popover(isPresented: $showSortMenu, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
@@ -248,7 +249,7 @@ struct LibraryView: View {
                                 .fill(store.sort == sort ? Theme.parchment : Color.clear)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                 }
             }
             .padding(6)

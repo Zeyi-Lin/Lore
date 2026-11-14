@@ -20,9 +20,10 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Fast to capture** — drag files in, paste from the clipboard (⇧⌘V), or grab a screen region (⇧⌘2).
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
-- **Agent-readable by default** — a read-only localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site.
+- **Agent-readable by default** — a localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site. Agents can also add images back into the library.
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once.
 - **Large image & keyboard browsing** — open a pin and switch to image-only mode; use ← / → to move between pins and Esc to go back.
+- **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
 
 ## Capture
@@ -68,6 +69,16 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true"
 # Markdown context — paste straight into an agent prompt
 curl -s http://127.0.0.1:4242/api/v1/context
 
+# Let an agent add an image (raw upload)
+curl -X POST "http://127.0.0.1:4242/api/v1/pins?title=Agent%20capture&board=Unsorted" \
+  -H "Content-Type: image/png" \
+  --data-binary @screenshot.png
+
+# Or send JSON + base64
+curl -X POST http://127.0.0.1:4242/api/v1/pins \
+  -H "Content-Type: application/json" \
+  -d '{"imageBase64":"...","title":"Agent capture","tags":["landing","dark"]}'
+
 # Open the documentation site
 open http://127.0.0.1:4242/docs
 ```
@@ -80,6 +91,7 @@ Discovery endpoints:
 - `/openapi.json` — OpenAPI 3.1 specification
 - `/llms.txt` — compact machine-readable index
 - `/api/v1/context` — Markdown design context for prompting
+- `POST /api/v1/pins` — image ingest (raw image or JSON base64)
 
 The server can be stopped, restarted, or moved to another port from **Agent access** in the sidebar or **Settings**. The offline HTML docs at `/docs` are a first-class surface:
 
@@ -164,9 +176,9 @@ Canta ships with **English** and **Simplified Chinese** interfaces. It follows t
   ./scripts/agent-smoke-test.sh
   ```
 
-  It starts the real server on an ephemeral port and checks every endpoint family, HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection.
-- The Swift Testing suite in `Tests/CantaAgentKitTests` contains 35 tests. Executing it requires Xcode's XCTest runner; the Command Line Tools-only environment here compiles the suite but cannot run it, so the smoke test is the authoritative local check.
-- Automated screenshots are reproducible with `./scripts/screenshot-app.sh gallery|agent|capture|detail`; set `SCREENSHOT_LANG=en|zh` to capture either language.
+  It starts the real server on an ephemeral port and checks every endpoint family, JSON/raw image uploads, HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection (154 checks).
+- The Swift Testing suite in `Tests/CantaAgentKitTests` contains 49 tests. Executing it requires Xcode's XCTest runner; the Command Line Tools-only environment here compiles the suite but cannot run it, so the smoke test is the authoritative local check.
+- Automated screenshots are reproducible with `./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`; set `SCREENSHOT_LANG=en|zh` to capture either language.
 
 ## Status
 

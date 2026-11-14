@@ -76,7 +76,7 @@ enum OpenAPISpec {
                 queryParameter("offset", description: "Number of matching pins to skip. Defaults to 0.", schema: ["type": "integer", "minimum": 0], example: 0)
             ],
             responses: responses(primary: ["200": jsonResponse(description: "A page of enriched pins.", schema: ref("PinListResponse"))], errors: [400: "invalid_parameter when a query value is malformed or out of range.", 500: "library_unavailable or library_corrupt when library.json cannot be read."])
-        ))
+        ), post: createPinOperation())
         paths["/api/v1/pins/{id}"] = pathItem(operation(
             token: "getPin",
             summary: "Single pin",
@@ -133,7 +133,7 @@ enum OpenAPISpec {
         let info: [String: Any] = [
             "title": "Canta Agent API",
             "version": CantaAgentAPI.version,
-            "description": "Loopback-only HTTP API for the Canta visual design library. Canta serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. All endpoints are read-only and re-read library.json on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
+            "description": "Loopback-only HTTP API for the Canta visual design library. Canta serves pinned UI screenshots as enriched metadata plus raw image streams so coding agents can reference real designs. Read endpoints are read-only; POST /api/v1/pins adds pins and re-reads library.json on every request. JSON errors always use the envelope {\"error\": {\"code\": string, \"message\": string}}."
         ]
         let server: [String: Any] = [
             "url": baseURL,
@@ -156,6 +156,62 @@ enum OpenAPISpec {
         return document
     }
 
+    private static func createPinOperation() -> [String: Any] {
+        let rawMetadata: [[String: Any]] = [
+            queryParameter("title", description: "Pin title. Defaults to an \"Agent capture\" timestamp title.", schema: ["type": "string"], example: "Checkout flow"),
+            queryParameter("note", description: "Design note stored with the pin.", schema: ["type": "string"]),
+            queryParameter("board", description: "Board name. Defaults to Unsorted.", schema: ["type": "string"], example: "Mobile flows"),
+            queryParameter("tags", description: "Comma-separated tags; trimmed, lower-cased, and de-duplicated.", schema: ["type": "string"], example: "mobile,checkout"),
+            queryParameter("sourceURL", description: "Optional source URL for the inspiration.", schema: ["type": "string"]),
+            queryParameter("sourceLabel", description: "Optional source label. Defaults to Agent API.", schema: ["type": "string"], example: "Claude Code"),
+            queryParameter("kind", description: "Pin kind. Defaults to screenshot.", schema: ["type": "string"], example: "screenshot"),
+            queryParameter("favorite", description: "Whether the new pin is a favorite.", schema: ["type": "boolean"])
+        ]
+        let requestBody: [String: Any] = [
+            "required": true,
+            "description": "Either an application/json document with imageBase64, or a raw image body with an image/* Content-Type. Raw metadata is supplied through the query parameters.",
+            "content": [
+                "application/json": ["schema": ref("CreatePinRequest")],
+                "image/png": ["schema": ["type": "string", "format": "binary"]],
+                "image/jpeg": ["schema": ["type": "string", "format": "binary"]],
+                "image/webp": ["schema": ["type": "string", "format": "binary"]],
+                "image/gif": ["schema": ["type": "string", "format": "binary"]],
+                "image/heic": ["schema": ["type": "string", "format": "binary"]],
+                "image/tiff": ["schema": ["type": "string", "format": "binary"]],
+                "image/bmp": ["schema": ["type": "string", "format": "binary"]],
+                "image/avif": ["schema": ["type": "string", "format": "binary"]]
+            ]
+        ]
+        let operationResponses: [String: Any] = [
+            "201": createdPinResponse(),
+            "400": errorResponse(description: "invalid_json, missing_image, invalid_image_data, or invalid_metadata when the upload cannot be accepted."),
+            "405": errorResponse(description: "method_not_allowed. The response includes an Allow header listing GET, HEAD, OPTIONS, and POST."),
+            "413": errorResponse(description: "request_body_too_large when the declared or decoded payload exceeds 20 MiB."),
+            "415": errorResponse(description: "unsupported_media_type when the Content-Type is neither application/json nor an image media type."),
+            "500": errorResponse(description: "library_unavailable, library_corrupt, or storage_failure when the library cannot be written.")
+        ]
+        return operation(
+            token: "createPin",
+            summary: "Add a pin",
+            description: "Validates an image, writes the original and a JPEG thumbnail (max 1200 px) into the Canta library, appends the pin to library.json atomically, and returns the enriched pin. Send application/json with imageBase64, or a raw image body with an image/* Content-Type and metadata in query parameters.",
+            tags: ["Library"],
+            parameters: rawMetadata,
+            requestBody: requestBody,
+            responses: operationResponses
+        )
+    }
+
+    private static func createdPinResponse() -> [String: Any] {
+        var response = jsonResponse(description: "The created pin, enriched with absolute image and thumbnail URLs.", schema: ref("EnrichedPin"))
+        response["headers"] = [
+            "Location": [
+                "description": "Relative URL of the new pin, for example /api/v1/pins/<uuid>.",
+                "schema": ["type": "string"]
+            ]
+        ]
+        return response
+    }
+
     // MARK: - Path helpers
 
     private static func operation(
@@ -164,6 +220,7 @@ enum OpenAPISpec {
         description: String,
         tags: [String],
         parameters: [[String: Any]] = [],
+        requestBody: [String: Any]? = nil,
         responses: [String: Any]
     ) -> [String: Any] {
         var result: [String: Any] = [
@@ -176,14 +233,21 @@ enum OpenAPISpec {
         if !parameters.isEmpty {
             result["parameters"] = parameters
         }
+        if let requestBody {
+            result["requestBody"] = requestBody
+        }
         return result
     }
 
-    private static func pathItem(_ get: [String: Any]) -> [String: Any] {
-        return [
+    private static func pathItem(_ get: [String: Any], post: [String: Any]? = nil) -> [String: Any] {
+        var item: [String: Any] = [
             "get": get,
             "head": headOperation(for: get)
         ]
+        if let post {
+            item["post"] = post
+        }
+        return item
     }
 
     private static func headOperation(for get: [String: Any]) -> [String: Any] {
@@ -206,7 +270,7 @@ enum OpenAPISpec {
 
     private static func responses(primary: [String: Any], errors: [Int: String]) -> [String: Any] {
         var result = primary
-        result["405"] = errorResponse(description: "method_not_allowed. The response includes an Allow header listing GET, HEAD, and OPTIONS.")
+        result["405"] = errorResponse(description: "method_not_allowed. The response includes an Allow header listing the methods supported by the path.")
         for (status, description) in errors {
             result[String(status)] = errorResponse(description: description)
         }
@@ -358,6 +422,23 @@ enum OpenAPISpec {
                 "colors", "favorite", "kind", "imageURL", "thumbnailURL"
             ]
         ]
+        let createPinRequest: [String: Any] = [
+            "type": "object",
+            "description": "JSON form for POST /api/v1/pins. imageBase64 is required; a data URI prefix (data:image/png;base64,...) is accepted.",
+            "properties": [
+                "imageBase64": ["type": "string", "description": "Base64-encoded image bytes. Data URI prefixes are accepted."],
+                "mimeType": ["type": "string", "description": "Optional declared media type, for example image/png."],
+                "title": ["type": "string"],
+                "note": ["type": "string"],
+                "board": ["type": "string"],
+                "tags": ["type": "array", "items": ["type": "string"]],
+                "sourceURL": nullableString,
+                "sourceLabel": nullableString,
+                "kind": ["type": "string"],
+                "favorite": ["type": "boolean"]
+            ],
+            "required": ["imageBase64"]
+        ]
         let pinList: [String: Any] = [
             "type": "object",
             "properties": [
@@ -400,6 +481,7 @@ enum OpenAPISpec {
             "Stats": stats,
             "NamedCount": namedCount,
             "EnrichedPin": enrichedPin,
+            "CreatePinRequest": createPinRequest,
             "PinListResponse": pinList,
             "Library": library,
             "BoardsResponse": boards,

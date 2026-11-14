@@ -185,6 +185,7 @@ struct CaptureSheet: View {
                 .menuIndicator(.hidden)
                 .focusable(false)
                 .fixedSize()
+                .pointerCursor()
             }
 
             Spacer()

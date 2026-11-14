@@ -28,6 +28,7 @@ struct PinCard: View {
         .contextMenu { contextMenu }
         .scaleEffect(hovering && !store.isSelectingPins ? 1.006 : 1)
         .shadow(color: .black.opacity(hovering && !store.isSelectingPins ? 0.12 : 0), radius: 20, x: 0, y: 10)
+        .pointerCursor()
     }
 
     private var image: some View {

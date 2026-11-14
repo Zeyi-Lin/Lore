@@ -45,7 +45,7 @@ struct AgentAccessView: View {
                         .font(.system(size: 35, weight: .bold))
                         .tracking(-1.35)
                         .foregroundStyle(Theme.ink)
-                    Text(T("Every pin is a queryable JSON record with a direct image stream, served on loopback."))
+                    Text(T("Every pin is a queryable JSON record with a direct image stream. Agents can read the library — and add new images — over the same loopback API."))
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.inkTertiary)
                 }
@@ -99,7 +99,7 @@ struct AgentAccessView: View {
                     HStack(spacing: 7) {
                         Image(systemName: "terminal")
                             .font(.system(size: 10, weight: .semibold))
-                        Text(T("LOCALHOST · READ ONLY"))
+                        Text(T("LOCALHOST · READ + WRITE"))
                             .font(Theme.mono(8.5, weight: .semibold))
                             .tracking(1.2)
                     }
@@ -234,8 +234,24 @@ struct AgentAccessView: View {
                         store.openAgentContext()
                     }
                 }
+
+                Rectangle().fill(Theme.hairline).frame(height: 1).padding(.vertical, 1)
+
+                Text(T("Or let your agent add an image:"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.inkTertiary)
+                codeBlock(uploadCommand, id: "upload")
+                HStack(spacing: 7) {
+                    SmallPillButton(title: T("Copy upload command"), icon: "doc.on.doc") {
+                        store.copyText(uploadCommand, message: T("Command copied"), icon: "terminal")
+                    }
+                }
             }
         }
+    }
+
+    private var uploadCommand: String {
+        "curl -X POST \"\(store.agentBaseURL)/api/v1/pins?title=My%20capture&board=Unsorted\" \\\n  -H \"Content-Type: image/png\" \\\n  --data-binary @screenshot.png"
     }
 
     private var promptCard: some View {
@@ -260,6 +276,7 @@ struct AgentAccessView: View {
     private var endpointsCard: some View {
         AgentPanel(title: T("API SURFACE"), icon: "point.3.connected.trianglepath.dotted") {
             VStack(spacing: 0) {
+                endpointRow("POST", "/api/v1/pins", T("Add an image from an agent"))
                 endpointRow("GET", "/api/v1/library", T("Everything in one payload"))
                 endpointRow("GET", "/api/v1/pins", T("Filter by q, tag, board, favorite"))
                 endpointRow("GET", "/api/v1/pins/{id}", T("A single enriched pin"))
@@ -311,7 +328,7 @@ struct AgentAccessView: View {
                             portField = "\(store.agentPort)"
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PointerPlainButtonStyle())
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(Theme.red)
                     Spacer()
@@ -323,21 +340,22 @@ struct AgentAccessView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(Theme.red)
+                    .pointerCursor()
                 }
 
                 HStack(spacing: 7) {
                     Button(T("Restart")) { store.restartAgentServer() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PointerPlainButtonStyle())
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                     Text("·").foregroundStyle(Theme.inkTertiary)
                     Button(T("Data folder")) { store.openDataFolder() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PointerPlainButtonStyle())
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                     Text("·").foregroundStyle(Theme.inkTertiary)
                     Button(T("llms.txt")) { store.openAgentManifest() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PointerPlainButtonStyle())
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Theme.inkSecondary)
                 }
@@ -354,10 +372,10 @@ struct AgentAccessView: View {
         HStack(spacing: 9) {
             Text(method)
                 .font(Theme.mono(7.5, weight: .bold))
-                .foregroundStyle(Theme.moss)
+                .foregroundStyle(method == "POST" ? Theme.red : Theme.moss)
                 .padding(.horizontal, 6)
                 .frame(height: 18)
-                .background(RoundedRectangle(cornerRadius: 4).fill(Theme.mossWash))
+                .background(RoundedRectangle(cornerRadius: 4).fill(method == "POST" ? Theme.redWash : Theme.mossWash))
             Text(path)
                 .font(Theme.mono(9.5, weight: .medium))
                 .foregroundStyle(Theme.ink)
@@ -400,7 +418,7 @@ struct AgentAccessView: View {
             .background(RoundedRectangle(cornerRadius: 9).fill(Theme.parchment))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .help(T("Copy"))
     }
 

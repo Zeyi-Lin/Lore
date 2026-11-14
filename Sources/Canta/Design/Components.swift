@@ -216,7 +216,7 @@ struct FilterChip: View {
             )
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PointerPlainButtonStyle())
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
     }
@@ -408,7 +408,7 @@ struct TagChip: View {
                         .frame(width: 14, height: 14)
                         .background(Circle().fill(Theme.ink.opacity(0.055)))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PointerPlainButtonStyle())
             }
         }
         .foregroundStyle(Theme.inkSecondary)
@@ -420,6 +420,7 @@ struct TagChip: View {
         .contentShape(Capsule())
         .onHover { hovering = $0 }
         .onTapGesture { onTap?() }
+        .pointerCursor()
     }
 }
 

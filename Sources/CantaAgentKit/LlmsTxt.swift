@@ -6,7 +6,7 @@ enum LlmsTxt {
         return """
 # Canta Agent API
 
-> Canta is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. The library is re-read from disk on every request.
+> Canta is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. Agents can also add new pins with POST /api/v1/pins using a JSON base64 payload or a raw image body. The library is re-read from disk on every request.
 
 Base URL: \(baseURL)
 API version: v1
@@ -15,7 +15,7 @@ Human documentation: \(baseURL)/docs
 
 ## Docs
 
-- [Canta Agent API documentation](\(baseURL)/docs): quickstart, endpoint reference, error codes, and paste-ready agent instructions.
+- [Canta Agent API documentation](\(baseURL)/docs): quickstart, endpoint reference, error codes, image ingest examples, and paste-ready agent instructions.
 - [OpenAPI 3.1 spec](\(baseURL)/openapi.json): machine-readable schemas for every endpoint.
 
 ## Endpoints
@@ -23,6 +23,7 @@ Human documentation: \(baseURL)/docs
 - [Health](\(baseURL)/health): liveness check with the bound port and current pin count. Alias: \(baseURL)/api/v1/health.
 - [Library](\(baseURL)/api/v1/library): the complete enriched library with stats, boards, tags, and every pin.
 - [Pins](\(baseURL)/api/v1/pins): filterable pin list. Query parameters: q, tag, board, favorite, kind, sort (recent|oldest|title), limit (1-200), offset.
+- [Create pin](\(baseURL)/api/v1/pins): POST a new pin. Send application/json with imageBase64 (data URI prefixes accepted) and optional metadata, or send a raw image body with Content-Type image/* and metadata as query parameters. Bodies are limited to 20 MiB; responses are 201 with an EnrichedPin and a Location header.
 - [Pin](\(baseURL)/api/v1/pins/{id}): one enriched pin by its UUID.
 - [Pin image](\(baseURL)/api/v1/pins/{id}/image): raw image bytes. Use variant=original (default) or variant=thumb; thumb falls back to original.
 - [Boards](\(baseURL)/api/v1/boards): board names with pin counts.
@@ -46,13 +47,27 @@ Download the original image for a pin:
 
     curl -s -o reference.png "\(baseURL)/api/v1/pins/{id}/image?variant=original"
 
+Add a pin from a local screenshot (raw image body):
+
+    curl -s -X POST --data-binary @shot.png \\
+      -H "Content-Type: image/png" \\
+      "\(baseURL)/api/v1/pins?title=Checkout%20flow&board=Mobile%20flows&tags=mobile,checkout"
+
+Add a pin with JSON base64 (data URI prefixes are accepted):
+
+    curl -s -X POST "\(baseURL)/api/v1/pins" \\
+      -H "Content-Type: application/json" \\
+      -d '{"imageBase64":"data:image/png;base64,iVBOR...","title":"Checkout flow","board":"Mobile flows","tags":["mobile","checkout"]}'
+
 ## Notes
 
 - The listener binds only to 127.0.0.1. It is not reachable from other devices.
-- All endpoints are read-only and support GET, HEAD, and OPTIONS (CORS preflight).
-- Errors are JSON: {"error": {"code": "...", "message": "..."}} with HTTP 400, 404, 405, or 500.
+- Read endpoints are read-only; POST /api/v1/pins is the only write endpoint. It appends to library.json and writes Images/ and Thumbnails/ assets inside the Canta library root.
+- Upload bodies are limited to 20 MiB. JSON base64 payloads must fit within that limit (base64 adds ~33% overhead).
+- All endpoints support GET, HEAD, and OPTIONS (CORS preflight); POST is supported on /api/v1/pins only.
+- Errors are JSON: {"error": {"code": "...", "message": "..."}} with HTTP 400, 404, 405, 413, 415, or 500.
 - Image responses use the correct Content-Type for the stored file (for example image/png or image/jpeg).
-- No authentication is required because the API is loopback-only.
+- No authentication is required because the API is loopback-only. Any local process can add pins; do not expose the port.
 """
     }
 }
