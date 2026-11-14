@@ -11,7 +11,12 @@ struct TopBarView: View {
             searchField
                 .layoutPriority(1)
 
-            Spacer(minLength: 0)
+            // The only zoom target on the right: the empty stretch of the
+            // toolbar between the search field and the status pill. Nothing
+            // else in the toolbar opts into the gesture.
+            WindowZoomZone()
+                .frame(maxWidth: .infinity)
+                .frame(height: CantaLayout.toolbarHeight)
 
             statusPill
 
@@ -30,14 +35,6 @@ struct TopBarView: View {
         // search row sits beside the traffic lights instead of below them.
         .padding(.top, CantaLayout.contentTopPadding)
         .padding(.bottom, 8)
-        .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                if !WindowZoom.isEditingText {
-                    WindowZoom.toggle()
-                }
-            }
-        )
         .onReceive(NotificationCenter.default.publisher(for: .cantaFocusSearch)) { _ in
             searchFocused = true
         }
@@ -88,7 +85,7 @@ struct TopBarView: View {
         }
         .padding(.horizontal, 15)
         .frame(maxWidth: 620)
-        .frame(height: 41)
+        .frame(height: CantaLayout.toolbarHeight)
         .background(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
                 .fill(Theme.parchment)

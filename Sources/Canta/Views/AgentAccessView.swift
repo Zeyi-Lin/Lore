@@ -10,10 +10,6 @@ struct AgentAccessView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 header
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        TapGesture(count: 2).onEnded { WindowZoom.toggle() }
-                    )
                 heroCard
                 HStack(alignment: .top, spacing: 18) {
                     quickstartCard

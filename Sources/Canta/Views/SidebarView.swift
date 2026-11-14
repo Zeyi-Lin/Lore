@@ -74,12 +74,8 @@ struct SidebarView: View {
         }
         .frame(width: CantaLayout.sidebarWidth)
         .background(Theme.parchment)
-        .contentShape(Rectangle())
         .onAppear { revealSelectedBoard() }
         .onChange(of: store.selectedBoard) { _, _ in revealSelectedBoard() }
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded { WindowZoom.toggle() }
-        )
     }
 
     private var brand: some View {

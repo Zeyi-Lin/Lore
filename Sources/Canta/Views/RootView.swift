@@ -45,6 +45,13 @@ struct RootView: View {
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
                 .environment(\.cantaContentWidth, contentWidth)
+                // The only zoom target on the left edge: the empty title-bar
+                // strip above the brand, where the window controls live. It
+                // deliberately stops short of the sidebar's rows.
+                .overlay(alignment: .topLeading) {
+                    WindowZoomZone()
+                        .frame(width: sidebarWidth, height: CantaLayout.titlebarInset)
+                }
             }
             .ignoresSafeArea(edges: .top)
 

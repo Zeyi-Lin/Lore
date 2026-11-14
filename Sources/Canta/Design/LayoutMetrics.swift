@@ -13,6 +13,9 @@ enum CantaLayout {
     /// Top padding of the content column's toolbar row, measured from the
     /// window's top edge.
     static let contentTopPadding: CGFloat = 10
+    /// Height of the toolbar row itself (the search field's pill). The
+    /// title-bar-like zoom zone fills exactly this row.
+    static let toolbarHeight: CGFloat = 41
 }
 
 /// Width of the main content column, i.e. the window width minus the sidebar.

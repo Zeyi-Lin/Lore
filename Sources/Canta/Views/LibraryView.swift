@@ -243,10 +243,6 @@ struct LibraryView: View {
             }
             .padding(.bottom, 3)
         }
-        .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded { WindowZoom.toggle() }
-        )
     }
 
     private var kicker: String {
