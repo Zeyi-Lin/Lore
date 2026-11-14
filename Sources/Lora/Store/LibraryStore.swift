@@ -274,13 +274,14 @@ final class LibraryStore {
         return candidates
     }
 
-    /// Detail candidates: the 1200 px thumbnail first, the original as fallback.
+    /// Detail candidates: the original first so a large pane can decode at its
+    /// full display size, then the 1200 px thumbnail as a cheap fallback.
     func detailImageCandidates(for pin: Pin) -> [String] {
         var candidates: [String] = []
+        candidates.append(root.path + "/" + pin.image)
         if let thumbnail = pin.thumbnail {
             candidates.append(root.path + "/" + thumbnail)
         }
-        candidates.append(root.path + "/" + pin.image)
         return candidates
     }
 
@@ -1019,7 +1020,16 @@ final class LibraryStore {
     }
 
     func copyImage(_ pin: Pin) {
-        let candidates = [thumbnailURL(for: pin)] + [originalURL(for: pin)]
+        copyImage(pin, fullResolution: false)
+    }
+
+    /// `fullResolution` copies the original file instead of the thumbnail. The
+    /// large-image viewer uses it so the clipboard matches what is on screen;
+    /// the grid and detail menus keep the cheaper thumbnail copy.
+    func copyImage(_ pin: Pin, fullResolution: Bool) {
+        let thumbnail = thumbnailURL(for: pin)
+        let original = originalURL(for: pin)
+        let candidates = fullResolution ? [original, thumbnail] : [thumbnail, original]
         guard let loaded = candidates.lazy.compactMap({ NSImage(contentsOf: $0) }).first else {
             showToast(T("Couldn't load that image"), icon: "exclamationmark.triangle")
             return
@@ -1210,12 +1220,12 @@ final class LibraryStore {
     }
 
     /// Warm a single detail image when the pointer rests on a card, so the
-    /// first paint after the click uses an already-decoded 1200 px image.
+    /// first paint after the click uses an already-decoded image.
     func prefetchDetail(id: UUID) {
         guard let pin = pin(id: id) else { return }
         let candidates = detailImageCandidates(for: pin)
         Task.detached(priority: .utility) {
-            _ = await ImageLoader.shared.image(paths: candidates, maxPixel: 1200)
+            _ = await ImageLoader.shared.image(paths: candidates, maxPixel: ImageLoader.detailMaxPixel)
         }
     }
 
@@ -1227,7 +1237,7 @@ final class LibraryStore {
         for offset in -radius...radius where offset != 0 {
             let neighborIndex = index + offset
             guard neighborIndex >= 0, neighborIndex < list.count else { continue }
-            requests.append((paths: detailImageCandidates(for: list[neighborIndex]), maxPixel: 1200))
+            requests.append((paths: detailImageCandidates(for: list[neighborIndex]), maxPixel: ImageLoader.detailMaxPixel))
         }
         guard !requests.isEmpty else { return }
         Task.detached(priority: .utility) {

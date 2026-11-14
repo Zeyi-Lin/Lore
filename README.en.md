@@ -25,7 +25,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
 - **Board management** — the button beside *Boards* in the sidebar opens a manager to rename a board or a whole group (sub-boards follow), merge by renaming onto an existing board, or delete a board and re-file its pins under Unsorted while keeping every image.
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
-- **Large image & keyboard browsing** — open a pin, then single-click the image to switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back.
+- **Large image & keyboard browsing** — open a pin, then single-click the image to switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back. Right-click the image to copy it.
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Window gestures** — double-click the empty title-bar strip beside the traffic lights, or the empty stretch of the toolbar between the search field and the API status pill, to zoom/restore the window with a smooth eased animation; double-clicks everywhere else keep their own meaning.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
@@ -49,6 +49,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | Large image: reset view | 0 |
 | Large image: pan the image | Drag the image |
 | Large image: toggle between fit and 250% | Double-click image |
+| Large image: copy the image | Right-click image → “Copy image” |
 
 ### Batch selection & large image
 
@@ -57,7 +58,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
   <img src="docs/screenshots/en/large.png" width="49%" alt="Image-only large mode" />
 </p>
 
-In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, single-click the image (or the **Large image** button) for an image-only view; the floating toolbar along the bottom offers zoom out, the zoom percentage (100% fits the window), zoom in, rotate left/right 90°, mirror horizontally, and reset view, with a one-line gesture hint beneath it. Scroll or pinch to zoom, drag the image to pan once zoomed in, and double-click to toggle between fit and 250%; on the keyboard, + / - zoom, R rotates right, ⇧R rotates left, M mirrors horizontally, 0 resets the view, ← / → move between pins, and Esc goes back.
+In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, single-click the image (or the **Large image** button) for an image-only view; the floating toolbar along the bottom offers zoom out, the zoom percentage (100% fits the window), zoom in, rotate left/right 90°, mirror horizontally, and reset view, with a one-line gesture hint beneath it. Scroll or pinch to zoom, drag the image to pan once zoomed in, and double-click to toggle between fit and 250%; on the keyboard, + / - zoom, R rotates right, ⇧R rotates left, M mirrors horizontally, 0 resets the view, ← / → move between pins, and Esc goes back. Right-click the image to copy the original.
 
 ![Quick capture sheet](docs/screenshots/en/capture.png)
 

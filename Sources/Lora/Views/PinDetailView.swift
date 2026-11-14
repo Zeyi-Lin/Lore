@@ -20,8 +20,7 @@ struct PinDetailOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
-            let width = min(max(geo.size.width - 150, 800), 1140)
-            let height = min(max(geo.size.height - 92, 540), 790)
+            let metrics = DetailCardMetrics(available: geo.size, aspectRatio: pin.aspectRatio)
 
             ZStack {
                 Color.black.opacity(isImageMode ? 0.86 : 0.46)
@@ -38,7 +37,7 @@ struct PinDetailOverlay: View {
                     LargeImageViewer(pin: pin, onExit: exitImageMode)
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 } else {
-                    regularCard(width: width, height: height)
+                    regularCard(metrics: metrics)
                         .transition(.opacity)
 
                     if store.filteredPins.count > 1 {
@@ -109,14 +108,14 @@ struct PinDetailOverlay: View {
         }
     }
 
-    private func regularCard(width: CGFloat, height: CGFloat) -> some View {
+    private func regularCard(metrics: DetailCardMetrics) -> some View {
         HStack(spacing: 0) {
-            imagePane
-                .frame(width: width * 0.575)
-            metaPane
-                .frame(width: width * 0.425)
+            imagePane(metrics: metrics)
+                .frame(width: metrics.imageWidth)
+            metaPane(metrics: metrics)
+                .frame(width: metrics.metaWidth)
         }
-        .frame(width: width, height: height)
+        .frame(width: metrics.cardWidth, height: metrics.cardHeight)
         .background(Theme.paper)
         .clipShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
         .overlay(
@@ -191,7 +190,7 @@ struct PinDetailOverlay: View {
 
     // MARK: - Image side
 
-    private var imagePane: some View {
+    private func imagePane(metrics: DetailCardMetrics) -> some View {
         ZStack {
             LinearGradient(
                 colors: [Color(hex: 0xEFEAE2), Color(hex: 0xE7E1D7)],
@@ -206,8 +205,8 @@ struct PinDetailOverlay: View {
                 endRadius: 430
             )
 
-            detailImage
-                .padding(27)
+            detailImage(metrics: metrics)
+                .padding(metrics.imagePadding)
 
             VStack {
                 HStack {
@@ -245,26 +244,26 @@ struct PinDetailOverlay: View {
     }
 
     /// The hero image. It is itself the affordance for the image-only view, so
-    /// a single click expands it; the 27 pt mat around it stays inert.
-    private var detailImage: some View {
+    /// a single click expands it; the adaptive mat around it stays inert.
+    private func detailImage(metrics: DetailCardMetrics) -> some View {
         Color.clear
             .aspectRatio(max(pin.aspectRatio, 0.05), contentMode: .fit)
             .overlay {
                 LibraryImage(
                     paths: store.detailImageCandidates(for: pin),
-                    maxPixel: 1200,
+                    maxPixel: ImageLoader.detailMaxPixel,
                     placeholderPaths: store.cardImageCandidates(for: pin),
                     placeholderMaxPixel: 640,
                     contentMode: .fill
                 )
             }
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: metrics.imageCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: metrics.imageCornerRadius, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
-            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: metrics.imageCornerRadius, style: .continuous))
             .onTapGesture { enterImageMode() }
             .help(T("Click to open large image"))
             .pointerCursor()
@@ -290,7 +289,7 @@ struct PinDetailOverlay: View {
 
     // MARK: - Metadata side
 
-    private var metaPane: some View {
+    private func metaPane(metrics: DetailCardMetrics) -> some View {
         VStack(spacing: 0) {
             Group {
                 if detailStage >= 1 {
@@ -309,22 +308,33 @@ struct PinDetailOverlay: View {
                     .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, 26)
+            .padding(.horizontal, metrics.metaPadding)
             .padding(.top, 24)
             .padding(.bottom, 16)
 
             Hairline()
 
             ScrollView(showsIndicators: false) {
-                metaSections
+                metaSections(metrics: metrics)
+            }
+
+            // Keep the destructive/secondary actions anchored to the card's
+            // bottom edge: on tall displays the metadata column is shorter
+            // than the card, and a scrolling footer would leave it floating
+            // mid-pane.
+            if detailStage >= 2 {
+                Hairline()
+                footerActions
+                    .padding(.horizontal, metrics.metaPadding)
+                    .padding(.vertical, 15)
             }
         }
         .background(Theme.paper)
     }
 
     @ViewBuilder
-    private var metaSections: some View {
-        VStack(alignment: .leading, spacing: 21) {
+    private func metaSections(metrics: DetailCardMetrics) -> some View {
+        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
             titleSection
 
             if detailStage >= 1 {
@@ -338,14 +348,13 @@ struct PinDetailOverlay: View {
                 paletteSection
                 agentSection
                 metadataSection
-                footerActions
             } else {
                 detailSkeleton(rows: 8)
             }
         }
-        .padding(.horizontal, 26)
+        .padding(.horizontal, metrics.metaPadding)
         .padding(.top, 20)
-        .padding(.bottom, 26)
+        .padding(.bottom, 24)
     }
 
     /// Cheap placeholder for the deferred metadata sections, so the first
@@ -864,6 +873,73 @@ struct PinDetailOverlay: View {
             }
         )
     }
+}
+
+/// Responsive geometry for the inspiration card. The card used to be clamped
+/// to a 1140 × 790 window, which read as a small fixed sheet on a 5K display.
+/// It now follows the window (88% of its height, up to 1000 pt) and then sizes
+/// its width from the image: the picture keeps roughly the same share of its
+/// pane as before, the metadata column stays at a comfortable reading width,
+/// and landscape pins claim the extra width that portrait pins do not need.
+private struct DetailCardMetrics {
+    static let minCardWidth: CGFloat = 800
+    static let maxCardWidth: CGFloat = 1880
+    static let minCardHeight: CGFloat = 540
+    static let maxCardHeight: CGFloat = 1000
+    static let widthFraction: CGFloat = 0.86
+    static let heightFraction: CGFloat = 0.88
+    static let minMetaWidth: CGFloat = 392
+    static let maxMetaWidth: CGFloat = 560
+    /// The hero image occupies about this share of the image pane. Keeping it
+    /// constant preserves the original card's visual balance at every size.
+    static let imageShare: CGFloat = 0.52
+
+    let cardWidth: CGFloat
+    let cardHeight: CGFloat
+    let metaWidth: CGFloat
+
+    init(available: CGSize, aspectRatio: CGFloat) {
+        let availableWidth = max(available.width, 1)
+        let availableHeight = max(available.height, 1)
+        let height = min(
+            max(availableHeight * Self.heightFraction, Self.minCardHeight),
+            Self.maxCardHeight
+        )
+        let maxWidth = min(
+            max(availableWidth * Self.widthFraction, Self.minCardWidth),
+            Self.maxCardWidth
+        )
+        let imagePadding = Self.imagePadding(for: height)
+        let imageWidth = max((height - imagePadding * 2) * max(aspectRatio, 0.05), 1)
+        let estimatedMeta = min(
+            max(maxWidth * 0.425, Self.minMetaWidth),
+            Self.maxMetaWidth
+        )
+        let idealWidth = estimatedMeta + imageWidth / Self.imageShare
+
+        cardHeight = height
+        cardWidth = min(max(idealWidth, Self.minCardWidth), maxWidth)
+        metaWidth = min(
+            max(cardWidth * 0.425, Self.minMetaWidth),
+            Self.maxMetaWidth
+        )
+    }
+
+    var imageWidth: CGFloat { max(cardWidth - metaWidth, 1) }
+
+    /// Breathing room inside the image pane, tied to the card height so the
+    /// mat does not look pinched once the card grows.
+    var imagePadding: CGFloat { Self.imagePadding(for: cardHeight) }
+
+    private static func imagePadding(for height: CGFloat) -> CGFloat {
+        min(max(height * 0.034, 24), 36)
+    }
+
+    var imageCornerRadius: CGFloat { min(max(cardHeight * 0.0165, 12), 18) }
+
+    var metaPadding: CGFloat { min(max(cardWidth * 0.022, 24), 40) }
+
+    var sectionSpacing: CGFloat { min(max(cardHeight * 0.026, 18), 26) }
 }
 
 struct SmallPillButton: View {

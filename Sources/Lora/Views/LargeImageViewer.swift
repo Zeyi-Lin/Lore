@@ -273,6 +273,11 @@ struct LargeImageViewer: View {
             }
             .frame(width: viewport.width, height: viewport.height)
             .coordinateSpace(.named("largeImageStage"))
+            // Pan lives on the untransformed stage, not on the image: the image
+            // grows past the window when zoomed, and a stage-wide gesture keeps
+            // every visible pixel draggable (and the drag distance in screen
+            // points) after zooming, rotating or mirroring.
+            .simultaneousGesture(stagePanGesture)
             .onChange(of: viewport, initial: true) { _, size in
                 canvas.setViewport(size)
             }
@@ -280,6 +285,9 @@ struct LargeImageViewer: View {
                 WindowResolver { window in
                     guard !viewerClosed, hostWindow == nil, let window else { return }
                     hostWindow = window
+                    // A background-movable window would drag the whole app
+                    // window out from under the image instead of panning it.
+                    window.isMovableByWindowBackground = false
                     installEventMonitors(for: window)
                 }
                 .frame(width: 0, height: 0)
@@ -293,7 +301,10 @@ struct LargeImageViewer: View {
         .onDisappear {
             viewerClosed = true
             removeEventMonitors()
+            // Restore the gallery's drag-the-window-from-empty-space behavior.
+            hostWindow?.isMovableByWindowBackground = true
             hostWindow = nil
+            dragStart = nil
         }
         .onChange(of: pin.id) { _, _ in
             canvas.configure(aspectRatio: pin.aspectRatio)
@@ -320,16 +331,25 @@ struct LargeImageViewer: View {
             .offset(canvas.pan)
             .shadow(color: .black.opacity(0.55), radius: 50, x: 0, y: 22)
             .contentShape(Rectangle())
-            .gesture(dragGesture)
+            .contextMenu {
+                // Copies the stored original, not the 1200 px thumbnail, so the
+                // clipboard keeps the resolution the viewer is showing.
+                Button(T("Copy image")) {
+                    store.copyImage(pin, fullResolution: true)
+                }
+            }
             .simultaneousGesture(magnifyGesture)
             .simultaneousGesture(doubleClickGesture)
             .pointerCursor()
-            .help(T("Double-click to zoom · drag to pan"))
+            .help(T("Double-click to zoom · hold and drag to pan"))
             .position(x: viewport.width / 2, y: viewport.height / 2)
     }
 
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 4)
+    /// Press-and-drag panning for the whole viewer. It is attached to the
+    /// untransformed stage so the translation is always in screen points and
+    /// the entire visible image stays draggable at any zoom or rotation.
+    private var stagePanGesture: some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .named("largeImageStage"))
             .onChanged { value in
                 if dragStart == nil { dragStart = canvas.pan }
                 guard let start = dragStart else { return }
@@ -402,9 +422,9 @@ struct LargeImageViewer: View {
     private var bottomBar: some View {
         VStack(spacing: 9) {
             toolbar
+            // Stay visible after zooming: drag-to-pan is exactly what a zoomed
+            // image needs, so the hint should not disappear with the fit state.
             hint
-                .opacity(canvas.isDefault ? 1 : 0)
-                .animation(.easeOut(duration: 0.2), value: canvas.isDefault)
         }
         .padding(.bottom, 24)
     }
@@ -424,7 +444,7 @@ struct LargeImageViewer: View {
     }
 
     private var hint: some View {
-        Text(T("← → browse · scroll to zoom · drag to pan · R rotate · 0 reset"))
+        Text(T("← → browse · scroll to zoom · hold and drag to pan · R rotate · 0 reset"))
             .font(.system(size: 9.5, weight: .medium))
             .foregroundStyle(Color.white.opacity(0.5))
             .padding(.horizontal, 11)

@@ -40,6 +40,11 @@ final class ImageStore: @unchecked Sendable {
 actor ImageLoader {
     static let shared = ImageLoader()
 
+    /// The detail card grows with the window, so it asks for a larger decode
+    /// than the old fixed 1200 px pane. 2400 px covers a 2x display at the
+    /// card's maximum size; one decoded bitmap stays in the 15–23 MB range.
+    static let detailMaxPixel = 2400
+
     nonisolated let store: ImageStore
     private var inflight: [String: Task<CGImage?, Never>] = [:]
     private let maxConcurrent: Int
