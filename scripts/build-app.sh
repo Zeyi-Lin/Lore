@@ -56,7 +56,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>Lora</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
