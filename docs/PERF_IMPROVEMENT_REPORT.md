@@ -1,6 +1,6 @@
-# Canta 交互性能优化报告
+# Lora 交互性能优化报告
 
-**项目**：Canta（macOS 本地视觉图库 · SwiftUI / AppKit）
+**项目**：Lora（macOS 本地视觉图库 · SwiftUI / AppKit）
 **日期**：2026-11-14
 **范围**：图库网格、详情、图片切换、画板切换、搜索与编辑、图片管线、持久化、启动
 **结论**：在不改 `library.json` 格式、不改 Agent API 契约、不引入第三方依赖的前提下，用纯 Swift 完成 P0 优化。四个症状的主因均被结构性消除，而非参数微调。
@@ -49,8 +49,8 @@
 
 - 机器：Apple M1 Max / 64 GB / macOS 26.6.2；Swift 6.3.3，`-O`。
 - 图库：由示例图库生成的合成库（1 000 / 5 000 pins，字段长度贴近真实数据）。
-- 数据层：`scripts/perf-bench/run.sh`（保留优化前算法，用于前后对照）与 `Canta --bench`（测量当前实现）。
-- 启动：以 `CANTA_HOME` 指向测试库，轮询 `CGWindowList` 到窗口出现的时间；新旧 App 使用同一图库。
+- 数据层：`scripts/perf-bench/run.sh`（保留优化前算法，用于前后对照）与 `Lora --bench`（测量当前实现）。
+- 启动：以 `LORA_HOME` 指向测试库，轮询 `CGWindowList` 到窗口出现的时间；新旧 App 使用同一图库。
 - 图片：ImageIO 直接测量解码、绘制与驻留内存。
 - UI 层：`OSSignposter` 已埋点（query / models / write / image decode），可用 Instruments 复核端到端 p95。
 - **说明**：本机无法自动注入鼠标/键盘事件（辅助功能权限受限），因此点击/←→ 的端到端 p95 未自动化；下文交互结论由「组件实测 + 结构消除」推导，建议在目标机器用 Instruments 做最终确认。
@@ -165,7 +165,7 @@
 ### 5.5 启动与观测
 
 - `SeedLoader.loadOrInstall` 合并播种判断与加载，只解码一次。
-- 新增 `OSSignposter`（`gallery.query`、`gallery.models`、`library.write`、`image.decode`）与 `Canta --bench`，让性能回归可量化。
+- 新增 `OSSignposter`（`gallery.query`、`gallery.models`、`library.write`、`image.decode`）与 `Lora --bench`，让性能回归可量化。
 
 ---
 
@@ -281,7 +281,7 @@ API 原来每个请求都重新读盘、解码、解析日期、排序、编码�
 ./scripts/perf-guard.sh --pins 5000  # 5 000 pins
 ```
 
-脚本生成合成图库，以 `CANTA_BENCH_JSON=1` 运行 `Canta --bench`，断言 memo 读取、搜索、换画板、列分配、解码的预算；1k/5k 当前均 PASS。性能回归从「靠感觉」变成可阻断的检查。
+脚本生成合成图库，以 `LORA_BENCH_JSON=1` 运行 `Lora --bench`，断言 memo 读取、搜索、换画板、列分配、解码的预算；1k/5k 当前均 PASS。性能回归从「靠感觉」变成可阻断的检查。
 
 ### 9.5 10k 规模实测
 
@@ -321,16 +321,16 @@ API 原来每个请求都重新读盘、解码、解析日期、排序、编码�
 ```bash
 ./scripts/build-app.sh release
 ./scripts/perf-bench/run.sh          # 优化前基线（对照）
-CANTA_HOME=/tmp/canta-perf/library-1k ./dist/Canta.app/Contents/MacOS/Canta --bench
+LORA_HOME=/tmp/lora-perf/library-1k ./dist/Lora.app/Contents/MacOS/Lora --bench
 ```
 
 ### B. 主要代码变更
 
-- 新增：`Sources/Canta/Store/LibrarySnapshot.swift`、`ImageLoader.swift`、`LibraryWriter.swift`、`CardThumbnailBackfill.swift`、`Sources/Canta/Performance/`
+- 新增：`Sources/Lora/Store/LibrarySnapshot.swift`、`ImageLoader.swift`、`LibraryWriter.swift`、`CardThumbnailBackfill.swift`、`Sources/Lora/Performance/`
 - 重写：`LibraryView.swift`（懒列网格）、`PinCard.swift`（值化 + Equatable）、`LibraryStore.swift`（快照/投影/持久化）
-- 修改：`Components.swift`（LibraryImage）、`SeedLoader.swift`（单次解码）、`CantaPaths.swift`（快速日期 + Cards 目录）、`ImageProcessor.swift`（640 档）、`PinDetailView.swift`（1200/原图、去材质）、`RootView.swift`（维护/flush）
+- 修改：`Components.swift`（LibraryImage）、`SeedLoader.swift`（单次解码）、`LoraPaths.swift`（快速日期 + Cards 目录）、`ImageProcessor.swift`（640 档）、`PinDetailView.swift`（1200/原图、去材质）、`RootView.swift`（维护/flush）
 - 删除：`Views/MasonryLayout.swift`
-- P1 新增：`Sources/CantaAgentKit/AgentResponseCache.swift`、`scripts/perf-guard.sh`
+- P1 新增：`Sources/LoraAgentKit/AgentResponseCache.swift`、`scripts/perf-guard.sh`
 - 文档：`docs/PERFORMANCE_PLAN.md`（方案 + 实施记录）
 
 ### C. 已知限制

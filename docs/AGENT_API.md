@@ -1,14 +1,14 @@
-# Canta Agent API
+# Lora Agent API
 
-Canta is a macOS visual library for design screenshots. The **Canta Agent API** exposes that library over a loopback-only HTTP service so coding agents — Claude Code, Codex, Cursor, or any local script — can discover pinned references, read their metadata, fetch the actual images, add new references they captured, and update existing metadata. Read endpoints are read-only; `POST /api/v1/pins` adds pins and `PATCH /api/v1/pins/{id}` updates metadata when editing is enabled in Settings.
+Lora is a macOS visual library for design screenshots. The **Lora Agent API** exposes that library over a loopback-only HTTP service so coding agents — Claude Code, Codex, Cursor, or any local script — can discover pinned references, read their metadata, fetch the actual images, add new references they captured, and update existing metadata. Read endpoints are read-only; `POST /api/v1/pins` adds pins and `PATCH /api/v1/pins/{id}` updates metadata when editing is enabled in Settings.
 
-The API is embedded in the Canta app (via **CantaAgentKit**) and starts automatically with the app. It binds to **127.0.0.1 only**, never requires authentication, and re-reads the library from disk on every request, so what you see in Canta is exactly what an agent gets.
+The API is embedded in the Lora app (via **LoraAgentKit**) and starts automatically with the app. It binds to **127.0.0.1 only**, never requires authentication, and re-reads the library from disk on every request, so what you see in Lora is exactly what an agent gets.
 
 | Property | Value |
 | --- | --- |
-| Base URL | `http://127.0.0.1:4242` by default (configurable in Canta → Settings → Agent access) |
+| Base URL | `http://127.0.0.1:4242` by default (configurable in Lora → Settings → Agent access) |
 | API version | `v1` |
-| Server implementation | `CantaAgentKit 1.0.0` (Network.framework, HTTP/1.1) |
+| Server implementation | `LoraAgentKit 1.0.0` (Network.framework, HTTP/1.1) |
 | Data source | `<libraryRoot>/library.json` plus `Images/` and `Thumbnails/` |
 | Access | Loopback-only, no authentication |
 | Writes | `POST /api/v1/pins` (JSON base64 or raw image body; 20 MiB limit) and `PATCH /api/v1/pins/{id}` (partial metadata; 256 KiB limit) |
@@ -19,13 +19,13 @@ The API is embedded in the Canta app (via **CantaAgentKit**) and starts automati
 
 ## Quickstart
 
-**1. Launch Canta.** The Agent API starts automatically on launch when *Agent access* is enabled (it is on by default). The bound port is shown in Canta's Agent access panel and defaults to **4242**.
+**1. Launch Lora.** The Agent API starts automatically on launch when *Agent access* is enabled (it is on by default). The bound port is shown in Lora's Agent access panel and defaults to **4242**.
 
 **2. Check that the API is alive.**
 
 ```bash
 curl -s http://127.0.0.1:4242/health
-# {"api":"v1","app":"Canta","pinCount":12,"port":4242,"status":"ok","version":"1.0.0"}
+# {"api":"v1","app":"Lora","pinCount":12,"port":4242,"status":"ok","version":"1.0.0"}
 ```
 
 **3. List recent pins.**
@@ -64,8 +64,8 @@ curl -s -X POST "http://127.0.0.1:4242/api/v1/pins" \
 
 ## Base URL, ports, and discovery
 
-- The default base URL is `http://127.0.0.1:4242`. If port 4242 is already in use, Canta reports **API unavailable** in its status UI; choose another port (1024–65535) in Settings.
-- The actual bound port is always reported by `GET /health` in the `port` field, and by Canta's Agent access status badge.
+- The default base URL is `http://127.0.0.1:4242`. If port 4242 is already in use, Lora reports **API unavailable** in its status UI; choose another port (1024–65535) in Settings.
+- The actual bound port is always reported by `GET /health` in the `port` field, and by Lora's Agent access status badge.
 - For embedded/programmatic use, `AgentServerConfig(port: 0, ...)` binds an ephemeral port and reports it through `AgentServerStatus.running(port:)`.
 - Discover the API without guessing:
   - `GET /health` — liveness + port + pin count
@@ -104,7 +104,7 @@ Unknown paths return a JSON **404**. Known paths with an unsupported method retu
 ```json
 {
   "status": "ok",
-  "app": "Canta",
+  "app": "Lora",
   "api": "v1",
   "version": "1.0.0",
   "pinCount": 12,
@@ -120,7 +120,7 @@ Returns the whole library in one response:
 
 ```json
 {
-  "app": "Canta",
+  "app": "Lora",
   "version": "1.0.0",
   "generatedAt": "2026-11-14T02:57:54Z",
   "stats": { "pins": 12, "boards": 4, "tags": 18, "favorites": 2, "images": 12 },
@@ -237,7 +237,7 @@ Metadata fields and defaults:
 | `kind` | `kind` | `?kind=` | `screenshot` |
 | `favorite` | `favorite` boolean | `?favorite=` | `false` |
 
-**Naming captures.** When you capture screenshots for a product, prefix the board with the product name — e.g. `board=Linear/Settings` — so Canta files them under the Linear group. Prefer one level of nesting. Include the product name in the title too (e.g. `Settings — Linear`) so the pin reads well in search and design context.
+**Naming captures.** When you capture screenshots for a product, prefix the board with the product name — e.g. `board=Linear/Settings` — so Lora files them under the Linear group. Prefer one level of nesting. Include the product name in the title too (e.g. `Settings — Linear`) so the pin reads well in search and design context.
 
 Processing and response:
 
@@ -249,7 +249,7 @@ Processing and response:
 - Success returns `201 Created`, the enriched pin JSON, and a `Location: /api/v1/pins/{id}` header. The same pin is immediately available from every read endpoint.
 - If anything fails, partially written image files are removed and the library is left unchanged. A missing or corrupt library returns the usual `500 library_unavailable` / `500 library_corrupt`.
 - Unsupported `Content-Type` values return `415 unsupported_media_type`; declared bodies over 20 MiB return `413 request_body_too_large`.
-- In the app, `CantaAgentServer.onLibraryChanged` fires once after the atomic write so the UI can reload.
+- In the app, `LoraAgentServer.onLibraryChanged` fires once after the atomic write so the UI can reload.
 - `POST` is accepted on `/api/v1/pins` only. On read-only paths it returns `405 method_not_allowed` with an `Allow` header listing the supported methods.
 
 ### PATCH /api/v1/pins/{id}
@@ -290,7 +290,7 @@ Editable fields:
 
 Bodies are limited to **256 KiB**; larger bodies return `413 request_body_too_large`. An empty or malformed JSON body returns `400 invalid_json`. A body with no editable fields, an unknown field, a wrong type, an empty or null `title`, or an unknown `kind` returns `400 invalid_metadata`. Unknown pins return `404 pin_not_found`; non-`application/json` payloads return `415 unsupported_media_type`; `PATCH /api/v1/pins` (the collection) returns `405 method_not_allowed`.
 
-The library owner can disable metadata editing in **Canta → Settings → Agent API → Allow metadata edits** (on by default and persisted across launches). Toggling it restarts the local server; while off, every `PATCH /api/v1/pins/{id}` returns `403 metadata_edits_disabled`, and all read endpoints plus the in-app editor keep working.
+The library owner can disable metadata editing in **Lora → Settings → Agent API → Allow metadata edits** (on by default and persisted across launches). Toggling it restarts the local server; while off, every `PATCH /api/v1/pins/{id}` returns `403 metadata_edits_disabled`, and all read endpoints plus the in-app editor keep working.
 
 ### GET /api/v1/pins/{id}
 
@@ -373,9 +373,9 @@ Query parameters:
 Example output (trimmed):
 
 ```markdown
-# Canta design context
+# Lora design context
 
-> Local design reference from Canta, a visual library of UI screenshots. ...
+> Local design reference from Lora, a visual library of UI screenshots. ...
 
 - Base URL: http://127.0.0.1:4242
 - Library: 12 pins · 4 boards · 18 tags
@@ -402,7 +402,7 @@ If no pins match, the document still returns `200` with an empty-state message l
 
 ### Discovery endpoints
 
-- `GET /docs` — polished, fully offline HTML documentation (white canvas, Canta red `#E60023`, endpoint table, copyable curl examples). No external fonts, scripts, or CDNs.
+- `GET /docs` — polished, fully offline HTML documentation (white canvas, Lora red `#E60023`, endpoint table, copyable curl examples). No external fonts, scripts, or CDNs.
 - `GET /openapi.json` — OpenAPI 3.1.0 document with all paths, parameters, response schemas, and the actual bound server URL.
 - `GET /llms.txt` — llms.txt-style plain-text index with absolute links and examples.
 - `GET /` — minimal HTML landing page linking to the resources above.
@@ -411,7 +411,7 @@ If no pins match, the document still returns `200` with an empty-state message l
 
 ## Data model: EnrichedPin
 
-A pin contains every field Canta persists plus two absolute URLs. Responses **never** contain internal filesystem paths.
+A pin contains every field Lora persists plus two absolute URLs. Responses **never** contain internal filesystem paths.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -445,7 +445,7 @@ Every non-2xx response is JSON with a stable machine-readable code and a human-r
 {
   "error": {
     "code": "pin_not_found",
-    "message": "No pin with id \"6f1c...\" exists in the Canta library."
+    "message": "No pin with id \"6f1c...\" exists in the Lora library."
   }
 }
 ```
@@ -453,7 +453,7 @@ Every non-2xx response is JSON with a stable machine-readable code and a human-r
 | Status | Codes | When |
 | --- | --- | --- |
 | 400 | `bad_request`, `invalid_parameter`, `invalid_percent_encoding`, `invalid_utf8`, `invalid_content_length`, `request_header_too_large`, `request_body_too_large`, `unsupported_http_version`, `unsupported_transfer_encoding`, `invalid_json`, `missing_image`, `invalid_image_data`, `invalid_metadata` | Malformed request, invalid query values, or an unusable upload payload |
-| 403 | `metadata_edits_disabled` | `PATCH /api/v1/pins/{id}` while metadata edits are turned off in Canta Settings |
+| 403 | `metadata_edits_disabled` | `PATCH /api/v1/pins/{id}` while metadata edits are turned off in Lora Settings |
 | 404 | `not_found`, `pin_not_found`, `image_not_found` | Unknown route/pin/image, including blocked traversal attempts |
 | 405 | `method_not_allowed` | Method not supported by the path; response includes `Allow` |
 | 413 | `request_body_too_large` | Upload body exceeds the 20 MiB limit, or a PATCH body exceeds 256 KiB |
@@ -470,22 +470,22 @@ HTTP status codes used: **400, 403, 404, 405, 413, 415, 500** (plus `204` for `O
 - **HEAD:** supported on every endpoint. Headers (including `Content-Length`) match the corresponding GET; the body is omitted.
 - **Connections:** one request per connection; every response sends `Connection: close` and a correct `Content-Length`. Request heads are capped at 32 KB. Only `POST /api/v1/pins` (up to 20 MiB) and `PATCH /api/v1/pins/{id}` (up to 256 KiB) wait for a request body, validated against `Content-Length`; read endpoints answer from the head alone. Chunked transfer encoding is rejected with `400 unsupported_transfer_encoding`.
 - **URL encoding:** query keys and values are percent-decoded (`+` means space); malformed percent escapes return `400 invalid_percent_encoding`. Path dot-segments (`.` / `..`) are rejected as `404 not_found`.
-- **Caching:** JSON responses send `Cache-Control: no-store`; images and docs send `Cache-Control: no-cache` so edits in Canta are visible immediately.
-- **Headers:** every response includes `Server: CantaAgentKit/1.0.0`, an RFC 1123 `Date`, and `X-Content-Type-Options: nosniff`. SVG images also send a restrictive `Content-Security-Policy`.
-- **Fresh reads:** `library.json` is decoded for every request. Adding, editing, or deleting pins in Canta is reflected on the next API call, with no restart.
+- **Caching:** JSON responses send `Cache-Control: no-store`; images and docs send `Cache-Control: no-cache` so edits in Lora are visible immediately.
+- **Headers:** every response includes `Server: LoraAgentKit/1.0.0`, an RFC 1123 `Date`, and `X-Content-Type-Options: nosniff`. SVG images also send a restrictive `Content-Security-Policy`.
+- **Fresh reads:** `library.json` is decoded for every request. Adding, editing, or deleting pins in Lora is reflected on the next API call, with no restart.
 
 ---
 
-## Using Canta with coding agents
+## Using Lora with coding agents
 
 ### Drop-in instructions
 
-Add this block to `AGENTS.md` (Codex), `CLAUDE.md` (Claude Code), or a Cursor rules file. Adjust the port if you changed it in Canta settings.
+Add this block to `AGENTS.md` (Codex), `CLAUDE.md` (Claude Code), or a Cursor rules file. Adjust the port if you changed it in Lora settings.
 
 ```markdown
-## Canta design reference API
+## Lora design reference API
 
-Canta runs a local HTTP API on loopback at http://127.0.0.1:4242.
+Lora runs a local HTTP API on loopback at http://127.0.0.1:4242.
 It serves the user's pinned UI screenshots as JSON metadata plus image streams
 and can add new pins from images you capture.
 
@@ -497,7 +497,7 @@ and can add new pins from images you capture.
 - Library:  GET /api/v1/library
 - Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB)
 - Update:   PATCH /api/v1/pins/{id}   (partial metadata: title, note, board, tags, source, favorite, kind; null clears)
-- Board naming: add captures on Product/Screen boards (e.g. Linear/Settings); Canta groups them under Product in the sidebar.
+- Board naming: add captures on Product/Screen boards (e.g. Linear/Settings); Lora groups them under Product in the sidebar.
 - Docs:     GET /docs            OpenAPI: GET /openapi.json    Index: GET /llms.txt
 
 Before writing UI code, fetch /api/v1/context (optionally filtered by board or tag),
@@ -508,13 +508,13 @@ API; do not invent URLs or guess pin IDs.
 
 ### Example prompts
 
-- *"Query Canta's design context for the board Web dashboards, choose the two most relevant references, and build the analytics overview page in SwiftUI. Match spacing, type scale, and palette."*
-- *"Use Canta to find pins matching 'onboarding'. Read each pin's imageURL and design note, then implement the empty-state screen so it belongs to the same product family."*
-- *"List Canta pins tagged editorial. Read their colors and thumbnails, and propose a consistent four-colour palette with hex values and usage notes."*
-- *"Before restyling the settings screen, pull Canta pins on the board Mobile flows and summarize the common navigation patterns."*
-- *"Capture the current Figma frame and add it to Canta with POST /api/v1/pins, tagged 'checkout' on the Mobile flows board, then use its imageURL as the reference for the implementation."*
-- *"Capture these five settings screenshots, add them to Canta on the board `Linear/Settings` with the tag `settings`, then pull the board context and restyle our settings page to match."*
-- *"Review the Canta pins I just added; fix their titles and file each on a `Product/Screen` board with PATCH /api/v1/pins/{id}."*
+- *"Query Lora's design context for the board Web dashboards, choose the two most relevant references, and build the analytics overview page in SwiftUI. Match spacing, type scale, and palette."*
+- *"Use Lora to find pins matching 'onboarding'. Read each pin's imageURL and design note, then implement the empty-state screen so it belongs to the same product family."*
+- *"List Lora pins tagged editorial. Read their colors and thumbnails, and propose a consistent four-colour palette with hex values and usage notes."*
+- *"Before restyling the settings screen, pull Lora pins on the board Mobile flows and summarize the common navigation patterns."*
+- *"Capture the current Figma frame and add it to Lora with POST /api/v1/pins, tagged 'checkout' on the Mobile flows board, then use its imageURL as the reference for the implementation."*
+- *"Capture these five settings screenshots, add them to Lora on the board `Linear/Settings` with the tag `settings`, then pull the board context and restyle our settings page to match."*
+- *"Review the Lora pins I just added; fix their titles and file each on a `Product/Screen` board with PATCH /api/v1/pins/{id}."*
 
 ### Useful jq recipes
 
@@ -531,10 +531,10 @@ curl -s http://127.0.0.1:4242/api/v1/library \
 curl -s http://127.0.0.1:4242/api/v1/boards | jq '.boards[] | "\(.name): \(.count)"'
 
 # Download every favorite image
-mkdir -p canta-references
+mkdir -p lora-references
 curl -s "http://127.0.0.1:4242/api/v1/pins?favorite=true&limit=200" \
   | jq -r '.pins[] | [.id, .imageURL] | @tsv' \
-  | while IFS=$'\t' read -r id url; do curl -s -o "canta-references/$id.png" "$url"; done
+  | while IFS=$'\t' read -r id url; do curl -s -o "lora-references/$id.png" "$url"; done
 
 # One pin with everything
 curl -s http://127.0.0.1:4242/api/v1/pins/<pin-id> | jq
@@ -579,15 +579,15 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `curl: (7) Failed to connect` | Canta is not running, Agent access is off, or the API failed to bind | Launch Canta; enable Agent access; check the status badge or a custom port |
+| `curl: (7) Failed to connect` | Lora is not running, Agent access is off, or the API failed to bind | Launch Lora; enable Agent access; check the status badge or a custom port |
 | Status shows *API unavailable* | Port already in use or invalid | Pick a different port (1024–65535) in Settings and retry |
-| `500 library_unavailable` | `library.json` is missing at the configured library root | Open Canta once so it creates the library, or check the data folder setting |
+| `500 library_unavailable` | `library.json` is missing at the configured library root | Open Lora once so it creates the library, or check the data folder setting |
 | `500 library_corrupt` | `library.json` is not valid JSON or is missing required pin fields | Recover/repair the library; the error message includes the decoding path |
-| `404 image_not_found` | The pin has no image or its image file is missing | Re-import the image in Canta |
+| `404 image_not_found` | The pin has no image or its image file is missing | Re-import the image in Lora |
 | `pinCount` is 0 but the app shows pins | The app's library root differs from the API's `libraryRoot` | Ensure the app started the server with its own data root |
 | `400 invalid_parameter` | Invalid `limit`, `offset`, `sort`, or `favorite` value | Use documented values; see the parameters table |
 | `405 method_not_allowed` | Tried POST/PATCH/PUT/DELETE on a path that does not accept it | Only `POST /api/v1/pins` and `PATCH /api/v1/pins/{id}` are writable; read endpoints accept GET/HEAD |
-| `403 metadata_edits_disabled` | Metadata edits are turned off in Settings | Enable **Allow metadata edits** in Canta → Settings → Agent API |
+| `403 metadata_edits_disabled` | Metadata edits are turned off in Settings | Enable **Allow metadata edits** in Lora → Settings → Agent API |
 | `413 request_body_too_large` | Upload body exceeds 20 MiB, or a PATCH body exceeds 256 KiB | Downscale the screenshot, or send a smaller metadata patch |
 | `415 unsupported_media_type` | Upload used a non-JSON, non-image Content-Type | Send `application/json` with `imageBase64`, or a raw image body with `image/png`/`image/jpeg`/… |
 | `400 invalid_image_data` | Base64 did not decode to an image, or the bytes are not a supported image | Verify the file opens as PNG/JPEG/WebP/GIF/HEIC/TIFF/BMP/AVIF |
@@ -598,7 +598,7 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 ## Versioning
 
 - The API generation is `v1`, reflected in the path prefix `/api/v1/` and the `api` field of `/health`.
-- `version` (currently `1.0.0`) identifies the CantaAgentKit implementation and may change independently of the API generation.
+- `version` (currently `1.0.0`) identifies the LoraAgentKit implementation and may change independently of the API generation.
 - Changes within `v1` are additive: new optional fields or endpoints may appear, but existing fields, status codes, and semantics stay compatible. Clients should ignore unknown JSON fields.
 - `generatedAt` in `/api/v1/library` indicates when the snapshot was produced; the library itself is read fresh on every request.
 - `POST /api/v1/pins` and `PATCH /api/v1/pins/{id}` are additive within `v1`: clients that only read the library keep working unchanged.
@@ -612,8 +612,8 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 
 | Path | Contents |
 | --- | --- |
-| `Sources/CantaAgentKit/` | Embedded HTTP server, router, library model, image ingest pipeline, docs/OpenAPI/llms content |
-| `Tests/CantaAgentKitTests/` | 49 Swift Testing tests (ephemeral ports, temporary library roots) |
+| `Sources/LoraAgentKit/` | Embedded HTTP server, router, library model, image ingest pipeline, docs/OpenAPI/llms content |
+| `Tests/LoraAgentKitTests/` | 49 Swift Testing tests (ephemeral ports, temporary library roots) |
 | `docs/AGENT_API.md` | This document |
 | `scripts/agent-smoke-test.sh` | Builds the kit and black-box tests a live server against a temp fixture library |
 
@@ -622,8 +622,8 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 The API target builds independently of the app:
 
 ```bash
-swift build --target CantaAgentKit
-swift test --filter CantaAgentKitTests
+swift build --target LoraAgentKit
+swift test --filter LoraAgentKitTests
 ```
 
 Requirements and environment notes:
@@ -655,12 +655,12 @@ The suite covers: health and alias, library JSON shape and enrichment, stats/boa
 ./scripts/agent-smoke-test.sh --tests  # also run the Swift Testing suite
 ```
 
-The script builds `CantaAgentKit` (and a temporary standalone harness), writes a fixture library to a temporary directory, starts the server on an ephemeral port, and runs 192 black-box checks covering health, library, filters, pin detail, images/thumbnails, HEAD, CORS, OPTIONS, 405/404, traversal protection, docs, OpenAPI, llms.txt, the metadata-update flow (successful partial update, null clearing, board move, validation failures, unknown pin, disabled-editing 403, and PATCH in CORS/OPTIONS plus docs/OpenAPI/llms.txt), and the ingest flow: JSON and raw uploads, metadata/tags/board persistence, image and thumbnail verification, default metadata, invalid JSON/base64/media type, oversized-rejection, POST-to-read-only-path 405s, and CORS/OPTIONS advertising POST. It prints `PASS`/`FAIL` lines and exits non-zero on failure (`SMOKE TEST PASSED: 192 checks` on success). Requirements: `swift` and `python3`; it never reads the real Canta library.
+The script builds `LoraAgentKit` (and a temporary standalone harness), writes a fixture library to a temporary directory, starts the server on an ephemeral port, and runs 192 black-box checks covering health, library, filters, pin detail, images/thumbnails, HEAD, CORS, OPTIONS, 405/404, traversal protection, docs, OpenAPI, llms.txt, the metadata-update flow (successful partial update, null clearing, board move, validation failures, unknown pin, disabled-editing 403, and PATCH in CORS/OPTIONS plus docs/OpenAPI/llms.txt), and the ingest flow: JSON and raw uploads, metadata/tags/board persistence, image and thumbnail verification, default metadata, invalid JSON/base64/media type, oversized-rejection, POST-to-read-only-path 405s, and CORS/OPTIONS advertising POST. It prints `PASS`/`FAIL` lines and exits non-zero on failure (`SMOKE TEST PASSED: 192 checks` on success). Requirements: `swift` and `python3`; it never reads the real Lora library.
 
 ### How the app wires it
 
 ```swift
-let server = CantaAgentServer(
+let server = LoraAgentServer(
     config: AgentServerConfig(port: agentPort, libraryRoot: root)
 )
 server.onStatusChange = { status in
@@ -679,4 +679,4 @@ server.stop()    // releases the listening socket
 - `onStatusChange` receives `.starting`, `.running(port:)`, `.failed(message)`, and `.stopped` on a background queue.
 - `onLibraryChanged` fires once per successful `POST /api/v1/pins` after the atomic library write, and is the app's cue to reload pins without polling.
 - `status`, `runningPort`, `baseURL`, and `isRunning` are thread-safe conveniences for the UI.
-- The app's data root is `~/Library/Application Support/Canta` (overridable with the `CANTA_HOME` environment variable), containing `library.json`, `Images/`, and `Thumbnails/`.
+- The app's data root is `~/Library/Application Support/Lora` (overridable with the `LORA_HOME` environment variable), containing `library.json`, `Images/`, and `Thumbnails/`.

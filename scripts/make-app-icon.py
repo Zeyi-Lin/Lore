@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render the Canta app icon master from the in-app brand mark.
+"""Render the Lora app icon master from the in-app brand mark.
 
-The Dock/Finder icon is generated from the same design as ``CantaMark`` in
-``Sources/Canta/Design/Components.swift``: a signature-red squircle carrying two
+The Dock/Finder icon is generated from the same design as ``LoraMark`` in
+``Sources/Lora/Design/Components.swift``: a signature-red squircle carrying two
 tilted photo cards, the front one holding the red heart. Keeping the master
 generated here means the app icon and the in-app mark stay one artwork.
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
-# Geometry, mirroring CantaMark (values are fractions of the mark size).
+# Geometry, mirroring LoraMark (values are fractions of the mark size).
 CANVAS = 1024
 SUPERSAMPLE = 4
 PLATE_FRACTION = 0.875          # macOS-style padding around the squircle
@@ -30,8 +30,8 @@ CARD_FILL_ALPHA = 0.42
 HEART_SIZE = 0.15
 HEART_OFFSET_Y = -0.015
 SHADOW_ALPHA = 0.12
-SHADOW_BLUR = 0.057             # blur radius / mark size (CantaMark: radius 2 @ 35)
-SHADOW_OFFSET_Y = 0.029         # (CantaMark: y 1 @ 35)
+SHADOW_BLUR = 0.057             # blur radius / mark size (LoraMark: radius 2 @ 35)
+SHADOW_OFFSET_Y = 0.029         # (LoraMark: y 1 @ 35)
 
 RED = (230, 0, 35, 255)         # Theme.red, #E60023
 WHITE = (255, 255, 255, 255)
@@ -139,7 +139,7 @@ def render(size: int) -> Image.Image:
     front_card = compose_card(front=True)
     rotated_front = front_card.rotate(CARD_ANGLE_FRONT, resample=Image.BICUBIC, expand=True)
 
-    # CantaMark blurs the front card itself, so its shadow falls across the
+    # LoraMark blurs the front card itself, so its shadow falls across the
     # translucent back card as well: paint it once the back card is in place.
     shadow = Image.new("RGBA", rotated_front.size, (0, 0, 0, 0))
     shadow.paste((0, 0, 0, round(255 * SHADOW_ALPHA)), (0, 0), rotated_front.getchannel("A"))
@@ -167,7 +167,7 @@ def render(size: int) -> Image.Image:
 
 def main() -> int:
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-        "Sources/Canta/Resources/AppIcon/icon_1024.png"
+        "Sources/Lora/Resources/AppIcon/icon_1024.png"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
 

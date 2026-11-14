@@ -15,30 +15,30 @@ let testLinkerSettings: [LinkerSetting] = hasCLTTesting
     : []
 
 let package = Package(
-    name: "Canta",
+    name: "Lora",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Canta", targets: ["Canta"]),
-        .library(name: "CantaAgentKit", targets: ["CantaAgentKit"])
+        .executable(name: "Lora", targets: ["Lora"]),
+        .library(name: "LoraAgentKit", targets: ["LoraAgentKit"])
     ],
     targets: [
         .target(
-            name: "CantaAgentKit",
-            path: "Sources/CantaAgentKit"
+            name: "LoraAgentKit",
+            path: "Sources/LoraAgentKit"
         ),
         .executableTarget(
-            name: "Canta",
-            dependencies: ["CantaAgentKit"],
-            path: "Sources/Canta",
+            name: "Lora",
+            dependencies: ["LoraAgentKit"],
+            path: "Sources/Lora",
             resources: [
                 .copy("Resources/Seed"),
                 .copy("Resources/AppIcon")
             ]
         ),
         .testTarget(
-            name: "CantaAgentKitTests",
-            dependencies: ["CantaAgentKit"],
-            path: "Tests/CantaAgentKitTests",
+            name: "LoraAgentKitTests",
+            dependencies: ["LoraAgentKit"],
+            path: "Tests/LoraAgentKitTests",
             swiftSettings: testSwiftSettings,
             linkerSettings: testLinkerSettings
         )

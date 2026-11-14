@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Canta Agent API smoke test
+# Lora Agent API smoke test
 # --------------------------
-# Builds CantaAgentKit, compiles a tiny standalone harness around the real
+# Builds LoraAgentKit, compiles a tiny standalone harness around the real
 # server implementation, generates a temporary fixture library, starts the
 # server on an ephemeral loopback port, and black-box tests every public
 # endpoint with python3.
@@ -12,7 +12,7 @@
 #   ./scripts/agent-smoke-test.sh --tests    # also run the Swift Testing suite
 #
 # Requires: swift, python3. The fixture lives under .build/agent-smoke and is
-# removed on exit. The test never touches the real Canta library.
+# removed on exit. The test never touches the real Lora library.
 #
 set -uo pipefail
 
@@ -26,7 +26,7 @@ PORT_FILE="$WORK/port.txt"
 SERVER_LOG="$WORK/server.log"
 DISABLED_PORT_FILE="$WORK/port-disabled.txt"
 DISABLED_LOG="$WORK/server-disabled.log"
-HARNESS="$WORK/harness/canta-agent-smoke"
+HARNESS="$WORK/harness/lora-agent-smoke"
 RUN_TESTS=0
 if [ "$#" -ge 1 ] && [ "$1" = "--tests" ]; then
     RUN_TESTS=1
@@ -63,8 +63,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "==> Building CantaAgentKit"
-if ! swift build --target CantaAgentKit --disable-sandbox --manifest-cache local \
+echo "==> Building LoraAgentKit"
+if ! swift build --target LoraAgentKit --disable-sandbox --manifest-cache local \
         --cache-path "$ROOT/.build/spm-cache" --scratch-path "$ROOT/.build" > "$WORK/build.log" 2>&1; then
     echo "    swift build failed:"
     tail -30 "$WORK/build.log"
@@ -83,7 +83,7 @@ root = sys.argv[1]
 library = os.path.join(root, "library")
 secret = os.path.join(root, "secret.txt")
 with open(secret, "w", encoding="utf-8") as handle:
-    handle.write("CANTA_SMOKE_TRAVERSAL_SECRET_DO_NOT_SERVE\n")
+    handle.write("LORA_SMOKE_TRAVERSAL_SECRET_DO_NOT_SERVE\n")
 
 png = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -126,7 +126,7 @@ def pin(identifier, title, image, thumbnail, board, tags, favorite, created):
         "tags": tags,
         "board": board,
         "sourceURL": "https://example.com/reference" if favorite else None,
-        "sourceLabel": "Dribbble" if favorite else "Canta Seed",
+        "sourceLabel": "Dribbble" if favorite else "Lora Seed",
         "colors": ["#0E1117", "#E60023"],
         "favorite": favorite,
         "kind": "screenshot",
@@ -162,7 +162,7 @@ with open(os.path.join(root, "expected-png.bin"), "wb") as handle:
 with open(os.path.join(root, "expected-jpeg.bin"), "wb") as handle:
     handle.write(jpeg)
 with open(os.path.join(root, "secret-marker.txt"), "w", encoding="utf-8") as handle:
-    handle.write("CANTA_SMOKE_TRAVERSAL_SECRET_DO_NOT_SERVE")
+    handle.write("LORA_SMOKE_TRAVERSAL_SECRET_DO_NOT_SERVE")
 PY
 echo "    ok"
 
@@ -177,16 +177,16 @@ guard arguments.count >= 3 else {
 }
 let libraryRoot = URL(fileURLWithPath: arguments[1], isDirectory: true)
 let portFile = URL(fileURLWithPath: arguments[2])
-let allowsMetadataEdits = ProcessInfo.processInfo.environment["CANTA_SMOKE_METADATA_EDITS"] != "0"
-let server = CantaAgentServer(config: AgentServerConfig(port: 0, libraryRoot: libraryRoot, allowsMetadataEdits: allowsMetadataEdits))
+let allowsMetadataEdits = ProcessInfo.processInfo.environment["LORA_SMOKE_METADATA_EDITS"] != "0"
+let server = LoraAgentServer(config: AgentServerConfig(port: 0, libraryRoot: libraryRoot, allowsMetadataEdits: allowsMetadataEdits))
 server.onStatusChange = { status in
     switch status {
     case .running(let port):
         try? "\(port)".write(to: portFile, atomically: true, encoding: .utf8)
-        print("CantaAgentSmoke listening on 127.0.0.1:\(port)")
+        print("LoraAgentSmoke listening on 127.0.0.1:\(port)")
         fflush(stdout)
     case .failed(let message):
-        FileHandle.standardError.write(Data(("CantaAgentSmoke failed: " + message + "\n").utf8))
+        FileHandle.standardError.write(Data(("LoraAgentSmoke failed: " + message + "\n").utf8))
     default:
         break
     }
@@ -200,12 +200,12 @@ while Date() < deadline {
 if case .running = server.status {
     while true { Thread.sleep(forTimeInterval: 1) }
 }
-FileHandle.standardError.write(Data("CantaAgentSmoke server did not start\n".utf8))
+FileHandle.standardError.write(Data("LoraAgentSmoke server did not start\n".utf8))
 exit(1)
 SWIFT
 
 if ! swiftc -swift-version 5 -module-cache-path "$CACHE/swift-modules" \
-        "$ROOT"/Sources/CantaAgentKit/*.swift "$WORK/harness/main.swift" \
+        "$ROOT"/Sources/LoraAgentKit/*.swift "$WORK/harness/main.swift" \
         -o "$HARNESS" > "$WORK/compile.log" 2>&1; then
     echo "    harness compilation failed:"
     tail -30 "$WORK/compile.log"
@@ -237,7 +237,7 @@ BASE="http://127.0.0.1:$PORT"
 echo "    listening on $BASE"
 
 echo "==> Starting metadata-disabled server"
-CANTA_SMOKE_METADATA_EDITS=0 "$HARNESS" "$LIBRARY" "$DISABLED_PORT_FILE" > "$DISABLED_LOG" 2>&1 &
+LORA_SMOKE_METADATA_EDITS=0 "$HARNESS" "$LIBRARY" "$DISABLED_PORT_FILE" > "$DISABLED_LOG" 2>&1 &
 DISABLED_PID=$!
 for _ in $(seq 1 300); do
     if [ -s "$DISABLED_PORT_FILE" ]; then
@@ -321,7 +321,7 @@ def expect_json(label, path, status=200):
 print("  [health]")
 health = expect_json("GET /health", "/health")
 record("health status field", health.get("status") == "ok", str(health.get("status")))
-record("health app field", health.get("app") == "Canta", str(health.get("app")))
+record("health app field", health.get("app") == "Lora", str(health.get("app")))
 record("health api field", health.get("api") == "v1", str(health.get("api")))
 record("health version present", isinstance(health.get("version"), str) and health.get("version") != "", str(health.get("version")))
 record("health pinCount == 7", health.get("pinCount") == 7, str(health.get("pinCount")))
@@ -332,7 +332,7 @@ record("health alias matches", alias == health)
 print("  [library]")
 library_payload = expect_json("GET /api/v1/library", "/api/v1/library")
 stats = library_payload.get("stats", {})
-record("library app", library_payload.get("app") == "Canta", str(library_payload.get("app")))
+record("library app", library_payload.get("app") == "Lora", str(library_payload.get("app")))
 record("library stats.pins == 7", stats.get("pins") == 7, str(stats.get("pins")))
 record("library stats.boards == 4", stats.get("boards") == 4, str(stats.get("boards")))
 record("library stats.favorites == 1", stats.get("favorites") == 1, str(stats.get("favorites")))
@@ -414,7 +414,7 @@ status, headers, body = request("/docs")
 docs = body.decode("utf-8", "replace")
 record("/docs status", status == 200, str(status))
 record("/docs is HTML", "text/html" in headers.get("content-type", ""), headers.get("content-type", ""))
-record("/docs uses Canta accent", "#E60023" in docs)
+record("/docs uses Lora accent", "#E60023" in docs)
 record("/docs links OpenAPI", "/openapi.json" in docs)
 record("/docs has no external CDN", "https://cdn" not in docs and "fonts.googleapis" not in docs and "@import" not in docs)
 record("/docs mentions llms.txt", "/llms.txt" in docs)
@@ -435,7 +435,7 @@ status, headers, body = request("/llms.txt")
 llms = body.decode("utf-8", "replace")
 record("/llms.txt status", status == 200, str(status))
 record("/llms.txt plain text", "text/plain" in headers.get("content-type", ""), headers.get("content-type", ""))
-record("/llms.txt headline", llms.startswith("# Canta Agent API"))
+record("/llms.txt headline", llms.startswith("# Lora Agent API"))
 record("/llms.txt absolute links", base + "/api/v1/pins" in llms)
 record("/llms.txt documents PATCH", "PATCH" in llms and "metadata_edits_disabled" in llms)
 record("/llms.txt documents board hierarchy", "Board hierarchy" in llms)

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-let target = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Canta"
+let target = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Lora"
 let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
 let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
 

@@ -1,6 +1,6 @@
-# Canta 交互性能优化方案
+# Lora 交互性能优化方案
 
-**版本** v1 · 2026-11 · 适用 Canta 1.0（Swift 6 / SwiftUI / macOS 14+）
+**版本** v1 · 2026-11 · 适用 Lora 1.0（Swift 6 / SwiftUI / macOS 14+）
 **目标** 在不改变 `library.json` 数据格式、不改变 Agent API 契约、不引入第三方依赖的前提下：
 
 1. 把「点详情 / ←→ 换图 / 换画板 / 搜索与编辑」类交互从 **150–300 ms（估算）** 降到 **一帧级（≤16.7 ms 起效，p95 ≤50 ms）**；
@@ -54,7 +54,7 @@
 ### 1.1 环境与方法
 
 - 机器：Apple M1 Max / 64 GB / macOS 26.6.2；Swift 6.3.3；`swiftc -O`。
-- **可复现**：`./scripts/perf-bench/run.sh`（本次新增）。它把 `LibraryStore.filteredPins`、`boardSummaries`、`persist()`、`CantaJSON`、`thumbnailURL` 的原样逻辑，编译进**真实的 `Pin` 模型**（`Sources/Canta/Store/Models.swift` + `Localization.swift`）后测量。
+- **可复现**：`./scripts/perf-bench/run.sh`（本次新增）。它把 `LibraryStore.filteredPins`、`boardSummaries`、`persist()`、`LoraJSON`、`thumbnailURL` 的原样逻辑，编译进**真实的 `Pin` 模型**（`Sources/Lora/Store/Models.swift` + `Localization.swift`）后测量。
 - 合成图库字段长度贴近真实数据（标题 20–40 字符、备注 ~150 字符、5 个标签、5 个画板）。
 - **能测的**：数据层、JSON、文件系统、ImageIO 解码/内存——本文所有毫秒数均为直接测量。
 - **不能测的**：SwiftUI body 求值与布局。这些数字在文中标注「估算」，并给出确认方法（第 6 节埋点）。所有 UI 级结论都可用「组件实测 × 结构推断」复核。
@@ -167,7 +167,7 @@ struct PinCard: View, Equatable {
 ```
 
 2. `store` 迁移到 `@Observable`（macOS 14 可用），把「快照 / 查询 / UI 状态」拆成三个对象（见 3.1），让视图只追踪自己真正读到的属性。
-3. 动作通过 `EnvironmentKey` 注入一个**永不发布**的 `CantaActions` 结构（open/toggle/select），避免闭包破坏 `Equatable`。
+3. 动作通过 `EnvironmentKey` 注入一个**永不发布**的 `LoraActions` 结构（open/toggle/select），避免闭包破坏 `Equatable`。
 
 **验收**：Instruments 里「点一次卡」的 `View Body` 次数从 ≈N 降到 **个位数 + 可见卡数**。
 
@@ -279,7 +279,7 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 - 编辑先落 `@State` 草稿，**300–600 ms debounce** 后写；失焦 / 切换 pin / 关闭详情 / 退出应用时 **flush**。
 - 单写者 actor（或串行队列）在后台编码并 `.atomic` 写；用递增 generation 丢弃过期写；同一时刻最多一个 in-flight 写。
-- `CantaJSON.encoder/iso8601` 这类静态实例**不要跨线程共用**（`JSONEncoder` 非线程安全），写线程内自建实例。
+- `LoraJSON.encoder/iso8601` 这类静态实例**不要跨线程共用**（`JSONEncoder` 非线程安全），写线程内自建实例。
 - 可选 P2：SQLite（系统 `import SQLite3`，无第三方依赖）作为真源，`library.json` 仅作导出；或 append-only journal + 周期压缩。**这属于存储架构升级，不属于本次止血**。
 
 ### 2.6 [P1] 缩略图过大 + 缓存按数量而非字节
@@ -306,13 +306,13 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 ### 2.9 [P2] 启动重复解码；ISO-8601 解析占解码 80%
 
-**证据**：`SeedLoader.swift:45-48` 解码一次，`LibraryStore.swift:61-62` 再解码一次；`CantaPaths.swift:56-66` 的 `.custom` 日期策略。
+**证据**：`SeedLoader.swift:45-48` 解码一次，`LibraryStore.swift:61-62` 再解码一次；`LoraPaths.swift:56-66` 的 `.custom` 日期策略。
 
 **实测**：75 ms @1k、219 ms @3k 主线程解码；其中 60/180 ms 是 `ISO8601DateFormatter`（33 µs/次）。换成手写定点解析 → **8.6 ms @1k**（8×），磁盘格式不变。
 
 **修法（P0，0.5 天）**：`installIfNeeded` 返回已解码结果或 `Data`，只解码一次；解码移到后台，先渲染窗口再填充；手写 ISO-8601 解析器（附录 B）。
 
-> 同一问题也在 Agent API：`CantaAgentKit/Library.swift:389-402` **每个请求**都重新读 + 解码 `library.json`。修成「内存快照 + FSEvents 失效」后，`GET /api/v1/pins` 可从 ~60 ms 降到 <2 ms。这不在本次 UI 卡顿主路径，但 Agent 频繁读取时会抢 IO/CPU。
+> 同一问题也在 Agent API：`LoraAgentKit/Library.swift:389-402` **每个请求**都重新读 + 解码 `library.json`。修成「内存快照 + FSEvents 失效」后，`GET /api/v1/pins` 可从 ~60 ms 降到 <2 ms。这不在本次 UI 卡顿主路径，但 Agent 频繁读取时会抢 IO/CPU。
 
 ### 2.10 [P2] 其他值得顺手处理的点
 
@@ -355,9 +355,9 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 **规则**
 
 1. 视图只读自己需要的属性；`@Observable` 按属性追踪，改 toast 不会让卡片重算。
-2. 叶子视图**只接收值**，不接收 store；动作通过不发布变更的 `CantaActions`（`EnvironmentKey`）注入。
+2. 叶子视图**只接收值**，不接收 store；动作通过不发布变更的 `LoraActions`（`EnvironmentKey`）注入。
 3. 所有派生数据都在投影里算一次并缓存；body 里不做 O(N) 工作。
-4. 数据层抽成 **`CantaCore` library target**（不依赖 SwiftUI）：可单测、可基准、可被未来的 Rust 实现替换——这是语言重构的唯一切入点（第 5 节）。
+4. 数据层抽成 **`LoraCore` library target**（不依赖 SwiftUI）：可单测、可基准、可被未来的 Rust 实现替换——这是语言重构的唯一切入点（第 5 节）。
 
 ### 3.2 渲染层
 
@@ -388,7 +388,7 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 ```swift
 @MainActor final class LibraryWriter {
-    private let queue = DispatchQueue(label: "canta.library-writer", qos: .utility)
+    private let queue = DispatchQueue(label: "lora.library-writer", qos: .utility)
     private var pending: DispatchWorkItem?
     private var generation = 0
 
@@ -400,7 +400,7 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.generation == gen else { return }
             let encoder = Self.makeEncoder()      // 不跨线程共享
-            guard let data = try? encoder.encode(CantaLibrary(version: 1, pins: snapshot)) else { return }
+            guard let data = try? encoder.encode(LoraLibrary(version: 1, pins: snapshot)) else { return }
             try? data.write(to: self.fileURL, options: .atomic)
         }
         pending = work
@@ -452,12 +452,12 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 | # | 改动 | 主要文件 | 预期收益 | 验收 |
 |---|---|---|---|---|
 | 0 | **埋点**：`OSSignposter` + 帧间隔 HUD + 合成图库生成器 | 新增 `Performance.swift` | 让后面每一项都可量化 | 每次交互可导出：body 次数、查询/写盘/解码耗时、掉帧 |
-| 1 | **快照 + 投影**：`LibrarySnapshot`、`QueryKey` memo、索引 | 新增 `CantaCore/Snapshot.swift` 等 | body 数据层 10–50 ms → **<0.6 ms** | 1k 卡 body 数据层 <1 ms |
+| 1 | **快照 + 投影**：`LibrarySnapshot`、`QueryKey` memo、索引 | 新增 `LoraCore/Snapshot.swift` 等 | body 数据层 10–50 ms → **<0.6 ms** | 1k 卡 body 数据层 <1 ms |
 | 2 | **卡片值化**：`PinCardModel` + `Equatable` + actions 注入 + `@Observable` | `PinCard.swift`、`LibraryView.swift`、`LibraryStore.swift` | 每次写入的 body 数 N → 个位数 | 点卡/选择时 Instruments body 次数 ≤ 可见卡 |
 | 3 | **懒列网格**：列分配 + `LazyVStack` + `reservesSpace` | `LibraryView.swift`、新增 `MasonryColumns.swift` | 首帧实例化 N → ~40 | 1k/5k 首帧 <100 ms |
 | 4 | **持久化**：草稿 + debounce + 后台单写者 | `PinDetailView.swift`、新 `LibraryWriter` | 每按键 15–45 ms → **0 ms 主线程** | `fs_usage` 无逐键写；标题输入帧率平稳 |
 | 5 | **图片分档 + Loader**：Cards/640、详情用现有 1200、后台解码、字节上限缓存、预取 | `ImageProcessor.swift`、`Components.swift`、新 `ImageLoader.swift` | 卡片解码 3.2 ms→<0.6 ms；详情 68 ms→<5 ms（1200 档） | 详情打开 ≤100 ms；←/→ ≤1 帧 |
-| 6 | **启动**：单次解码 + 快速 ISO-8601 | `SeedLoader.swift`、`LibraryStore.swift`、`CantaPaths.swift` | 启动解码 75 ms→9 ms @1k | 冷启动到可交互 ≤800 ms @5k |
+| 6 | **启动**：单次解码 + 快速 ISO-8601 | `SeedLoader.swift`、`LibraryStore.swift`、`LoraPaths.swift` | 启动解码 75 ms→9 ms @1k | 冷启动到可交互 ≤800 ms @5k |
 | 7 | **动效收口** | `LibraryStore.swift`、`RootView.swift`、`LibraryView.swift` | 去掉全网格动画 | 搜字/换画板无整屏动画 |
 | 8 | **回归** | — | — | 见 4.4 |
 
@@ -491,8 +491,8 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 1. **数据层**：`./scripts/perf-bench/run.sh`（本次已入库），对比改动前后。
 2. **UI 层**：Instruments 模板（SwiftUI View Body / Animation Hitches / Hangs / Time Profiler），固定动作序列：打开详情 → ← ×10 → 标题输入 6 字 → 换画板 → 搜索 8 字。
-3. **合成图库**：`CANTA_HOME=/tmp/canta-bench-5k ./dist/Canta.app/Contents/MacOS/Canta`，用脚本生成 1k/5k/10k 三档。
-4. **文件写入**：`fs_usage -w -f filesys Canta`，确认按键不再逐键写。
+3. **合成图库**：`LORA_HOME=/tmp/lora-bench-5k ./dist/Lora.app/Contents/MacOS/Lora`，用脚本生成 1k/5k/10k 三档。
+4. **文件写入**：`fs_usage -w -f filesys Lora`，确认按键不再逐键写。
 5. **回归清单**：详情 ←/→ 首尾边界、搜索清空、选择模式、拖拽导入、Agent 写回后 UI 刷新、语言切换。
 
 ---
@@ -501,7 +501,7 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 ### 5.1 为什么 UI 层不能（也不该）用 Rust
 
-- Canta 的 UI 是 SwiftUI + AppKit（材质、`NSWindow`、跟踪光标、输入法、无障碍、`SettingsLink`）。Rust 没有可用的 macOS 原生 UI 栈；重写意味着重新实现整个交互层，**6–12 人月**（估算）起，且会失去现有 **154 项** API 冒烟测试与签名打包链路。
+- Lora 的 UI 是 SwiftUI + AppKit（材质、`NSWindow`、跟踪光标、输入法、无障碍、`SettingsLink`）。Rust 没有可用的 macOS 原生 UI 栈；重写意味着重新实现整个交互层，**6–12 人月**（估算）起，且会失去现有 **154 项** API 冒烟测试与签名打包链路。
 - 更关键：本次四个症状的主线程预算是「view body 求值 + 布局 + 状态无效化」。这些**只发生在 SwiftUI 内部**，Rust 代码再快也进不了这条路径。
 - 本机**没有安装 `rustc`/`cargo`**（已确认），本次未做任何 Rust 基准；下文的 Rust 数字全部标注为**估算**。
 
@@ -528,20 +528,20 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 
 工程细节（若批准）：
 
-- 通用二进制：`cargo build --target {aarch64,x86_64}-apple-darwin` + `lipo -create`；`MACOSX_DEPLOYMENT_TARGET=14.0`。当前 `dist/Canta.app` 是 **arm64-only、ad-hoc 签名**（已核实），`scripts/build-app.sh` 里 `ARCH_DIR` 也写死了 arm64，需要先决定是否做通用包。
+- 通用二进制：`cargo build --target {aarch64,x86_64}-apple-darwin` + `lipo -create`；`MACOSX_DEPLOYMENT_TARGET=14.0`。当前 `dist/Lora.app` 是 **arm64-only、ad-hoc 签名**（已核实），`scripts/build-app.sh` 里 `ARCH_DIR` 也写死了 arm64，需要先决定是否做通用包。
 - Swift 6 并发：`Package.swift` 目前是 `swiftLanguageModes: [.v5]`。跨边界指针不得逃逸 `withUnsafeBytes`；句柄用 `actor` 包裹；Rust 回调必须 `@Sendable` 并显式跳 `@MainActor`。
 - 错误与 panic：`panic = "abort"` + 边界 `catch_unwind`；错误用 `(Int32, *const c_char)` 或 JSON envelope，**不要在 ABI 传 Swift `String`**。
 - **绝不在 SwiftUI body 里跨 FFI**。1 万卡 × 60 Hz × 1 µs = 600 ms/s；批处理（每 64 张一次调用）或异步投递。
 
 ### 5.4 唯一建议的 Rust 落点（如果一定要做）
 
-**`canta-media`：离线批量媒体 worker（sidecar CLI）**
+**`lora-media`：离线批量媒体 worker（sidecar CLI）**
 
 - 职责：为存量图库生成 `Cards/` 640 px（可选 `Previews/` 1600 px）、调色板重算、PNG/JPEG 优化；
 - 收益面：批处理吞吐（可用满多核），以及未来跨平台复用；
 - 不碰：UI、实时渲染、每帧/每次交互路径；
 - 门禁：在 1 万张真实图库上，**比优化后的 Swift+ImageIO 批处理快 ≥1.5×**，且输出字节一致；否则放弃；
-- 打包：`Contents/Helpers/canta-media`，独立签名/公证；宿主可缺省运行；
+- 打包：`Contents/Helpers/lora-media`，独立签名/公证；宿主可缺省运行；
 - 回滚：删除 helper，Swift 批处理路径保留。
 
 **不建议**的落点：JSON/持久化（换 SQLite 更划算）、搜索（1 万以内 Swift 足够）、HTTP（重实现 154 项检查）、任何 UI。
@@ -581,17 +581,17 @@ CGImageSourceCreateThumbnailAtIndex(source, 0, [
 ```swift
 import os
 enum Perf {
-    static let sp = OSSignposter(subsystem: "studio.canta.library", category: "interaction")
+    static let sp = OSSignposter(subsystem: "studio.lora.library", category: "interaction")
     // 统一字段：N（库大小）、visible（可见卡）、tier（cards/thumb1200/original）、ms
 }
 
 // 关键区间
-// canta.query.recompute      LibrarySnapshot/Projection
-// canta.persist.encode/write
-// canta.image.decode.{cards|thumb1200|original}
-// canta.detail.open
-// canta.card.body            （sample 1/64 卡，避免自身开销）
-// canta.grid.layout
+// lora.query.recompute      LibrarySnapshot/Projection
+// lora.persist.encode/write
+// lora.image.decode.{cards|thumb1200|original}
+// lora.detail.open
+// lora.card.body            （sample 1/64 卡，避免自身开销）
+// lora.grid.layout
 ```
 
 HUD（`⌥⌘P`，仅 Debug）：`N / 可见卡 / 最近一秒 body 次数 / 帧间隔 p95 / 图片缓存 MB / 上次写盘 ms`。
@@ -599,7 +599,7 @@ HUD（`⌥⌘P`，仅 Debug）：`N / 可见卡 / 最近一秒 body 次数 / 帧
 ### 6.3 门禁
 
 - `scripts/perf-bench/run.sh`：数据层回归（本次已入库）；P0 落地时把基线固化为 `docs/perf-baseline.json`，回归劣化 >20% 失败；
-- `CantaCoreTests`：`XCTClockMetric` + `XCTMemoryMetric`（1k/5k 两档）；
+- `LoraCoreTests`：`XCTClockMetric` + `XCTMemoryMetric`（1k/5k 两档）；
 - 发布前：Instruments 固定动作序列，导出 trace 存档；
 - 代码评审红线：
   * body / `body` 调用的方法里不得有 O(N) 遍历、文件 IO、JSON、解码；
@@ -639,7 +639,7 @@ HUD（`⌥⌘P`，仅 Debug）：`N / 可见卡 / 最近一秒 body 次数 / 帧
 | P0-3 懒列网格 | `MasonryColumns`（每列一个 `LazyVStack`）+ 高度算术分配；删除 `MasonryLayout` | `Views/LibraryView.swift` |
 | P0-4 持久化 | `LibraryWriter`：debounce + 单写者 + 后台编码 + generation 丢弃过期写；退出/失焦/关详情 flush | `Store/LibraryWriter.swift` |
 | P0-5 图片管线 | `ImageLoader` actor（有界并发、128 MB 字节上限、目标像素解码）；`Cards/` 640 px 生成 + 后台回填；详情 1200 px、原图仅大图模式；±1 预取 | `Store/ImageLoader.swift`、`Store/CardThumbnailBackfill.swift`、`Design/Components.swift` |
-| P0-6 启动 | `SeedLoader.loadOrInstall` 单次解码；手写 ISO-8601 解析 | `Store/SeedLoader.swift`、`Store/CantaPaths.swift` |
+| P0-6 启动 | `SeedLoader.loadOrInstall` 单次解码；手写 ISO-8601 解析 | `Store/SeedLoader.swift`、`Store/LoraPaths.swift` |
 | P0-7 动效 | 移除网格容器动画与每卡 transition；详情遮罩去材质 | `Views/LibraryView.swift`、`Views/PinDetailView.swift` |
 
 转入 P1 / 未做：`@Observable` 迁移（卡片已不订阅整库，剩余收益变小）、搜索倒排（5k 冷查询仍有 36 ms）、`NSCollectionView`、API 快照、详情独立窗口、HUD。
@@ -850,7 +850,7 @@ private func daysFromCivil(_ y: Int, _ m: Int, _ d: Int) -> Int {
 }
 
 /// "2026-11-13T09:12:00Z" → Date，约 0.07 µs（对比 ISO8601DateFormatter 33 µs）
-func parseCantaDate(_ s: String) -> Date? {
+func parseLoraDate(_ s: String) -> Date? {
     let b = Array(s.utf8)
     guard b.count == 20, b[4] == 45, b[7] == 45, b[10] == 84, b[13] == 58, b[16] == 58, b[19] == 90 else { return nil }
     let y = Int(b[0] - 48) * 1000 + Int(b[1] - 48) * 100 + Int(b[2] - 48) * 10 + Int(b[3] - 48)
@@ -863,7 +863,7 @@ func parseCantaDate(_ s: String) -> Date? {
 }
 ```
 
-> 注意：现有 `CantaJSON.decoder` 同时接受带小数秒的旧数据（`iso8601Fractional`），保留该回退分支即可。
+> 注意：现有 `LoraJSON.decoder` 同时接受带小数秒的旧数据（`iso8601Fractional`），保留该回退分支即可。
 
 ### B.4 图片解码 actor（骨架）
 
@@ -913,13 +913,13 @@ actor ImageLoader {
 
 # 构建并运行应用（release）
 ./scripts/build-app.sh release
-open dist/Canta.app
+open dist/Lora.app
 
 # 用合成图库存跑（避免污染真实图库）
-CANTA_HOME=/tmp/canta-5k ./dist/Canta.app/Contents/MacOS/Canta
+LORA_HOME=/tmp/lora-5k ./dist/Lora.app/Contents/MacOS/Lora
 
 # 观察写盘频率：在详情里改标题时应看到「一次写/约 0.5 s」，而不是每个字符一次
-fs_usage -w -f filesys Canta
+fs_usage -w -f filesys Lora
 
 # 记录 Instruments 轨迹（固定动作序列）
 #   Xcode → Instruments → SwiftUI + Animation Hitches + Time Profiler
@@ -941,7 +941,7 @@ fs_usage -w -f filesys Canta
 |---|---|
 | `docs/PERFORMANCE_PLAN.md` | 本方案：诊断、目标架构、分期路线、Rust 评估、SLO 与回归方式 |
 | `docs/PERF_IMPROVEMENT_REPORT.md` | 本次优化报告（适合直接粘贴/导入飞书） |
-| `docs/Canta-交互性能优化报告.docx` | 同上的 Word 版，可在飞书知识库「导入」为文档 |
+| `docs/Lora-交互性能优化报告.docx` | 同上的 Word 版，可在飞书知识库「导入」为文档 |
 | `docs/DETAIL_OPEN_LATENCY.md` | 详情打开延迟专项：分阶段探针、根因、P0–P2 实现与最终实测 |
 | `docs/AGENT_PAGE_LATENCY.md` | Agent 访问页切换专项：分段测量、分阶段渲染与最终实测 |
 | `scripts/perf-bench/run.sh` + `scripts/perf-bench/main.swift` | 可复现的 P0 前数据层基准（对照用） |

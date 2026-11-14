@@ -14,23 +14,23 @@ swift build \
   --cache-path .build/spm-cache \
   --scratch-path .build \
   -c "$CONFIG" \
-  --product Canta
+  --product Lora
 
 ARCH_DIR=".build/arm64-apple-macosx/$CONFIG"
-BINARY="$ARCH_DIR/Canta"
-BUNDLE="$ARCH_DIR/Canta_Canta.bundle"
+BINARY="$ARCH_DIR/Lora"
+BUNDLE="$ARCH_DIR/Lora_Lora.bundle"
 
-APP="dist/Canta.app"
+APP="dist/Lora.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BINARY" "$APP/Contents/MacOS/Canta"
+cp "$BINARY" "$APP/Contents/MacOS/Lora"
 if [ -d "$BUNDLE" ]; then
-  cp -R "$BUNDLE" "$APP/Contents/Resources/Canta_Canta.bundle"
+  cp -R "$BUNDLE" "$APP/Contents/Resources/Lora_Lora.bundle"
 fi
 
 # App icon (built from the designed 1024 master when available)
-ICON_MASTER="Sources/Canta/Resources/AppIcon/icon_1024.png"
+ICON_MASTER="Sources/Lora/Resources/AppIcon/icon_1024.png"
 if [ -f "$ICON_MASTER" ]; then
   ICONSET=".build/AppIcon.iconset"
   rm -rf "$ICONSET"
@@ -49,19 +49,19 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>Canta</string>
-    <key>CFBundleExecutable</key><string>Canta</string>
+    <key>CFBundleDisplayName</key><string>Lora</string>
+    <key>CFBundleExecutable</key><string>Lora</string>
     <key>CFBundleIconFile</key><string>appicon</string>
-    <key>CFBundleIdentifier</key><string>studio.canta.library</string>
+    <key>CFBundleIdentifier</key><string>studio.lora.library</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>Canta</string>
+    <key>CFBundleName</key><string>Lora</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSHumanReadableCopyright</key><string>Canta — a visual library for humans and their agents.</string>
+    <key>NSHumanReadableCopyright</key><string>Lora — a visual library for humans and their agents.</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>
