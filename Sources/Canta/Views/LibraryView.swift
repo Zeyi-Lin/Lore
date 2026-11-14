@@ -210,16 +210,6 @@ struct LibraryView: View {
     private var header: some View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(Theme.red)
-                        .frame(width: 5, height: 5)
-                    Text(kicker)
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.6)
-                        .foregroundStyle(Theme.inkTertiary)
-                }
-
                 Text(store.pageTitle)
                     .font(.system(size: 35, weight: .bold))
                     .tracking(-1.35)
@@ -242,17 +232,6 @@ struct LibraryView: View {
                 sortMenu
             }
             .padding(.bottom, 3)
-        }
-    }
-
-    private var kicker: String {
-        if !store.searchText.trimmed.isEmpty { return T("SEARCHING YOUR LIBRARY") }
-        if let board = store.selectedBoard { return TF("BOARD · %@", localizedBoard(board).uppercased()) }
-        switch store.section {
-        case .all: return T("YOUR VISUAL LIBRARY")
-        case .favorites: return T("SAVED FOR LATER")
-        case .recent: return T("RECENTLY PINNED")
-        case .agent: return T("AGENT ACCESS")
         }
     }
 

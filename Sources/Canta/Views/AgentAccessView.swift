@@ -3,23 +3,21 @@ import AppKit
 
 struct AgentAccessView: View {
     @Environment(LibraryStore.self) private var store
-    @State private var portField = ""
+    @State private var portField: String?
     @State private var copiedBlock: String?
+    @State private var showsPanels = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 heroCard
-                HStack(alignment: .top, spacing: 18) {
-                    quickstartCard
-                    promptCard
+                if showsPanels {
+                    panels
+                        .transition(.opacity)
+                } else {
+                    panelsSkeleton
                 }
-                HStack(alignment: .top, spacing: 18) {
-                    endpointsCard
-                    localCard
-                }
-                .padding(.bottom, 48)
             }
             .padding(.horizontal, 34)
             .padding(.top, 22)
@@ -27,31 +25,64 @@ struct AgentAccessView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.paper)
-        .onAppear { portField = "\(store.agentPort)" }
+        .onAppear {
+            if !showsPanels {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+                    showsPanels = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var panels: some View {
+        HStack(alignment: .top, spacing: 18) {
+            quickstartCard
+            promptCard
+        }
+        HStack(alignment: .top, spacing: 18) {
+            endpointsCard
+            localCard
+        }
+        .padding(.bottom, 48)
+    }
+
+    private var panelsSkeleton: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 18) {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Theme.parchment.opacity(0.55))
+                    .frame(height: 190)
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Theme.parchment.opacity(0.55))
+                    .frame(height: 190)
+            }
+            HStack(spacing: 18) {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Theme.parchment.opacity(0.55))
+                    .frame(height: 250)
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Theme.parchment.opacity(0.55))
+                    .frame(height: 250)
+            }
+            Color.clear.frame(height: 48)
+        }
+        .accessibilityHidden(true)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 7) {
-                Circle().fill(Theme.red).frame(width: 5, height: 5)
-                Text(T("AGENT ACCESS"))
-                    .font(.system(size: 9, weight: .bold))
-                    .tracking(1.6)
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(T("Give your agent eyes."))
+                    .font(.system(size: 35, weight: .bold))
+                    .tracking(-1.35)
+                    .foregroundStyle(Theme.ink)
+                Text(T("Every pin is a queryable JSON record with a direct image stream. Agents can read the library — and add new images — over the same loopback API."))
+                    .font(.system(size: 12.5))
                     .foregroundStyle(Theme.inkTertiary)
             }
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(T("Give your agent eyes."))
-                        .font(.system(size: 35, weight: .bold))
-                        .tracking(-1.35)
-                        .foregroundStyle(Theme.ink)
-                    Text(T("Every pin is a queryable JSON record with a direct image stream. Agents can read the library — and add new images — over the same loopback API."))
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.inkTertiary)
-                }
-                Spacer()
-                statusBadge
-            }
+            Spacer()
+            statusBadge
         }
     }
 
@@ -324,19 +355,24 @@ struct AgentAccessView: View {
                         .font(.system(size: 8, weight: .bold))
                         .tracking(1.1)
                         .foregroundStyle(Theme.inkTertiary)
-                    TextField("4242", text: $portField)
+                    TextField("4242", text: Binding(
+                        get: { portField ?? "\(store.agentPort)" },
+                        set: { portField = $0 }
+                    ))
                         .textFieldStyle(.plain)
                         .font(Theme.mono(11, weight: .medium))
                         .padding(.horizontal, 8)
                         .frame(width: 70, height: 28)
                         .background(RoundedRectangle(cornerRadius: 7).fill(Theme.parchment))
                     Button(T("Apply")) {
-                        if let value = UInt16(portField), value >= 1024 {
+                        let text = portField ?? String(store.agentPort)
+                        if let value = UInt16(text), value >= 1024 {
                             store.setAgentPort(value)
+                            portField = nil
                             store.showToast(TF("Agent API restarted on :%ld", Int(value)), icon: "arrow.triangle.2.circlepath")
                         } else {
                             store.showToast(T("Port must be 1024–65535"), icon: "exclamationmark.triangle")
-                            portField = "\(store.agentPort)"
+                            portField = nil
                         }
                     }
                     .buttonStyle(PointerPlainButtonStyle())

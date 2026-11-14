@@ -357,13 +357,11 @@ final class LibraryStore {
 
     func select(section newSection: LibrarySection) {
         endSelection()
-        withAnimation(.snappy(duration: 0.28)) {
-            section = newSection
-            if newSection != .all || selectedBoard != nil {
-                selectedBoard = nil
-            }
-            if newSection == .favorites { filter = .all }
+        section = newSection
+        if newSection != .all || selectedBoard != nil {
+            selectedBoard = nil
         }
+        if newSection == .favorites { filter = .all }
     }
 
     func select(board: String) {

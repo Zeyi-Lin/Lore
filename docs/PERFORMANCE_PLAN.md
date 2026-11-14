@@ -943,6 +943,7 @@ fs_usage -w -f filesys Canta
 | `docs/PERF_IMPROVEMENT_REPORT.md` | 本次优化报告（适合直接粘贴/导入飞书） |
 | `docs/Canta-交互性能优化报告.docx` | 同上的 Word 版，可在飞书知识库「导入」为文档 |
 | `docs/DETAIL_OPEN_LATENCY.md` | 详情打开延迟专项：分阶段探针、根因、P0–P2 实现与最终实测 |
+| `docs/AGENT_PAGE_LATENCY.md` | Agent 访问页切换专项：分段测量、分阶段渲染与最终实测 |
 | `scripts/perf-bench/run.sh` + `scripts/perf-bench/main.swift` | 可复现的 P0 前数据层基准（对照用） |
 | `scripts/perf-guard.sh` | P1 性能门禁：合成图库 + `--bench` JSON + 预算断言，1k/5k 均通过 |
 | 应用源码（P0 实施） | 数据层、卡片、网格、图片管线、持久化、启动、动效均已落地；新增 `Store/LibrarySnapshot.swift`、`Store/ImageLoader.swift`、`Store/LibraryWriter.swift`、`Store/CardThumbnailBackfill.swift`、`Performance/` |
