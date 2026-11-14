@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct PinDetailOverlay: View {
     let pin: Pin
@@ -9,6 +10,8 @@ struct PinDetailOverlay: View {
     @State private var showNewBoardField = false
     @State private var newBoardName = ""
     @State private var showBoardMenu = false
+    @State private var isImageMode = UserDefaults.standard.bool(forKey: "canta.debugLargeImage")
+    @State private var keyMonitor: Any?
 
     var body: some View {
         GeometryReader { geo in
@@ -16,43 +19,24 @@ struct PinDetailOverlay: View {
             let height = min(max(geo.size.height - 92, 540), 790)
 
             ZStack {
-                Color.black.opacity(0.42)
+                Color.black.opacity(isImageMode ? 0.86 : 0.42)
                     .background(.ultraThinMaterial)
                     .ignoresSafeArea()
-                    .onTapGesture { store.dismissDetail() }
-
-                HStack(spacing: 0) {
-                    imagePane
-                        .frame(width: width * 0.575)
-                    metaPane
-                        .frame(width: width * 0.425)
-                }
-                .frame(width: width, height: height)
-                .background(Theme.paper)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.34), radius: 48, x: 0, y: 26)
-                .overlay(alignment: .topTrailing) {
-                    Button {
-                        store.dismissDetail()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Theme.ink)
-                            .frame(width: 35, height: 35)
-                            .background(Circle().fill(Theme.paper))
-                            .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
-                            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                    .onTapGesture {
+                        if isImageMode {
+                            withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                        } else {
+                            store.dismissDetail()
+                        }
                     }
-                    .buttonStyle(PressableStyle())
-                    .offset(x: 13, y: -13)
-                    .help(T("Close"))
+
+                if isImageMode {
+                    imageOnlyLayer
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else {
+                    regularCard(width: width, height: height)
+                        .transition(.opacity)
                 }
-                .compositingGroup()
-                .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
 
                 if store.filteredPins.count > 1 {
                     HStack {
@@ -64,6 +48,11 @@ struct PinDetailOverlay: View {
                     }
                     .frame(width: geo.size.width)
                 }
+
+                if isImageMode {
+                    imageModeChrome
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -72,13 +61,162 @@ struct PinDetailOverlay: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 NSApp.keyWindow?.makeFirstResponder(nil)
             }
+            installKeyMonitor()
         }
-        .onExitCommand { store.dismissDetail() }
+        .onDisappear {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+                self.keyMonitor = nil
+            }
+        }
+        .onExitCommand {
+            if isImageMode {
+                withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+            } else {
+                store.dismissDetail()
+            }
+        }
         .alert(T("Delete this pin?"), isPresented: $showDeleteAlert) {
             Button(T("Delete"), role: .destructive) { store.deletePin(pin) }
             Button(T("Cancel"), role: .cancel) { }
         } message: {
             Text(T("The original image and its metadata will be removed from Canta."))
+        }
+    }
+
+    private func regularCard(width: CGFloat, height: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            imagePane
+                .frame(width: width * 0.575)
+            metaPane
+                .frame(width: width * 0.425)
+        }
+        .frame(width: width, height: height)
+        .background(Theme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.34), radius: 48, x: 0, y: 26)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                store.dismissDetail()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 35, height: 35)
+                    .background(Circle().fill(Theme.paper))
+                    .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            }
+            .buttonStyle(PressableStyle())
+            .offset(x: 13, y: -13)
+            .help(T("Close"))
+        }
+        .compositingGroup()
+        .contentShape(RoundedRectangle(cornerRadius: Theme.modalRadius, style: .continuous))
+    }
+
+    private var imageOnlyLayer: some View {
+        GeometryReader { proxy in
+            let fitted = fittedImageSize(in: CGSize(width: proxy.size.width - 130, height: proxy.size.height - 130))
+            LibraryImage(path: store.originalURL(for: pin).path, contentMode: .fit)
+                .frame(width: fitted.width, height: fitted.height)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.55), radius: 50, x: 0, y: 22)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                .onTapGesture(count: 2) {
+                    withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var imageModeChrome: some View {
+        ZStack {
+            VStack {
+                HStack {
+                    if let index = store.filteredPins.firstIndex(where: { $0.id == pin.id }) {
+                        Text("\(index + 1) / \(store.filteredPins.count)")
+                            .font(Theme.mono(10, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.72))
+                            .padding(.horizontal, 9)
+                            .frame(height: 26)
+                            .background(Capsule().fill(Color.black.opacity(0.32)))
+                    }
+                    Spacer()
+                    HStack(spacing: 10) {
+                        overlayCircleButton(icon: "arrow.down.right.and.arrow.up.left", help: T("Exit large image")) {
+                            withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                        }
+                        overlayCircleButton(icon: "xmark", help: T("Close")) {
+                            store.dismissDetail()
+                        }
+                    }
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 40)
+
+                Spacer()
+
+                Text(T("Use ← → to browse"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.52))
+                    .padding(.horizontal, 11)
+                    .frame(height: 25)
+                    .background(Capsule().fill(Color.black.opacity(0.28)))
+                    .padding(.bottom, 28)
+            }
+        }
+    }
+
+    private func overlayCircleButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.9))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.black.opacity(0.38)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(PressableStyle())
+        .help(help)
+    }
+
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
+            if let responder = NSApp.keyWindow?.firstResponder,
+               responder is NSTextView || responder is NSTextField {
+                return event
+            }
+            switch event.keyCode {
+            case 123:
+                guard store.filteredPins.count > 1 else { return event }
+                store.showAdjacentPin(offset: -1)
+                return nil
+            case 124:
+                guard store.filteredPins.count > 1 else { return event }
+                store.showAdjacentPin(offset: 1)
+                return nil
+            case 53:
+                if isImageMode {
+                    withAnimation(.snappy(duration: 0.24)) { isImageMode = false }
+                } else {
+                    store.dismissDetail()
+                }
+                return nil
+            default:
+                return event
+            }
         }
     }
 
@@ -110,6 +248,9 @@ struct PinDetailOverlay: View {
                     )
                     .shadow(color: .black.opacity(0.16), radius: 26, x: 0, y: 12)
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                    .onTapGesture(count: 2) {
+                        withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
+                    }
             }
             .padding(27)
 
@@ -208,6 +349,11 @@ struct PinDetailOverlay: View {
             boardMenu
 
             Spacer()
+
+            CircleActionButton(icon: "arrow.up.left.and.arrow.down.right", label: T("Large image"), size: 35) {
+                withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
+            }
+            .help(T("Large image"))
 
             CircleActionButton(icon: pin.isFavorite ? "heart.fill" : "heart", size: 35) {
                 store.toggleFavorite(pin)

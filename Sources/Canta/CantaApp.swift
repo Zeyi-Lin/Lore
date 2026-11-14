@@ -74,6 +74,15 @@ struct CantaApp: App {
             Button(T("Agent Access")) { store.select(section: .agent) }
                 .keyboardShortcut("4", modifiers: .command)
             Divider()
+            Button(store.isSelectingPins ? T("Exit selection") : T("Select pins")) {
+                if store.isSelectingPins {
+                    store.endSelection()
+                } else {
+                    store.beginSelection()
+                }
+            }
+            .keyboardShortcut("b", modifiers: .command)
+            Divider()
             Button(T("Copy Agent Context")) { store.copyAgentContext() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button(T("Open Data Folder")) { store.openDataFolder() }

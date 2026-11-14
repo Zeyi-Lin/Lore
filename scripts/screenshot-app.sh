@@ -6,6 +6,8 @@
 #   ./scripts/screenshot-app.sh agent
 #   ./scripts/screenshot-app.sh capture
 #   ./scripts/screenshot-app.sh detail "Aurora"
+#   ./scripts/screenshot-app.sh batch
+#   ./scripts/screenshot-app.sh large "Miso"
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -54,7 +56,13 @@ if [ "${FRESH_LIBRARY:-1}" = "1" ]; then
 fi
 
 defaults write studio.canta.library canta.debugHome -string "$HOME_DIR"
-defaults write studio.canta.library canta.debugShow -string "$MODE"
+if [ "$MODE" = "large" ]; then
+  defaults write studio.canta.library canta.debugShow -string detail
+  defaults write studio.canta.library canta.debugLargeImage -bool true
+else
+  defaults write studio.canta.library canta.debugShow -string "$MODE"
+  defaults delete studio.canta.library canta.debugLargeImage >/dev/null 2>&1 || true
+fi
 defaults write studio.canta.library canta.debugPin -string "$PIN_QUERY"
 if [ -n "$LANG_OVERRIDE" ]; then
   defaults write studio.canta.library canta.debugLanguage -string "$LANG_OVERRIDE"
@@ -93,6 +101,7 @@ defaults delete studio.canta.library canta.debugShow >/dev/null 2>&1 || true
 defaults delete studio.canta.library canta.debugHome >/dev/null 2>&1 || true
 defaults delete studio.canta.library canta.debugPin >/dev/null 2>&1 || true
 defaults delete studio.canta.library canta.debugLanguage >/dev/null 2>&1 || true
+defaults delete studio.canta.library canta.debugLargeImage >/dev/null 2>&1 || true
 
 echo "Captured $OUT"
 

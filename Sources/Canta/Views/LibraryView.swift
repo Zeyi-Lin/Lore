@@ -5,6 +5,26 @@ struct LibraryView: View {
     @State private var showSortMenu = false
 
     var body: some View {
+        libraryScroll
+            .overlay(alignment: .bottom) {
+                if store.isSelectingPins {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 20)
+                        BatchActionBar()
+                            .environmentObject(store)
+                        Spacer(minLength: 20)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 22)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(4)
+                }
+            }
+            .background(Theme.paper)
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: store.isSelectingPins)
+    }
+
+    private var libraryScroll: some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -52,9 +72,11 @@ struct LibraryView: View {
             }
             .onChange(of: store.currentListIdentity) { _, _ in
                 proxy.scrollTo("library-top", anchor: .top)
+                if store.isSelectingPins {
+                    store.clearSelection()
+                }
             }
         }
-        .background(Theme.paper)
     }
 
     private var header: some View {
@@ -85,8 +107,13 @@ struct LibraryView: View {
 
             Spacer(minLength: 12)
 
-            sortMenu
-                .padding(.bottom, 3)
+            HStack(spacing: 8) {
+                if !store.isSelectingPins {
+                    selectButton
+                }
+                sortMenu
+            }
+            .padding(.bottom, 3)
         }
     }
 
@@ -147,6 +174,30 @@ struct LibraryView: View {
 
             Spacer()
         }
+    }
+
+    private var selectButton: some View {
+        Button {
+            store.beginSelection()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(T("Select"))
+                    .font(.system(size: 11.5, weight: .semibold))
+            }
+            .foregroundStyle(Theme.inkSecondary)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(Capsule().fill(Theme.parchment))
+            .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .disabled(store.filteredPins.isEmpty)
+        .opacity(store.filteredPins.isEmpty ? 0.45 : 1)
+        .help(T("Select pins"))
     }
 
     private var sortMenu: some View {

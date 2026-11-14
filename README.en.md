@@ -21,6 +21,8 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **Agent-readable by default** — a read-only localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site.
+- **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once.
+- **Large image & keyboard browsing** — open a pin and switch to image-only mode; use ← / → to move between pins and Esc to go back.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
 
 ## Capture
@@ -33,6 +35,18 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | Capture a screen region | ⇧⌘2 |
 | Search pins | ⌘F |
 | Open Agent access | ⌘4 |
+| Select multiple cards | ⌘B |
+| Previous / next pin in detail | ← / → |
+| Enter image-only mode (detail) | Double-click image or click “Large image” |
+
+### Batch selection & large image
+
+<p align="center">
+  <img src="docs/screenshots/en/batch.png" width="49%" alt="Batch selection on cards" />
+  <img src="docs/screenshots/en/large.png" width="49%" alt="Image-only large mode" />
+</p>
+
+In selection mode, cards get a check circle and the bottom bar can select all, favorite, move to a board, copy agent context, or delete in one action. In any pin detail, click **Large image** or double-click the image for an image-only view; use ← / → to move between pins and Esc to go back.
 
 ![Quick capture sheet](docs/screenshots/en/capture.png)
 

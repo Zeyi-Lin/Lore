@@ -42,7 +42,7 @@ struct RootView: View {
                 VStack {
                     Spacer()
                     ToastView(toast: toast)
-                        .padding(.bottom, 28)
+                        .padding(.bottom, store.isSelectingPins ? 100 : 28)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .allowsHitTesting(false)
@@ -68,6 +68,8 @@ struct RootView: View {
                 store.dismissDetail()
             } else if store.capturePresented {
                 withAnimation(.easeOut(duration: 0.18)) { store.capturePresented = false }
+            } else if store.isSelectingPins {
+                store.endSelection()
             } else if !store.searchText.isEmpty {
                 store.searchText = ""
             }
@@ -92,6 +94,12 @@ struct RootView: View {
             store.select(section: .agent)
         case "capture":
             store.capturePresented = true
+        case "batch":
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let ids = Set(store.filteredPins.prefix(4).map(\.id))
+                store.beginSelection()
+                store.selectedPinIDs = ids
+            }
         case "detail":
             if let query = UserDefaults.standard.string(forKey: "canta.debugPin"),
                let pin = store.pins.first(where: { $0.title.localizedCaseInsensitiveContains(query) }) {

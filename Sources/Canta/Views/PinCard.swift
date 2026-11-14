@@ -13,15 +13,21 @@ struct PinCard: View {
             caption
         }
         .contentShape(Rectangle())
-        .onTapGesture { store.openDetail(pin) }
+        .onTapGesture {
+            if store.isSelectingPins {
+                store.toggleSelection(pin.id)
+            } else {
+                store.openDetail(pin)
+            }
+        }
         .onHover { value in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
                 hovering = value
             }
         }
         .contextMenu { contextMenu }
-        .scaleEffect(hovering ? 1.006 : 1)
-        .shadow(color: .black.opacity(hovering ? 0.12 : 0), radius: 20, x: 0, y: 10)
+        .scaleEffect(hovering && !store.isSelectingPins ? 1.006 : 1)
+        .shadow(color: .black.opacity(hovering && !store.isSelectingPins ? 0.12 : 0), radius: 20, x: 0, y: 10)
     }
 
     private var image: some View {
@@ -35,19 +41,55 @@ struct PinCard: View {
                 RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.055), lineWidth: 1)
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                    .strokeBorder(store.isSelectingPins && isSelected ? Theme.red : Color.clear, lineWidth: 3)
+            }
+            .overlay(alignment: .topLeading) {
+                if store.isSelectingPins {
+                    selectionBadge
+                        .padding(10)
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 saveButton
                     .padding(10)
-                    .opacity(hovering ? 1 : 0)
+                    .opacity(store.isSelectingPins ? 0 : (hovering ? 1 : 0))
                     .scaleEffect(hovering ? 1 : 0.9, anchor: .topTrailing)
+                    .allowsHitTesting(!store.isSelectingPins)
             }
             .overlay(alignment: .bottomLeading) {
                 metadataPill
                     .padding(10)
-                    .opacity(hovering ? 1 : 0)
+                    .opacity(store.isSelectingPins ? 0 : (hovering ? 1 : 0))
                     .offset(y: hovering ? 0 : 5)
             }
+            .opacity(store.isSelectingPins && !isSelected ? 0.86 : 1)
             .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+    }
+
+    private var isSelected: Bool {
+        store.selectedPinIDs.contains(pin.id)
+    }
+
+    private var selectionBadge: some View {
+        ZStack {
+            Circle()
+                .fill(isSelected ? Theme.red : Color.white.opacity(0.94))
+                .frame(width: 25, height: 25)
+                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.white)
+            } else {
+                Circle()
+                    .strokeBorder(Theme.ink.opacity(0.16), lineWidth: 1)
+                    .frame(width: 25, height: 25)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var saveButton: some View {

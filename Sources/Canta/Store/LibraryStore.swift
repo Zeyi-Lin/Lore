@@ -13,6 +13,8 @@ final class LibraryStore: ObservableObject {
     @Published var filter: GalleryFilter = .all
     @Published var sort: PinSort = .recent
     @Published var selectedPinID: UUID?
+    @Published var isSelectingPins = false
+    @Published var selectedPinIDs: Set<UUID> = []
     @Published var capturePresented = false
     @Published var isImporting = false
     @Published var toast: ToastMessage?
@@ -70,6 +72,18 @@ final class LibraryStore: ObservableObject {
     var selectedPin: Pin? {
         guard let selectedPinID else { return nil }
         return pins.first { $0.id == selectedPinID }
+    }
+
+    var selectedPins: [Pin] {
+        filteredPins.filter { selectedPinIDs.contains($0.id) }
+    }
+
+    var allVisibleSelected: Bool {
+        !filteredPins.isEmpty && filteredPins.allSatisfy { selectedPinIDs.contains($0.id) }
+    }
+
+    var selectedPinsAreFavorites: Bool {
+        !selectedPins.isEmpty && selectedPins.allSatisfy(\.isFavorite)
     }
 
     var filteredPins: [Pin] {
@@ -212,6 +226,7 @@ final class LibraryStore: ObservableObject {
     // MARK: - Navigation
 
     func select(section newSection: LibrarySection) {
+        endSelection()
         withAnimation(.snappy(duration: 0.28)) {
             section = newSection
             if newSection != .all || selectedBoard != nil {
@@ -222,6 +237,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func select(board: String) {
+        endSelection()
         withAnimation(.snappy(duration: 0.28)) {
             section = .all
             selectedBoard = board
@@ -230,6 +246,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func openDetail(_ pin: Pin) {
+        if isSelectingPins { endSelection() }
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
             selectedPinID = pin.id
         }
@@ -250,6 +267,114 @@ final class LibraryStore: ObservableObject {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
             selectedPinID = list[nextIndex].id
         }
+    }
+
+    // MARK: - Batch selection
+
+    func beginSelection() {
+        withAnimation(.snappy(duration: 0.24)) {
+            isSelectingPins = true
+            selectedPinIDs.removeAll()
+            selectedPinID = nil
+        }
+    }
+
+    func endSelection() {
+        guard isSelectingPins || !selectedPinIDs.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.24)) {
+            isSelectingPins = false
+            selectedPinIDs.removeAll()
+        }
+    }
+
+    func toggleSelection(_ pinID: UUID) {
+        withAnimation(.snappy(duration: 0.18)) {
+            if selectedPinIDs.contains(pinID) {
+                selectedPinIDs.remove(pinID)
+            } else {
+                selectedPinIDs.insert(pinID)
+            }
+        }
+    }
+
+    func selectAllVisible() {
+        withAnimation(.snappy(duration: 0.2)) {
+            selectedPinIDs = Set(filteredPins.map(\.id))
+        }
+    }
+
+    func clearSelection() {
+        withAnimation(.snappy(duration: 0.18)) {
+            selectedPinIDs.removeAll()
+        }
+    }
+
+    func setFavorite(_ favorite: Bool, for pinIDs: Set<UUID>) {
+        var changed = 0
+        for index in pins.indices where pinIDs.contains(pins[index].id) {
+            if pins[index].isFavorite != favorite {
+                pins[index].isFavorite = favorite
+                pins[index].updatedAt = Date()
+                changed += 1
+            }
+        }
+        guard changed > 0 else {
+            showToast(favorite ? T("Saved to favorites") : T("Removed from favorites"), icon: favorite ? "heart.fill" : "heart")
+            return
+        }
+        persist()
+        let message = favorite
+            ? TF("%ld pins added to favorites", changed)
+            : TF("%ld pins removed from favorites", changed)
+        showToast(message, icon: favorite ? "heart.fill" : "heart")
+    }
+
+    func toggleSelectedFavorites() {
+        guard !selectedPins.isEmpty else { return }
+        setFavorite(!selectedPinsAreFavorites, for: selectedPinIDs)
+    }
+
+    func moveSelectedPins(toBoard board: String) {
+        let ids = selectedPinIDs
+        guard !ids.isEmpty else { return }
+        let clean = board.trimmed.nilIfEmpty ?? "Unsorted"
+        var changed = 0
+        for index in pins.indices where ids.contains(pins[index].id) {
+            pins[index].board = clean
+            pins[index].updatedAt = Date()
+            changed += 1
+        }
+        persist()
+        showToast(TF("%ld pins moved to %@", changed, localizedBoard(clean)), icon: "folder")
+        endSelection()
+    }
+
+    func deleteSelectedPins() {
+        let ids = selectedPinIDs
+        let targets = pins.filter { ids.contains($0.id) }
+        guard !targets.isEmpty else { return }
+        let fm = FileManager.default
+        for pin in targets {
+            try? fm.removeItem(at: root.appendingPathComponent(pin.image))
+            if let thumbnail = pin.thumbnail {
+                try? fm.removeItem(at: root.appendingPathComponent(thumbnail))
+            }
+        }
+        pins.removeAll { ids.contains($0.id) }
+        if let selectedPinID, ids.contains(selectedPinID) { self.selectedPinID = nil }
+        persist()
+        showToast(TF("%ld pins deleted", targets.count), icon: "trash")
+        endSelection()
+    }
+
+    func copySelectedAgentContext() {
+        let chosen = selectedPins
+        guard !chosen.isEmpty else { return }
+        copyText(
+            agentContext(includePins: chosen),
+            message: TF("%ld pins copied as agent context", chosen.count),
+            icon: "sparkles"
+        )
     }
 
     // MARK: - Mutations
