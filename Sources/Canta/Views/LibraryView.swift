@@ -42,6 +42,7 @@ struct MasonryColumns<Card: View>: View {
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var store
+    @Environment(\.cantaContentWidth) private var contentWidth
     @State private var showSortMenu = false
     @State private var gridWidth: CGFloat = 1080
     @State private var pendingDeleteID: UUID?
@@ -147,7 +148,11 @@ struct LibraryView: View {
     }
 
     private var grid: some View {
-        let available = max(gridWidth, 240)
+        // Prefer the exact main-column width. The gridWidth preference can
+        // trail behind a live window resize, which made the masonry keep the
+        // old column count for a moment (and could overflow into the sidebar).
+        let measuredWidth = contentWidth > 0 ? contentWidth : gridWidth
+        let available = max(measuredWidth - 68, 240)
         let columns = store.columns(forWidth: available)
         let spacing = store.cardColumnSpacing
         let columnWidth = MasonryComposer.columnWidth(

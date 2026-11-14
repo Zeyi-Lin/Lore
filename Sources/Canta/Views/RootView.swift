@@ -11,14 +11,22 @@ struct RootView: View {
             Theme.paper
                 .ignoresSafeArea()
 
-            HStack(spacing: 0) {
-                SidebarView()
+            GeometryReader { geometry in
+                let sidebarWidth: CGFloat = 246
+                let contentWidth = max(geometry.size.width - sidebarWidth, 0)
+                HStack(spacing: 0) {
+                    SidebarView()
+                        .frame(width: sidebarWidth)
 
-                VStack(spacing: 0) {
-                    TopBarView()
-                    content
+                    VStack(spacing: 0) {
+                        TopBarView()
+                        content
+                    }
+                    .frame(width: contentWidth, height: geometry.size.height, alignment: .topLeading)
+                    .clipped()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+                .environment(\.cantaContentWidth, contentWidth)
             }
 
             if dropTargeted {
