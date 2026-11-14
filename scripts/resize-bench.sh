@@ -25,27 +25,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-APP="$PWD/dist/Lora.app"
-if [ "$BUILD" = "1" ] || [ ! -x "$APP/Contents/MacOS/Lora" ]; then
+APP="$PWD/dist/Lore.app"
+if [ "$BUILD" = "1" ] || [ ! -x "$APP/Contents/MacOS/Lore" ]; then
   ./scripts/build-app.sh release
 fi
 
-if pgrep -x Lora >/dev/null 2>&1; then
-  echo "resize-bench: quit Lora first (the benchmark drives its own window)" >&2
+if pgrep -x Lore >/dev/null 2>&1; then
+  echo "resize-bench: quit Lore first (the benchmark drives its own window)" >&2
   exit 2
 fi
 
 HOME_DIR="$PWD/.build/resize-bench/library-$PINS"
 rm -rf "$HOME_DIR"
 mkdir -p "$HOME_DIR"
-cp -R Sources/Lora/Resources/Seed/Images "$HOME_DIR/Images"
-cp -R Sources/Lora/Resources/Seed/Thumbnails "$HOME_DIR/Thumbnails"
+cp -R Sources/Lore/Resources/Seed/Images "$HOME_DIR/Images"
+cp -R Sources/Lore/Resources/Seed/Thumbnails "$HOME_DIR/Thumbnails"
 python3 - "$PINS" "$HOME_DIR/library.json" <<'PY'
 import json, os, sys, uuid, datetime
 
 count = int(sys.argv[1])
 out = sys.argv[2]
-seed = json.load(open("Sources/Lora/Resources/Seed/seed.json"))["pins"]
+seed = json.load(open("Sources/Lore/Resources/Seed/seed.json"))["pins"]
 order = sorted(seed, key=lambda p: p["createdAt"])
 boards = ["Web dashboards", "Mobile flows", "Landing pages", "Editorial", "Linear/Settings"]
 start = datetime.datetime(2026, 11, 13, 9, 12, 0)
@@ -81,19 +81,19 @@ PY
 # is the only reliable way to get a window when the session is busy. stdout is
 # not connected in that case, so the app mirrors its report to a file.
 quit_app() {
-  pkill -f "Lora --resize-bench" 2>/dev/null || true
-  pkill -x Lora 2>/dev/null || true
+  pkill -f "Lore --resize-bench" 2>/dev/null || true
+  pkill -x Lore 2>/dev/null || true
   for _ in $(seq 1 20); do
-    pgrep -x Lora >/dev/null 2>&1 || break
+    pgrep -x Lore >/dev/null 2>&1 || break
     sleep 0.2
   done
   sleep 2
 }
 
 run_launchservices() {
-  local out="${TMPDIR:-/tmp}/lora-resize-bench-$$.log"
+  local out="${TMPDIR:-/tmp}/lore-resize-bench-$$.log"
   rm -f "$out"
-  open -n "$APP" --args --resize-bench -lora.debugHome "$HOME_DIR" -lora.benchOutput "$out"
+  open -n "$APP" --args --resize-bench -lore.debugHome "$HOME_DIR" -lore.benchOutput "$out"
   for _ in $(seq 1 150); do
     [ -s "$out" ] && break
     sleep 1
@@ -103,9 +103,9 @@ run_launchservices() {
 }
 
 run_direct() {
-  local out="${TMPDIR:-/tmp}/lora-resize-bench-direct-$$.log"
+  local out="${TMPDIR:-/tmp}/lore-resize-bench-direct-$$.log"
   : >"$out"
-  "$APP/Contents/MacOS/Lora" --resize-bench -lora.debugHome "$HOME_DIR" >"$out" 2>&1 &
+  "$APP/Contents/MacOS/Lore" --resize-bench -lore.debugHome "$HOME_DIR" >"$out" 2>&1 &
   local pid=$!
   for _ in $(seq 1 150); do
     grep -q "RESIZE_BENCH grid-relayouts" "$out" && break

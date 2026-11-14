@@ -10,9 +10,9 @@ cd "$(dirname "$0")/.."
 PINS=1000
 if [ "${1:-}" = "--pins" ]; then PINS="${2:-1000}"; fi
 
-APP="$PWD/dist/Lora.app/Contents/MacOS/Lora"
+APP="$PWD/dist/Lore.app/Contents/MacOS/Lore"
 if [ ! -x "$APP" ]; then
-  APP="$PWD/.build/arm64-apple-macosx/release/Lora"
+  APP="$PWD/.build/arm64-apple-macosx/release/Lore"
 fi
 if [ ! -x "$APP" ]; then
   echo "Build the app first: ./scripts/build-app.sh release" >&2
@@ -49,7 +49,7 @@ for i in range(count):
 json.dump({"version": 1, "pins": pins}, open(out, "w"))
 PY
 
-OUTPUT=$(LORA_HOME="$HOME_DIR" LORA_BENCH_JSON=1 "$APP" --bench 2>/dev/null | grep '^LORA_BENCH_JSON ' | head -1 | sed 's/^LORA_BENCH_JSON //')
+OUTPUT=$(LORE_HOME="$HOME_DIR" LORE_BENCH_JSON=1 "$APP" --bench 2>/dev/null | grep '^LORE_BENCH_JSON ' | head -1 | sed 's/^LORE_BENCH_JSON //')
 if [ -z "${OUTPUT:-}" ]; then
   echo "perf-guard: benchmark produced no JSON output" >&2
   exit 3

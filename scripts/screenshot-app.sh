@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Capture a window screenshot of Lora in a deterministic state.
+# Capture a window screenshot of Lore in a deterministic state.
 # Usage:
 #   ./scripts/screenshot-app.sh gallery
 #   ./scripts/screenshot-app.sh agent
@@ -17,8 +17,8 @@ MODE="${1:-gallery}"
 PIN_QUERY="${2:-Aurora}"
 LANG_OVERRIDE="${SCREENSHOT_LANG:-}"
 OUT="${3:-docs/screenshots/${MODE}.png}"
-HOME_DIR="${LORA_SCREENSHOT_HOME:-$PWD/.build/screenshot-library}"
-APP="$PWD/dist/Lora.app"
+HOME_DIR="${LORE_SCREENSHOT_HOME:-$PWD/.build/screenshot-library}"
+APP="$PWD/dist/Lore.app"
 
 mkdir -p docs/screenshots artifacts
 
@@ -41,13 +41,13 @@ SWIFT
   swiftc -target arm64-apple-macosx14.0 .build/tools/move-cursor.swift -o .build/tools/move-cursor
 fi
 
-pkill -x Lora >/dev/null 2>&1 || true
+pkill -x Lore >/dev/null 2>&1 || true
 for _ in $(seq 1 25); do
-  pgrep -x Lora >/dev/null 2>&1 || break
+  pgrep -x Lore >/dev/null 2>&1 || break
   sleep 0.2
 done
-if pgrep -x Lora >/dev/null 2>&1; then
-  pkill -9 -x Lora >/dev/null 2>&1 || true
+if pgrep -x Lore >/dev/null 2>&1; then
+  pkill -9 -x Lore >/dev/null 2>&1 || true
   sleep 0.5
 fi
 
@@ -56,59 +56,59 @@ if [ "${FRESH_LIBRARY:-1}" = "1" ]; then
   rm -rf "$HOME_DIR"
 fi
 
-defaults write studio.lora.library lora.debugHome -string "$HOME_DIR"
+defaults write studio.lore.library lore.debugHome -string "$HOME_DIR"
 if [ "$MODE" = "large" ]; then
-  defaults write studio.lora.library lora.debugShow -string detail
-  defaults write studio.lora.library lora.debugLargeImage -bool true
+  defaults write studio.lore.library lore.debugShow -string detail
+  defaults write studio.lore.library lore.debugLargeImage -bool true
 else
-  defaults write studio.lora.library lora.debugShow -string "$MODE"
-  defaults delete studio.lora.library lora.debugLargeImage >/dev/null 2>&1 || true
+  defaults write studio.lore.library lore.debugShow -string "$MODE"
+  defaults delete studio.lore.library lore.debugLargeImage >/dev/null 2>&1 || true
 fi
-defaults write studio.lora.library lora.debugPin -string "$PIN_QUERY"
+defaults write studio.lore.library lore.debugPin -string "$PIN_QUERY"
 if [ -n "$LANG_OVERRIDE" ]; then
-  defaults write studio.lora.library lora.debugLanguage -string "$LANG_OVERRIDE"
+  defaults write studio.lore.library lore.debugLanguage -string "$LANG_OVERRIDE"
 else
-  defaults delete studio.lora.library lora.debugLanguage >/dev/null 2>&1 || true
+  defaults delete studio.lore.library lore.debugLanguage >/dev/null 2>&1 || true
 fi
 
 open -n "$APP"
 sleep 7
 
-# Bring Lora forward (colored window controls) without spawning another instance.
-if [ -x .build/tools/activate-lora ]; then
-  .build/tools/activate-lora >/dev/null 2>&1 || true
+# Bring Lore forward (colored window controls) without spawning another instance.
+if [ -x .build/tools/activate-lore ]; then
+  .build/tools/activate-lore >/dev/null 2>&1 || true
 fi
-osascript -e 'tell application "Lora" to activate' >/dev/null 2>&1 || true
+osascript -e 'tell application "Lore" to activate' >/dev/null 2>&1 || true
 .build/tools/move-cursor >/dev/null 2>&1 || true
 sleep 1.5
 
-if [ "$(pgrep -x Lora | wc -l | tr -d ' ')" != "1" ]; then
-  echo "Expected exactly one Lora process before capture" >&2
+if [ "$(pgrep -x Lore | wc -l | tr -d ' ')" != "1" ]; then
+  echo "Expected exactly one Lore process before capture" >&2
   exit 1
 fi
 
 if [ "$MODE" = "settings" ]; then
-  # The Settings panel is the narrowest Lora window; the main gallery is wide.
-  WINDOW_ID="$(.build/tools/window-id Lora | awk '{print $2"\t"$1}' | sort -t x -k1n | head -1 | awk -F '\t' '{print $2}')"
+  # The Settings panel is the narrowest Lore window; the main gallery is wide.
+  WINDOW_ID="$(.build/tools/window-id Lore | awk '{print $2"\t"$1}' | sort -t x -k1n | head -1 | awk -F '\t' '{print $2}')"
 else
-  WINDOW_ID="$(.build/tools/window-id Lora | head -1 | awk '{print $1}')"
+  WINDOW_ID="$(.build/tools/window-id Lore | head -1 | awk '{print $1}')"
 fi
 if [ -z "${WINDOW_ID:-}" ]; then
-  echo "Lora window not found" >&2
-  defaults delete studio.lora.library lora.debugShow >/dev/null 2>&1 || true
-  defaults delete studio.lora.library lora.debugHome >/dev/null 2>&1 || true
-  defaults delete studio.lora.library lora.debugPin >/dev/null 2>&1 || true
+  echo "Lore window not found" >&2
+  defaults delete studio.lore.library lore.debugShow >/dev/null 2>&1 || true
+  defaults delete studio.lore.library lore.debugHome >/dev/null 2>&1 || true
+  defaults delete studio.lore.library lore.debugPin >/dev/null 2>&1 || true
   exit 1
 fi
 
 screencapture -x -o -l "$WINDOW_ID" "$OUT"
 
-defaults delete studio.lora.library lora.debugShow >/dev/null 2>&1 || true
-defaults delete studio.lora.library lora.debugHome >/dev/null 2>&1 || true
-defaults delete studio.lora.library lora.debugPin >/dev/null 2>&1 || true
-defaults delete studio.lora.library lora.debugLanguage >/dev/null 2>&1 || true
-defaults delete studio.lora.library lora.debugLargeImage >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugShow >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugHome >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugPin >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugLanguage >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugLargeImage >/dev/null 2>&1 || true
 
 echo "Captured $OUT"
 
-pkill -x Lora >/dev/null 2>&1 || true
+pkill -x Lore >/dev/null 2>&1 || true

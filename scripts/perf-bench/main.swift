@@ -7,7 +7,7 @@ setvbuf(stdout, nil, _IONBF, 0)
 var globalChecksum = 0
 
 // ============================================================================
-// Lora interaction-cost benchmark — pre-optimization baseline.
+// Lore interaction-cost benchmark — pre-optimization baseline.
 //
 // This harness preserves the v1 algorithms (filtering / summarising /
 // persistence) verbatim so the before/after numbers in
@@ -284,7 +284,7 @@ final class GalleryProjection {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence, verbatim encoder settings (LoraPaths.swift:45)
+// Persistence, verbatim encoder settings (LorePaths.swift:45)
 // ---------------------------------------------------------------------------
 
 let iso8601: ISO8601DateFormatter = {
@@ -301,12 +301,12 @@ let prettyEncoder: JSONEncoder = {
 
 func measurePersistence(_ pins: [Pin]) {
     section("Persistence — runs on the main actor on every mutation AND every keystroke")
-    let library = LoraLibrary(version: 1, pins: pins)
+    let library = LoreLibrary(version: 1, pins: pins)
     var data = Data()
     let encode = bench("JSONEncoder (.prettyPrinted + .sortedKeys), N=\(pins.count)") {
         data = (try? prettyEncoder.encode(library)) ?? Data()
     }
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("lora-bench-library.json")
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("lore-bench-library.json")
     let write = bench("Data.write(.atomic)") { try? data.write(to: url, options: .atomic) }
     bench("full persist() = encode + atomic write") {
         if let encoded = try? prettyEncoder.encode(library) { try? encoded.write(to: url, options: .atomic) }
@@ -321,15 +321,15 @@ func measureKeystroke(_ pins: [Pin]) {
     var store = StoreLogic(pins: pins)
     store.searchText = "dark ui"
     let filter = bench("filteredPins(search) per keystroke") { _ = store.filteredPins }
-    let library = LoraLibrary(version: 1, pins: pins)
+    let library = LoreLibrary(version: 1, pins: pins)
     let persist = bench("persist() per keystroke") {
         if let data = try? prettyEncoder.encode(library) {
-            try? data.write(to: URL(fileURLWithPath: "/tmp/lora-keystroke.json"), options: .atomic)
+            try? data.write(to: URL(fileURLWithPath: "/tmp/lore-keystroke.json"), options: .atomic)
         }
     }
     print(String(format: "    search keystroke: %.1f ms data work (before SwiftUI re-renders N cards)", filter))
     print(String(format: "    title/note keystroke: %.1f ms MAIN-THREAD disk write (before re-render)", persist))
-    try? FileManager.default.removeItem(atPath: "/tmp/lora-keystroke.json")
+    try? FileManager.default.removeItem(atPath: "/tmp/lore-keystroke.json")
 }
 
 let realDecoder: JSONDecoder = {
@@ -344,10 +344,10 @@ let realDecoder: JSONDecoder = {
 }()
 
 func measureDecode(_ pins: [Pin]) {
-    section("Load / reload — LoraJSON.decoder on the main actor (launch, agent writes)")
-    let data = (try? prettyEncoder.encode(LoraLibrary(version: 1, pins: pins))) ?? Data()
+    section("Load / reload — LoreJSON.decoder on the main actor (launch, agent writes)")
+    let data = (try? prettyEncoder.encode(LoreLibrary(version: 1, pins: pins))) ?? Data()
     bench("JSONDecoder, N=\(pins.count) (\(data.count / 1024) KB)") {
-        _ = try? realDecoder.decode(LoraLibrary.self, from: data)
+        _ = try? realDecoder.decode(LoreLibrary.self, from: data)
     }
     bench("ISO8601DateFormatter parse × \(pins.count * 2) dates") {
         for _ in 0..<(pins.count * 2) { _ = iso8601.date(from: "2026-11-13T09:12:00Z") }
@@ -356,7 +356,7 @@ func measureDecode(_ pins: [Pin]) {
 
 func measureThumbnailURL(_ pins: [Pin]) {
     section("Card body plumbing — thumbnailURL(for:) is computed per card, per body pass")
-    let root = URL(fileURLWithPath: "/Users/zeyilin/Library/Application Support/Lora", isDirectory: true)
+    let root = URL(fileURLWithPath: "/Users/zeyilin/Library/Application Support/Lore", isDirectory: true)
     let fm = FileManager.default
     bench("fileExists + URL path × \(pins.count)") {
         for pin in pins {
@@ -368,7 +368,7 @@ func measureThumbnailURL(_ pins: [Pin]) {
 
 func measureStat() {
     section("thumbnailURL(for:) — FileManager.fileExists on every access, main thread")
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lora-stat-bench", isDirectory: true)
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lore-stat-bench", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     var urls: [URL] = []
     for i in 0..<2000 {
@@ -470,7 +470,7 @@ func draw(_ image: NSImage, width: Int, height: Int) {
 
 func measureImages() {
     section("Image pipeline")
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lora-image-bench", isDirectory: true)
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lore-image-bench", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let pngURL = dir.appendingPathComponent("original-3200x2400.png")
     let jpgURL = dir.appendingPathComponent("thumb-1200x900.jpg")
@@ -565,7 +565,7 @@ func measureImages() {
 // Run
 // ---------------------------------------------------------------------------
 
-print("Lora interaction-cost benchmark — \(ProcessInfo.processInfo.operatingSystemVersionString)")
+print("Lore interaction-cost benchmark — \(ProcessInfo.processInfo.operatingSystemVersionString)")
 print("synthetic library; per-call best-of-11; 16.7 ms = one 60 Hz frame\n")
 
 section("Current filteredPins — computed property re-read several times per body pass")

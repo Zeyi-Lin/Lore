@@ -14,23 +14,23 @@ swift build \
   --cache-path .build/spm-cache \
   --scratch-path .build \
   -c "$CONFIG" \
-  --product Lora
+  --product Lore
 
 ARCH_DIR=".build/arm64-apple-macosx/$CONFIG"
-BINARY="$ARCH_DIR/Lora"
-BUNDLE="$ARCH_DIR/Lora_Lora.bundle"
+BINARY="$ARCH_DIR/Lore"
+BUNDLE="$ARCH_DIR/Lore_Lore.bundle"
 
-APP="dist/Lora.app"
+APP="dist/Lore.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BINARY" "$APP/Contents/MacOS/Lora"
+cp "$BINARY" "$APP/Contents/MacOS/Lore"
 if [ -d "$BUNDLE" ]; then
-  cp -R "$BUNDLE" "$APP/Contents/Resources/Lora_Lora.bundle"
+  cp -R "$BUNDLE" "$APP/Contents/Resources/Lore_Lore.bundle"
 fi
 
 # App icon (built from the designed 1024 master when available)
-ICON_MASTER="Sources/Lora/Resources/AppIcon/icon_1024.png"
+ICON_MASTER="Sources/Lore/Resources/AppIcon/icon_1024.png"
 if [ -f "$ICON_MASTER" ]; then
   ICONSET=".build/AppIcon.iconset"
   rm -rf "$ICONSET"
@@ -49,20 +49,31 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>Lora</string>
-    <key>CFBundleExecutable</key><string>Lora</string>
+    <key>CFBundleDisplayName</key><string>Lore</string>
+    <key>CFBundleExecutable</key><string>Lore</string>
     <key>CFBundleIconFile</key><string>appicon</string>
-    <key>CFBundleIdentifier</key><string>studio.lora.library</string>
+    <key>CFBundleIdentifier</key><string>studio.lore.library</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>Lora</string>
+    <key>CFBundleName</key><string>Lore</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSHumanReadableCopyright</key><string>Lora — a visual library for humans and their agents.</string>
+    <key>NSHumanReadableCopyright</key><string>Lore — a visual library for humans and their agents.</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <!-- Private drag payload for sidebar rows and gallery cards. Declaring it
+         keeps foreign drops (plain text from other apps) from matching a board
+         row, and lets the system show a sane drag image. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+      <dict>
+        <key>UTTypeIdentifier</key><string>studio.lore.sidebar-drag</string>
+        <key>UTTypeDescription</key><string>Lore drag</string>
+        <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+      </dict>
+    </array>
 </dict>
 </plist>
 PLIST

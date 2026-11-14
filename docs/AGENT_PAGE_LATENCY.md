@@ -64,7 +64,7 @@
 3. **去掉 section 切换动画**：`select(section:)` 不再包 `withAnimation(.snappy(0.28))`，页面瞬时出现；230–280 ms 的淡入消失。
 4. 保留 hero 的渐变与模糊（实测不是瓶颈），保留所有卡片内容与端口编辑功能。
 
-文件：`Sources/Lora/Views/AgentAccessView.swift`、`Sources/Lora/Store/LibraryStore.swift`。
+文件：`Sources/Lore/Views/AgentAccessView.swift`、`Sources/Lore/Store/LibraryStore.swift`。
 
 ---
 

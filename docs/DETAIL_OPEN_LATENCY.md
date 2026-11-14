@@ -182,7 +182,7 @@ if isEditingTitle {
 
 ## 6. 验收指标
 
-用同一个 `--detail-probe`（建议做成常驻 signpost `lora.detail.open`）：
+用同一个 `--detail-probe`（建议做成常驻 signpost `lore.detail.open`）：
 
 | 指标 | 目标 |
 |---|---:|
@@ -245,4 +245,4 @@ if isEditingTitle {
 
 - **已做**：图片窗格扁平化、首开预热。
 - **未做**：独立 `NSPanel` 详情窗口。P0–P2 后首次首帧已 ≤45 ms、warm ≤24 ms，独立窗口的焦点/键盘/关闭行为改造风险大于收益；保留为后续可选方案。
-- 诊断用的 `--detail-probe`、变体开关、探针标记均已移除；`dist/Lora.app` 已按清理后的代码重新构建。
+- 诊断用的 `--detail-probe`、变体开关、探针标记均已移除；`dist/Lore.app` 已按清理后的代码重新构建。
