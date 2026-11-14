@@ -27,7 +27,7 @@ struct AgentAccessView: View {
             }
             .padding(.horizontal, 34)
             .padding(.top, 22)
-            .frame(maxWidth: 1120)
+            .frame(maxWidth: 1320)
             .frame(maxWidth: .infinity)
         }
         .background(Theme.paper)

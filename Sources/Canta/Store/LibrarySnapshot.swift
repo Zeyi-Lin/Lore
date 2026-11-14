@@ -354,8 +354,8 @@ final class GalleryProjection {
 enum MasonryComposer {
     static func columnCount(
         width: CGFloat,
-        minColumnWidth: CGFloat = 238,
-        maxColumns: Int = 5,
+        minColumnWidth: CGFloat = 220,
+        maxColumns: Int = 8,
         spacing: CGFloat = 20
     ) -> Int {
         guard width.isFinite, width > 0 else { return 2 }
