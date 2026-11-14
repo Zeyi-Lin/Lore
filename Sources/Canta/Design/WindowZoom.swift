@@ -24,12 +24,21 @@ enum WindowZoom {
 
         let key = window.windowNumber
         if let saved = savedFrames.removeValue(forKey: key) {
-            window.setFrame(saved, display: true, animate: true)
+            apply(saved, to: window)
             return
         }
 
         guard let screen = window.screen ?? NSScreen.main else { return }
         savedFrames[key] = window.frame
-        window.setFrame(screen.visibleFrame, display: true, animate: true)
+        apply(screen.visibleFrame, to: window)
+    }
+
+    private static func apply(_ frame: NSRect, to window: NSWindow) {
+        // Snap rather than animate: a live window-frame animation can leave the
+        // SwiftUI hosting view mid-reflow (especially on Retina displays).
+        window.setFrame(frame, display: true, animate: false)
+        window.contentView?.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
     }
 }
