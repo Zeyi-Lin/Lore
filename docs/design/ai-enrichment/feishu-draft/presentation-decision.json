@@ -1,0 +1,1 @@
+{"audience":"产品负责人、macOS 客户端工程师、设计师","reader_task":"判断方案是否可行，并据此排期实现","presentation_mode":"rich","visual_plan":{"reason":"需要架构、时序和界面三张图分别解释系统边界、写入时序与交互","blocks":[{"type":"img","min_count":3,"purpose":"架构图、时序图、界面设计图"}]}}
