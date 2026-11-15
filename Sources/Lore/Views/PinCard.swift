@@ -20,6 +20,9 @@ struct PinCardActions {
     /// Starts a drag of this card (or of the whole selection) so it can be
     /// dropped on a sidebar board.
     var beginDrag: (UUID) -> String
+    /// How many pins the drag starting on this card carries. Used only for the
+    /// compact drag preview badge.
+    var dragCount: (UUID) -> Int
 }
 
 struct PinCard: View, Equatable {
@@ -43,6 +46,8 @@ struct PinCard: View, Equatable {
         .contentShape(Rectangle())
         .onDrag {
             LoreDrag.provider(marker: actions.beginDrag(model.id))
+        } preview: {
+            PinDragPreview(model: model, count: max(1, actions.dragCount(model.id)))
         }
         .onTapGesture {
             if isSelecting {
@@ -259,5 +264,39 @@ struct PinCard: View, Equatable {
         Button(T("Delete pin"), role: .destructive) {
             actions.requestDelete(model.id)
         }
+    }
+}
+
+/// A small drag ghost instead of the full card: the gallery card is large, and
+/// its default preview hides the board rows and the new trash target while the
+/// user is trying to aim. Keep the thumbnail but drop the captions, buttons and
+/// hover chrome.
+private struct PinDragPreview: View {
+    let model: PinCardModel
+    let count: Int
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            LibraryImage(paths: model.imageCandidates, maxPixel: 640, contentMode: .fill)
+                .frame(width: 132, height: 88)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.24), radius: 12, y: 5)
+
+            if count > 1 {
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 7)
+                    .frame(height: 20)
+                    .background(Capsule().fill(Theme.red))
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.85), lineWidth: 1))
+                    .offset(x: 5, y: -5)
+            }
+        }
+        .frame(width: 142, height: 98)
     }
 }
