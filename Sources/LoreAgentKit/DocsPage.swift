@@ -527,7 +527,7 @@ pins under the product group in the sidebar, so the library stays tidy.</code></
 </main>
 <footer>
   <div class="footer-inner">
-    <div><strong>Lore Agent API v1</strong> · Served from LoreAgentKit 1.0.0 · 127.0.0.1:\(port)</div>
+    <div><strong>Lore Agent API v1</strong> · Served from LoreAgentKit 1.1.0 · 127.0.0.1:\(port)</div>
     <div>Machine-readable: <a href="/openapi.json">openapi.json</a> · <a href="/llms.txt">llms.txt</a> · <a href="/health">health</a></div>
   </div>
 </footer>

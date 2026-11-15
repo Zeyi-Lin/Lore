@@ -218,4 +218,4 @@ Lore ships with **English** and **Simplified Chinese** interfaces. It follows th
 
 ## Status
 
-Lore 1.0 is a complete, local-first macOS app. The seed library is designed from scratch and rendered from hand-written HTML/CSS; no external assets or network requests are used at runtime.
+Lore 1.1 is a complete, local-first macOS app. The seed library is designed from scratch and rendered from hand-written HTML/CSS; no external assets or network requests are used at runtime.

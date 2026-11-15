@@ -12,7 +12,7 @@ final class AgentAPITests: RunningServerSuite {
         #expect(health["status"] as? String == "ok")
         #expect(health["app"] as? String == "Lore")
         #expect(health["api"] as? String == "v1")
-        #expect(health["version"] as? String == "1.0.0")
+        #expect(health["version"] as? String == "1.1.0")
         #expect(health["pinCount"] as? Int == 4)
         #expect(health["port"] as? Int == Int(port))
     }
@@ -30,7 +30,7 @@ final class AgentAPITests: RunningServerSuite {
         let result = try client.get("/api/v1/library")
         let library = try expectJSON(result)
         #expect(library["app"] as? String == "Lore")
-        #expect(library["version"] as? String == "1.0.0")
+        #expect(library["version"] as? String == "1.1.0")
         #expect(library["generatedAt"] as? String != nil)
 
         let stats = try #require(library["stats"] as? [String: Any])

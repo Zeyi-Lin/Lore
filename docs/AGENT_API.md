@@ -8,7 +8,7 @@ The API is embedded in the Lore app (via **LoreAgentKit**) and starts automatica
 | --- | --- |
 | Base URL | `http://127.0.0.1:4242` by default (configurable in Lore → Settings → Agent access) |
 | API version | `v1` |
-| Server implementation | `LoreAgentKit 1.0.0` (Network.framework, HTTP/1.1) |
+| Server implementation | `LoreAgentKit 1.1.0` (Network.framework, HTTP/1.1) |
 | Data source | `<libraryRoot>/library.json` plus `Images/` and `Thumbnails/` |
 | Access | Loopback-only, no authentication |
 | Writes | `POST /api/v1/pins` (JSON base64 or raw image body; 20 MiB limit) and `PATCH /api/v1/pins/{id}` (partial metadata; 256 KiB limit) |
@@ -25,7 +25,7 @@ The API is embedded in the Lore app (via **LoreAgentKit**) and starts automatica
 
 ```bash
 curl -s http://127.0.0.1:4242/health
-# {"api":"v1","app":"Lore","pinCount":12,"port":4242,"status":"ok","version":"1.0.0"}
+# {"api":"v1","app":"Lore","pinCount":12,"port":4242,"status":"ok","version":"1.1.0"}
 ```
 
 **3. List recent pins.**
@@ -112,7 +112,7 @@ Unknown paths return a JSON **404**. Known paths with an unsupported method retu
   "status": "ok",
   "app": "Lore",
   "api": "v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "pinCount": 12,
   "port": 4242
 }
@@ -127,7 +127,7 @@ Returns the whole library in one response:
 ```json
 {
   "app": "Lore",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "generatedAt": "2026-11-14T02:57:54Z",
   "stats": { "pins": 12, "boards": 4, "tags": 18, "favorites": 2, "images": 12 },
   "boards": [ { "name": "Web dashboards", "count": 5 } ],
@@ -631,7 +631,7 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 ## Versioning
 
 - The API generation is `v1`, reflected in the path prefix `/api/v1/` and the `api` field of `/health`.
-- `version` (currently `1.0.0`) identifies the LoreAgentKit implementation and may change independently of the API generation.
+- `version` (currently `1.1.0`) identifies the LoreAgentKit implementation and may change independently of the API generation.
 - Changes within `v1` are additive: new optional fields or endpoints may appear, but existing fields, status codes, and semantics stay compatible. Clients should ignore unknown JSON fields.
 - `generatedAt` in `/api/v1/library` indicates when the snapshot was produced; the library itself is read fresh on every request.
 - `POST /api/v1/pins` and `PATCH /api/v1/pins/{id}` are additive within `v1`: clients that only read the library keep working unchanged.

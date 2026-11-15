@@ -10,7 +10,7 @@ public enum LoreAgentAPI {
     /// API generation reported by the health endpoint.
     public static let apiVersion = "v1"
     /// Version of the Agent API implementation.
-    public static let version = "1.0.0"
+    public static let version = "1.1.0"
     /// Default loopback port used by the Lore app.
     public static let defaultPort: UInt16 = 4242
     /// Maximum accepted request body for image ingestion (20 MiB).
