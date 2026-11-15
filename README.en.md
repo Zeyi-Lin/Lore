@@ -17,7 +17,7 @@ Lore is a native macOS app for capturing UI screenshots, keeping them in a Pinte
 
 Design reference usually lives in a messy folder of screenshots, a chat thread, or a dozen browser tabs. Agents can't see any of it. Lore is a small, local-first memory for visual taste:
 
-- **Fast to capture** — drag files in, paste from the clipboard (⇧⌘V), or grab a screen region (⇧⌘2).
+- **Fast to capture** — drag files in, paste from the clipboard (⌘V), or grab a screen region (⇧⌘2).
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **GIF support** — import, drop, paste, or upload a GIF through the Agent API and the original animation is preserved. Cards play it on hover, the detail card and large-image mode keep it looping, and the API exposes `animated` and `frameCount`.
@@ -39,7 +39,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | --- | --- |
 | Quick capture sheet | ⌘N |
 | Import images | ⌘O |
-| Paste image from clipboard | ⇧⌘V |
+| Paste image from clipboard | ⌘V (or ⇧⌘V) |
 | Capture a screen region | ⇧⌘2 |
 | Search pins | ⌘F |
 | Open Agent access | ⌘4 |

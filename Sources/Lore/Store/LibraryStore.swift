@@ -997,7 +997,7 @@ final class LibraryStore {
 
         if let objects = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
             let urls = objects.compactMap { ($0 as? NSURL) as URL? }
-            let imageURLs = urls.filter { Self.isLikelyImage($0) }
+            let imageURLs = urls.filter { Clipboard.isLikelyImage($0) }
             if !imageURLs.isEmpty {
                 await addFiles(imageURLs, sourceLabel: "Clipboard", board: board)
                 return true
@@ -1007,7 +1007,7 @@ final class LibraryStore {
         // Prefer GIF bytes before PNG/TIFF: browsers expose a static PNG
         // representation too, and copying from the wrong one would drop the
         // animation. Both the classic and modern pasteboard identifiers exist.
-        for type in Self.gifPasteboardTypes {
+        for type in Clipboard.gifTypes {
             if let gif = pasteboard.data(forType: type) {
                 await addImageData(
                     gif,
@@ -1525,13 +1525,4 @@ final class LibraryStore {
         Date().loreTime
     }
 
-    private static let gifPasteboardTypes: [NSPasteboard.PasteboardType] = [
-        NSPasteboard.PasteboardType("com.compuserve.gif"),
-        NSPasteboard.PasteboardType("public.gif")
-    ]
-
-    private static func isLikelyImage(_ url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        return ["png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "webp", "gif", "bmp"].contains(ext)
-    }
 }

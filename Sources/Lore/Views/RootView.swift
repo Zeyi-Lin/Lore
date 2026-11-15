@@ -9,6 +9,9 @@ struct RootView: View {
     /// The scroll-view warm-up is only useful while the app is starting; after
     /// that it is a live subtree that every resize pass has to lay out.
     @State private var prewarming = true
+    /// Local ⌘V monitor: the gallery pastes a clipboard image without going
+    /// through the menu or the capture sheet.
+    @State private var pasteMonitor: Any?
 
     var body: some View {
         ZStack {
@@ -144,6 +147,8 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             store.flushPersistence()
         }
+        .onAppear { installPasteMonitor() }
+        .onDisappear { removePasteMonitor() }
         .onExitCommand {
             if store.boardManagerPresented {
                 withAnimation(.easeOut(duration: 0.16)) { store.boardManagerPresented = false }
@@ -158,6 +163,29 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: dropTargeted)
+    }
+
+    private func installPasteMonitor() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Let the standard paste command win wherever text is being
+            // edited, and let the capture sheet handle its own ⌘V (it knows
+            // which board the paste should land in).
+            guard Clipboard.isPasteShortcut(event),
+                  !Clipboard.isTextInputFocused(),
+                  Clipboard.containsImage() else { return event }
+            let galleryReady = MainActor.assumeIsolated {
+                !store.capturePresented && !store.boardManagerPresented && store.selectedPin == nil
+            }
+            guard galleryReady else { return event }
+            Task { @MainActor in _ = await store.pasteFromClipboard() }
+            return nil
+        }
+    }
+
+    private func removePasteMonitor() {
+        if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
+        pasteMonitor = nil
     }
 
     /// Hidden launch-argument hooks used for automated design verification:

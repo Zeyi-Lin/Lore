@@ -96,7 +96,10 @@ struct LoreButton: View {
                     .font(.system(size: 13.5, weight: .semibold))
                 if let shortcut {
                     Text(shortcut)
-                        .font(Theme.mono(10.5, weight: .medium))
+                        // SF Mono does not advance ⌘/⇧ correctly at this
+                        // size (they overlap); the default face keeps the
+                        // keycap glyphs legible.
+                        .font(.system(size: 10.5, weight: .medium))
                         .opacity(0.58)
                         .padding(.leading, 2)
                 }

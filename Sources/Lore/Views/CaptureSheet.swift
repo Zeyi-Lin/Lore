@@ -6,6 +6,7 @@ struct CaptureSheet: View {
     @State private var board = "Unsorted"
     @State private var dropTargeted = false
     @State private var boardMenuHovering = false
+    @State private var pasteMonitor: Any?
 
     var body: some View {
         GeometryReader { geo in
@@ -53,7 +54,9 @@ struct CaptureSheet: View {
         .transition(.opacity.combined(with: .scale(scale: 0.975)))
         .onAppear {
             board = store.selectedBoard ?? store.defaultBoard
+            installPasteMonitor()
         }
+        .onDisappear { removePasteMonitor() }
     }
 
     private var header: some View {
@@ -101,7 +104,7 @@ struct CaptureSheet: View {
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(Theme.ink)
 
-            Text(T("or paste with ⇧⌘V · PNG, JPEG, GIF, HEIC, TIFF"))
+            Text(T("or press ⌘V to paste · PNG, JPEG, GIF, HEIC, TIFF"))
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.inkTertiary)
         }
@@ -139,7 +142,7 @@ struct CaptureSheet: View {
                 ImportPanel.present(store: store, board: board)
             }
 
-            LoreButton(title: T("Paste"), icon: "doc.on.clipboard", variant: .ghost, shortcut: "⇧⌘V") {
+            LoreButton(title: T("Paste"), icon: "doc.on.clipboard", variant: .ghost, shortcut: "⌘V") {
                 close()
                 Task { await store.pasteFromClipboard(board: board) }
             }
@@ -202,6 +205,27 @@ struct CaptureSheet: View {
             .foregroundStyle(Theme.inkTertiary)
             .help(T("Images are stored on this Mac and never uploaded."))
         }
+    }
+
+    /// The sheet has no text fields, so ⌘V can always mean "paste the image
+    /// into this board" while it is open. A search field behind the sheet may
+    /// still hold focus; the shortcut must not defer to it.
+    private func installPasteMonitor() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard Clipboard.isPasteShortcut(event), Clipboard.containsImage() else { return event }
+            MainActor.assumeIsolated {
+                let target = board
+                close()
+                Task { @MainActor in _ = await store.pasteFromClipboard(board: target) }
+            }
+            return nil
+        }
+    }
+
+    private func removePasteMonitor() {
+        if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
+        pasteMonitor = nil
     }
 
     private func close() {

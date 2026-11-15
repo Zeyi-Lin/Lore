@@ -63,7 +63,7 @@ struct EmptyStateView: View {
             if mode == .emptyLibrary {
                 HStack(spacing: 7) {
                     Image(systemName: "clipboard")
-                    Text(T("or press ⇧⌘V to pin the clipboard"))
+                    Text(T("or press ⌘V to pin the clipboard"))
                     Text("·")
                     Image(systemName: "viewfinder")
                     Text(T("⇧⌘2 for a screen capture"))
