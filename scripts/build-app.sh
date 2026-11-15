@@ -3,6 +3,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
+
+# Version lives in exactly one place: Sources/Lore/Version.swift. The Settings
+# screen reads the stamped bundle version back, so there is no second number to
+# forget when cutting a release (see docs/RELEASING.md).
+VERSION="$(sed -n 's/.*static let current = "\([0-9][0-9.]*\)".*/\1/p' Sources/Lore/Version.swift | head -1)"
+if [ -z "$VERSION" ]; then
+  echo "Could not read LoreVersion.current from Sources/Lore/Version.swift" >&2
+  exit 1
+fi
+# CFBundleVersion only needs to increase; the commit count is a free monotonic
+# counter and keeps local builds distinguishable.
+BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
+
 export CLANG_MODULE_CACHE_PATH="$PWD/.build/cache/clang"
 export SWIFT_MODULECACHE_PATH="$PWD/.build/cache/swift"
 export TMPDIR="$PWD/.build/tmp"
@@ -43,7 +56,7 @@ if [ -f "$ICON_MASTER" ]; then
   iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/appicon.icns"
 fi
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -56,8 +69,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>Lore</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.1.0</string>
-    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+    <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>

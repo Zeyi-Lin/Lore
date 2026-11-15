@@ -120,6 +120,19 @@ struct RootView: View {
             }
             applyDemoModeIfNeeded()
 
+            // One quiet update check a day, well after the gallery has painted.
+            // A failure stays invisible; a hit gets a toast pointing at Settings.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                await UpdateController.shared.checkIfDue()
+                if let release = UpdateController.shared.availableRelease {
+                    store.showToast(
+                        TF("Lore %@ is available in Settings → About", release.version.description),
+                        icon: "arrow.down.circle"
+                    )
+                }
+            }
+
             // Keep the warm-up for the launch window only, then drop it out of
             // the tree so it stops taking part in layout passes.
             try? await Task.sleep(nanoseconds: 1_500_000_000)

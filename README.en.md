@@ -31,6 +31,7 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Window gestures** — double-click the empty title-bar strip beside the traffic lights, or the empty stretch of the toolbar between the search field and the API status pill, to zoom/restore the window with a smooth eased animation; double-clicks everywhere else keep their own meaning.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
+- **Self-updating** — Settings → About checks GitHub Releases and can download, install, and relaunch the newest build in one click.
 
 ## Capture
 
@@ -140,6 +141,8 @@ open dist/Lore.app
 ```
 
 The build script bundles the SwiftPM resource bundle, generates the app icon from the 1024 px master, writes `Info.plist`, and ad-hoc signs `dist/Lore.app`.
+
+The release flow — single version source, DMG packaging, and the GitHub release — is documented in [docs/RELEASING.md](docs/RELEASING.md).
 
 The icon master `Sources/Lore/Resources/AppIcon/icon_1024.png` is drawn by `scripts/make-app-icon.py` from the same geometry as the in-app `LoreMark`, so the Dock icon and the app's own brand mark stay one artwork.
 

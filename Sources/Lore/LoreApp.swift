@@ -41,6 +41,12 @@ struct LoreApp: App {
 
     @CommandsBuilder
     private var appCommands: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button(T("Check for Updates…")) {
+                UpdateController.shared.checkFromMenu()
+            }
+        }
+
         CommandGroup(replacing: .newItem) {
             Button(T("New Pin")) {
                 store.capturePresented = true
