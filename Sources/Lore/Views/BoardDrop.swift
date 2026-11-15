@@ -125,3 +125,37 @@ enum BoardRowMetrics {
     /// Keep in sync with the row height in `SidebarView`.
     static let height: CGFloat = 35
 }
+
+/// Footer drop target that deletes the pins being dragged. It accepts only pin
+/// payloads so a board row dragged over the footer keeps the normal "no" cursor.
+struct TrashDropDelegate: DropDelegate {
+    let store: LibraryStore
+    @Binding var isTargeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        guard case let .pins(ids) = store.activeDragPayload else { return false }
+        return !ids.isEmpty
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer {
+            isTargeted = false
+            store.finishDrag()
+        }
+        guard case let .pins(ids) = store.activeDragPayload, !ids.isEmpty else { return false }
+        store.deletePins(ids: ids)
+        return true
+    }
+}

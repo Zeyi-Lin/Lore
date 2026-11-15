@@ -12,6 +12,9 @@ struct RootView: View {
     /// Local ⌘V monitor: the gallery pastes a clipboard image without going
     /// through the menu or the capture sheet.
     @State private var pasteMonitor: Any?
+    /// Clears a drag payload after the mouse comes up, including drags that were
+    /// cancelled instead of dropped on a board or the trash.
+    @State private var dragEndMonitor: Any?
 
     var body: some View {
         ZStack {
@@ -146,9 +149,16 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             store.flushPersistence()
+            store.finishDrag()
         }
-        .onAppear { installPasteMonitor() }
-        .onDisappear { removePasteMonitor() }
+        .onAppear {
+            installPasteMonitor()
+            installDragEndMonitor()
+        }
+        .onDisappear {
+            removePasteMonitor()
+            removeDragEndMonitor()
+        }
         .onExitCommand {
             if store.boardManagerPresented {
                 withAnimation(.easeOut(duration: 0.16)) { store.boardManagerPresented = false }
@@ -187,6 +197,26 @@ struct RootView: View {
     private func removePasteMonitor() {
         if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
         pasteMonitor = nil
+    }
+
+    private func installDragEndMonitor() {
+        guard dragEndMonitor == nil else { return }
+        dragEndMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+            let session = MainActor.assumeIsolated { store.dragSession }
+            guard session > 0 else { return event }
+            // Let the drop target consume the payload first; only then discard a
+            // drag that ended in empty space. The session check makes a late
+            // cleanup harmless if the next drag already started.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                Task { @MainActor in store.finishDrag(session: session) }
+            }
+            return event
+        }
+    }
+
+    private func removeDragEndMonitor() {
+        if let dragEndMonitor { NSEvent.removeMonitor(dragEndMonitor) }
+        dragEndMonitor = nil
     }
 
     /// Hidden launch-argument hooks used for automated design verification:
