@@ -1075,9 +1075,13 @@ final class LibraryStore {
     }
 
     private func revealFreshlyAdded(board: String) {
+        // All Pins already contains the new pin; jumping into its board (often
+        // "Unsorted") just because of a paste is disorienting. Everywhere else
+        // keep the existing behavior of revealing the board that received it.
+        let staysInAllPins = section == .all && selectedBoard == nil
         withAnimation(.snappy(duration: 0.3)) {
             section = .all
-            selectedBoard = board
+            selectedBoard = staysInAllPins ? nil : board
             filter = .all
             colorFamilyFilter = nil
             toneFilter = nil

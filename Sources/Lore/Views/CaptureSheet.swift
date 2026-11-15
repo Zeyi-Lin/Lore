@@ -213,7 +213,9 @@ struct CaptureSheet: View {
     private func installPasteMonitor() {
         guard pasteMonitor == nil else { return }
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard Clipboard.isPasteShortcut(event), Clipboard.containsImage() else { return event }
+            guard Clipboard.isPasteShortcut(event),
+                  Clipboard.containsImage(),
+                  event.window === NSApp.mainWindow else { return event }
             MainActor.assumeIsolated {
                 let target = board
                 close()

@@ -173,7 +173,8 @@ struct RootView: View {
             // which board the paste should land in).
             guard Clipboard.isPasteShortcut(event),
                   !Clipboard.isTextInputFocused(),
-                  Clipboard.containsImage() else { return event }
+                  Clipboard.containsImage(),
+                  event.window === NSApp.mainWindow else { return event }
             let galleryReady = MainActor.assumeIsolated {
                 !store.capturePresented && !store.boardManagerPresented && store.selectedPin == nil
             }
