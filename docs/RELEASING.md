@@ -97,7 +97,7 @@ The script:
 2. runs `./scripts/build-app.sh release` (with `--no-build`: skips this and reuses `dist/Lore.app`);
 3. checks `dist/Lore.app`'s `CFBundleShortVersionString` equals `X.Y.Z` and `CFBundleIdentifier` equals `studio.lore.library`, so a stale bundle is never shipped;
 4. rebuilds `.build/dmg-stage` with `Lore.app` at the root, an `Applications → /Applications` symlink, and the Finder background in `.background/`;
-5. creates a writable UDRW image, mounts it, and runs `scripts/dmg-layout.applescript` to set the 640×546 window, background picture, icon positions, and hidden toolbar/status bar;
+5. creates a writable UDRW image, mounts it, and runs `scripts/dmg-layout.applescript` to set the 640×586 window centered on the active display, background picture, icon positions, and hidden toolbar/status bar;
 6. converts the laid-out image to `dist/Lore-vX.Y.Z.dmg` with `hdiutil` (`-format UDZO`, volume name `Lore X.Y.Z`);
 7. prints the DMG path, human-readable size, and SHA-256.
 
@@ -113,7 +113,7 @@ Packaged Lore X.Y.Z
 
 Keep the SHA-256 for the release notes. The script never tags, pushes, or uploads — publishing is a separate, deliberate step.
 
-The installer window is a static design: `scripts/dmg-background.png` (1280×1040 at 144 DPI, shown as 640×520 points) carries the headline, dotted drag path, and the three first-launch Gatekeeper steps. Icon positions live in `scripts/dmg-layout.applescript`; keep them aligned with the background if you move things. Regenerate the background after editing `scripts/make-dmg-background.py`:
+The installer window is a static design: `scripts/dmg-background.png` (1280×1120 at 144 DPI, shown as 640×560 points) carries the headline, dotted drag path, and the three first-launch Gatekeeper steps. Icon positions live in `scripts/dmg-layout.applescript`; keep them aligned with the background if you move things. Regenerate the background after editing `scripts/make-dmg-background.py`:
 
 ```bash
 python3 scripts/make-dmg-background.py   # requires Pillow
