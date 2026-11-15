@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds dist/Lore.app and wraps it into dist/Lore-v<version>.dmg — the exact
-# asset shape the in-app updater expects.
+# asset shape the in-app updater expects, with a guided Finder install window.
 #
 #   ./scripts/package-release.sh              # swift build (release), then DMG
 #   ./scripts/package-release.sh --no-build   # reuse the existing dist/Lore.app
@@ -85,25 +85,58 @@ if [ "$BUILT_ID" != "studio.lore.library" ]; then
   exit 1
 fi
 
-# Stage exactly what the DMG should contain: the app at the root plus the usual
-# /Applications symlink. The updater mounts the image read-only and copies
-# Lore.app out of it; nothing runs from the image itself.
+# Stage exactly what the DMG should contain: the app at the root, the usual
+# /Applications symlink, and the Finder background. The updater mounts the image
+# read-only and copies Lore.app out of it; nothing runs from the image itself.
+if [ ! -f scripts/dmg-background.png ]; then
+  echo "Missing scripts/dmg-background.png; run python3 scripts/make-dmg-background.py." >&2
+  exit 1
+fi
+
 STAGE=".build/dmg-stage"
 rm -rf "$STAGE"
-mkdir -p "$STAGE"
+mkdir -p "$STAGE/.background"
 ditto "$APP" "$STAGE/Lore.app"
 ln -s /Applications "$STAGE/Applications"
+cp scripts/dmg-background.png "$STAGE/.background/background.png"
 
 mkdir -p dist
 DMG="dist/Lore-v$VERSION.dmg"
 rm -f "$DMG"
-# UDZO = compressed, read-only DMG; -ov replaces a stale image if one exists.
-hdiutil create \
-  -volname "Lore $VERSION" \
+VOLUME="Lore $VERSION"
+MOUNT="/Volumes/$VOLUME"
+RWTMP=".build/Lore-$VERSION-rw.dmg"
+rm -f "$RWTMP"
+
+if [ -e "$MOUNT" ]; then
+  echo "Volume '$VOLUME' is already mounted; detach it before packaging." >&2
+  exit 1
+fi
+
+# Finder can only write .DS_Store into a writable image, so build a UDRW
+# intermediate, apply the window layout, then compress it to the final UDZO.
+hdiutil create -quiet \
+  -volname "$VOLUME" \
   -srcfolder "$STAGE" \
   -ov \
-  -format UDZO \
-  "$DMG"
+  -format UDRW \
+  "$RWTMP"
+
+hdiutil attach -quiet -nobrowse -readwrite "$RWTMP"
+# Layout is best-effort so a headless/CI machine can still cut a valid (plain)
+# image when Finder Automation is unavailable.
+if ! osascript scripts/dmg-layout.applescript "$VOLUME"; then
+  echo "warning: Finder layout failed; shipping a plain DMG window" >&2
+fi
+sync
+osascript -e "tell application \"Finder\" to close window of disk \"$VOLUME\"" >/dev/null 2>&1 || true
+sleep 0.5
+if ! hdiutil detach "$MOUNT" >/dev/null; then
+  hdiutil detach -force "$MOUNT" >/dev/null
+fi
+
+hdiutil convert "$RWTMP" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
+rm -f "$RWTMP"
 
 if [ ! -s "$DMG" ]; then
   echo "hdiutil did not produce $DMG" >&2

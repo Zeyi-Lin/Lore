@@ -96,9 +96,10 @@ The script:
 1. extracts the version with the `sed` command above and rejects anything that is not `X.Y.Z`;
 2. runs `./scripts/build-app.sh release` (with `--no-build`: skips this and reuses `dist/Lore.app`);
 3. checks `dist/Lore.app`'s `CFBundleShortVersionString` equals `X.Y.Z` and `CFBundleIdentifier` equals `studio.lore.library`, so a stale bundle is never shipped;
-4. rebuilds `.build/dmg-stage` with `Lore.app` at the root plus an `Applications → /Applications` symlink;
-5. writes `dist/Lore-vX.Y.Z.dmg` with `hdiutil` (`-format UDZO`, volume name `Lore X.Y.Z`);
-6. prints the DMG path, human-readable size, and SHA-256.
+4. rebuilds `.build/dmg-stage` with `Lore.app` at the root, an `Applications → /Applications` symlink, and the Finder background in `.background/`;
+5. creates a writable UDRW image, mounts it, and runs `scripts/dmg-layout.applescript` to set the 640×546 window, background picture, icon positions, and hidden toolbar/status bar;
+6. converts the laid-out image to `dist/Lore-vX.Y.Z.dmg` with `hdiutil` (`-format UDZO`, volume name `Lore X.Y.Z`);
+7. prints the DMG path, human-readable size, and SHA-256.
 
 Expected tail of the output:
 
@@ -111,6 +112,14 @@ Packaged Lore X.Y.Z
 ```
 
 Keep the SHA-256 for the release notes. The script never tags, pushes, or uploads — publishing is a separate, deliberate step.
+
+The installer window is a static design: `scripts/dmg-background.png` (1280×1040 at 144 DPI, shown as 640×520 points) carries the headline, dotted drag path, and the three first-launch Gatekeeper steps. Icon positions live in `scripts/dmg-layout.applescript`; keep them aligned with the background if you move things. Regenerate the background after editing `scripts/make-dmg-background.py`:
+
+```bash
+python3 scripts/make-dmg-background.py   # requires Pillow
+```
+
+Finder Automation is needed for the layout. If it is unavailable, the script prints a warning and still produces a valid DMG with a plain Finder window; the app and updater contract are unaffected.
 
 > `CFBundleVersion` is the git commit count at build time, so rebuilding the same version produces different bytes. Upload the artifact you built and record *its* SHA-256; do not rebuild between packaging and publishing.
 
@@ -311,6 +320,9 @@ When launching through `open` (which does not forward shell environment variable
 | `Version mismatch: Sources/Lore/Version.swift says X.Y.Z but dist/Lore.app says …` | `--no-build` reused a bundle from an earlier version | Run `./scripts/package-release.sh` without `--no-build` |
 | `Missing dist/Lore.app` | Nothing has been built yet | Run `./scripts/package-release.sh` (builds by default) or `./scripts/build-app.sh release` first |
 | `Refusing to package: bundle id is '…'` | The bundle was built by an old/foreign `build-app.sh` | Rebuild with `./scripts/build-app.sh release`; the id must be `studio.lore.library` |
+| `Volume 'Lore X.Y.Z' is already mounted; detach it before packaging.` | A previous build of the same version is still mounted | `hdiutil detach "/Volumes/Lore X.Y.Z"`, close its Finder window, rerun |
+| DMG opens with a plain white Finder window | Finder Automation was denied, or `scripts/dmg-background.png` is missing | Allow the terminal/agent under **System Settings → Privacy & Security → Automation → Finder**, or regenerate the background; rerun the package script |
+| `warning: Finder layout failed; shipping a plain DMG window` | Same as above; the image is still valid but not guided | Fix Automation, rerun, and re-upload the asset only before publishing |
 | `hdiutil: create failed - Resource busy` (or similar) | A previous `Lore X.Y.Z` volume, stale helper image, or the output DMG is open/mounted | `hdiutil info` to list mounted images, `hdiutil detach "/Volumes/Lore X.Y.Z"`, close Finder windows on it, rerun |
 | `gh: command not found` or `HTTP 401` from `gh` | GitHub CLI missing or not authenticated | `brew install gh`, then `gh auth login` |
 | `gh release create` fails with `--verify-tag` | Tag was not pushed (or is misspelled) | `git push origin "vX.Y.Z"`; confirm with `git tag -l "vX.Y.Z"` |
