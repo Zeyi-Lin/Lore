@@ -63,7 +63,7 @@ struct EmptyStateView: View {
             if mode == .emptyLibrary {
                 HStack(spacing: 7) {
                     Image(systemName: "clipboard")
-                    Text(T("or press ⇧⌘V to pin the clipboard"))
+                    Text(T("or press ⌘V to pin the clipboard"))
                     Text("·")
                     Image(systemName: "viewfinder")
                     Text(T("⇧⌘2 for a screen capture"))
@@ -112,20 +112,6 @@ struct EmptyArtwork: View {
             screenshotCard
                 .rotationEffect(.degrees(-2))
                 .offset(x: 2, y: 0)
-
-            VStack(spacing: 0) {
-                ZStack {
-                    Circle().fill(Theme.red)
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Theme.red.opacity(0.28), radius: 10, y: 4)
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .rotationEffect(.degrees(32))
-                }
-                Spacer()
-            }
-            .offset(x: 138, y: -76)
 
             // small floating tag
             HStack(spacing: 5) {

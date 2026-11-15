@@ -234,7 +234,13 @@ struct LibraryView: View {
             requestDelete: { pendingDeleteID = $0 },
             prefetchDetail: { store.prefetchDetail(id: $0) },
             boardNames: { store.allBoardNames },
-            beginDrag: { store.beginPinDrag($0) }
+            beginDrag: { store.beginPinDrag($0) },
+            dragCount: { id in
+                if store.isSelectingPins, store.selectedPinIDs.contains(id) {
+                    return store.selectedPinIDs.count
+                }
+                return 1
+            }
         )
     }
 

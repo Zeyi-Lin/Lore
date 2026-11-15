@@ -20,6 +20,7 @@ struct SidebarView: View {
     /// Escape cancels the inline rename before `RootView`'s `onExitCommand`
     /// can treat it as "clear search" or "close detail".
     @State private var renameEscapeMonitor: Any?
+    @State private var trashTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -513,6 +514,23 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
+        ZStack {
+            if store.isDraggingPins || trashTargeted {
+                trashFooter
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                libraryFooter
+                    .transition(.opacity)
+            }
+        }
+        .frame(height: 44, alignment: .leading)
+        .contentShape(Rectangle())
+        .onDrop(of: [LoreDrag.type], delegate: TrashDropDelegate(store: store, isTargeted: $trashTargeted))
+        .animation(.easeOut(duration: 0.14), value: store.isDraggingPins)
+        .animation(.easeOut(duration: 0.14), value: trashTargeted)
+    }
+
+    private var libraryFooter: some View {
         HStack(spacing: 9) {
             ZStack {
                 Circle().fill(Theme.parchmentDeep)
@@ -545,6 +563,40 @@ struct SidebarView: View {
             .pointerCursor()
             .help(T("Settings"))
         }
+    }
+
+    private var trashFooter: some View {
+        HStack(spacing: 9) {
+            ZStack {
+                Circle().fill(trashTargeted ? Theme.red : Theme.parchmentDeep)
+                Image(systemName: trashTargeted ? "trash.fill" : "trash")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(trashTargeted ? Color.white : Theme.inkSecondary)
+            }
+            .frame(width: 29, height: 29)
+            .overlay(Circle().strokeBorder(trashTargeted ? Color.clear : Theme.hairline, lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(trashTargeted ? T("Release to delete") : T("Drop here to delete"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(trashTargeted ? Theme.red : Theme.ink)
+                Text(T("This cannot be undone."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Theme.inkTertiary)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 42)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(trashTargeted ? Theme.redWash : Theme.parchmentDeep)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(trashTargeted ? Theme.red : Theme.hairline, lineWidth: 1)
+        )
     }
 }
 

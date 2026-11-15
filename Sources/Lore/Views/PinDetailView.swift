@@ -13,6 +13,8 @@ struct PinDetailOverlay: View {
     @State private var showBoardMenu = false
     @State private var isImageMode = UserDefaults.standard.bool(forKey: "lore.debugLargeImage")
     @State private var keyMonitor: Any?
+    @State private var scrollMonitor: Any?
+    @State private var scrollNavigator = ScrollNavigationAccumulator()
     @State private var detailStage = 0
     @State private var isEditingTitle = false
     @State private var isEditingNote = false
@@ -66,6 +68,7 @@ struct PinDetailOverlay: View {
                 NSApp.keyWindow?.makeFirstResponder(nil)
             }
             installKeyMonitor()
+            installScrollMonitor()
             store.prefetchNeighbors(around: pin)
             if detailStage == 0 {
                 // Let the lightweight shell commit its first frame before the
@@ -95,12 +98,17 @@ struct PinDetailOverlay: View {
             noteHovering = false
             tagHovering = false
             boardMenuHovering = false
+            scrollNavigator.reset()
             store.prefetchNeighbors(around: pin)
         }
         .onDisappear {
             if let keyMonitor {
                 NSEvent.removeMonitor(keyMonitor)
                 self.keyMonitor = nil
+            }
+            if let scrollMonitor {
+                NSEvent.removeMonitor(scrollMonitor)
+                self.scrollMonitor = nil
             }
         }
         .onExitCommand {
@@ -207,6 +215,34 @@ struct PinDetailOverlay: View {
             default:
                 return event
             }
+        }
+    }
+
+    /// Wheel/trackpad scrolling steps through the gallery while the detail is
+    /// open. Image mode keeps the wheel for zoom, and a focused text editor
+    /// keeps it for its own scrolling.
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard !isImageMode else { return event }
+            guard let mainWindow = NSApp.mainWindow, event.window === mainWindow else { return event }
+            if let responder = event.window?.firstResponder,
+               responder is NSTextView || responder is NSTextField {
+                return event
+            }
+            // A trackpad flick keeps emitting momentum after the fingers lift;
+            // swallow it so one flick moves exactly one pin.
+            if !event.momentumPhase.isEmpty { return nil }
+            if event.phase == .began || event.phase == .ended || event.phase == .cancelled {
+                scrollNavigator.reset()
+            }
+            guard store.filteredPins.count > 1 else { return event }
+            guard let offset = scrollNavigator.step(
+                deltaY: event.scrollingDeltaY,
+                precise: event.hasPreciseScrollingDeltas
+            ) else { return nil }
+            store.showAdjacentPin(offset: offset)
+            return nil
         }
     }
 

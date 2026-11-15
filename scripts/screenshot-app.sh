@@ -57,6 +57,8 @@ if [ "${FRESH_LIBRARY:-1}" = "1" ]; then
 fi
 
 defaults write studio.lore.library lore.debugHome -string "$HOME_DIR"
+# Keep captures deterministic: no launch-time GitHub check, no toast timing.
+defaults write studio.lore.library lore.debugDisableUpdateCheck -bool true
 if [ "$MODE" = "large" ]; then
   defaults write studio.lore.library lore.debugShow -string detail
   defaults write studio.lore.library lore.debugLargeImage -bool true
@@ -105,6 +107,7 @@ screencapture -x -o -l "$WINDOW_ID" "$OUT"
 
 defaults delete studio.lore.library lore.debugShow >/dev/null 2>&1 || true
 defaults delete studio.lore.library lore.debugHome >/dev/null 2>&1 || true
+defaults delete studio.lore.library lore.debugDisableUpdateCheck >/dev/null 2>&1 || true
 defaults delete studio.lore.library lore.debugPin >/dev/null 2>&1 || true
 defaults delete studio.lore.library lore.debugLanguage >/dev/null 2>&1 || true
 defaults delete studio.lore.library lore.debugLargeImage >/dev/null 2>&1 || true

@@ -17,7 +17,7 @@ Lore is a native macOS app for capturing UI screenshots, keeping them in a Pinte
 
 Design reference usually lives in a messy folder of screenshots, a chat thread, or a dozen browser tabs. Agents can't see any of it. Lore is a small, local-first memory for visual taste:
 
-- **Fast to capture** — drag files in, paste from the clipboard (⇧⌘V), or grab a screen region (⇧⌘2).
+- **Fast to capture** — drag files in, paste from the clipboard (⌘V), or grab a screen region (⇧⌘2).
 - **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **GIF support** — import, drop, paste, or upload a GIF through the Agent API and the original animation is preserved. Cards play it on hover, the detail card and large-image mode keep it looping, and the API exposes `animated` and `frameCount`.
@@ -27,10 +27,12 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
 - **Board management** — right-click a board in the sidebar to rename it inline (Enter saves, Esc cancels); the button beside *Boards* opens a manager to rename a board or a whole group (sub-boards follow), merge by renaming onto an existing board, or delete a board and re-file its pins under Unsorted while keeping every image.
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
-- **Large image & keyboard browsing** — open a pin, then single-click the image to switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → to move between pins and Esc to go back. Right-click the image to copy it.
+- **Drag to delete** — drag a card (or the selected cards in selection mode) onto the sidebar footer; it turns into a trash target and deletes on release.
+- **Large image & keyboard browsing** — open a pin, then single-click the image to switch to image-only mode; a floating toolbar and keyboard shortcuts handle zoom, pan, rotate, mirror, and reset; use ← / → or scroll to move between pins and Esc to go back. Right-click the image to copy it.
 - **Hand-cursor details** — cards, buttons, menus, switches, and every other clickable control use the pointing-hand cursor.
 - **Window gestures** — double-click the empty title-bar strip beside the traffic lights, or the empty stretch of the toolbar between the search field and the API status pill, to zoom/restore the window with a smooth eased animation; double-clicks everywhere else keep their own meaning.
 - **Local and private** — images and metadata stay on this Mac. The server binds only to 127.0.0.1.
+- **Self-updating** — Settings → About checks GitHub Releases and can download, install, and relaunch the newest build in one click.
 
 ## Capture
 
@@ -38,12 +40,12 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | --- | --- |
 | Quick capture sheet | ⌘N |
 | Import images | ⌘O |
-| Paste image from clipboard | ⇧⌘V |
+| Paste image from clipboard | ⌘V (or ⇧⌘V) |
 | Capture a screen region | ⇧⌘2 |
 | Search pins | ⌘F |
 | Open Agent access | ⌘4 |
 | Select multiple cards | ⌘B |
-| Previous / next pin in detail | ← / → |
+| Previous / next pin in detail | ← / → or scroll |
 | Enter image-only mode (detail) | Click the image or the “Large image” button |
 | Large image: zoom in / out | + / - |
 | Large image: rotate right / left 90° | R / ⇧R |
@@ -140,6 +142,8 @@ open dist/Lore.app
 ```
 
 The build script bundles the SwiftPM resource bundle, generates the app icon from the 1024 px master, writes `Info.plist`, and ad-hoc signs `dist/Lore.app`.
+
+The release flow — single version source, DMG packaging, and the GitHub release — is documented in [docs/RELEASING.md](docs/RELEASING.md).
 
 The icon master `Sources/Lore/Resources/AppIcon/icon_1024.png` is drawn by `scripts/make-app-icon.py` from the same geometry as the in-app `LoreMark`, so the Dock icon and the app's own brand mark stay one artwork.
 

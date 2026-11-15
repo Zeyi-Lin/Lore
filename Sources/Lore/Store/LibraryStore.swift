@@ -75,6 +75,12 @@ final class LibraryStore {
     /// Set when a drag starts, cleared when it ends. Not observed: it changes
     /// on every drag and no view should re-render because of it.
     @ObservationIgnored var activeDragPayload: DragPayload?
+    /// Observed by the sidebar so its footer can turn into a trash target as
+    /// soon as a card drag starts, rather than only once the pointer reaches it.
+    private(set) var isDraggingPins = false
+    /// Guards delayed drag cleanup: a mouse-up from drag A must not clear the
+    /// payload of drag B that started immediately afterwards.
+    private(set) var dragSession = 0
     @ObservationIgnored private var recentCountMemo: (revision: UInt64, value: Int)?
     @ObservationIgnored private var didStartMaintenance = false
     @ObservationIgnored private var hasPendingWrite = false
@@ -629,6 +635,32 @@ final class LibraryStore {
         endSelection()
     }
 
+    /// Deletes exactly the pins carried by a drag, leaving any other selection
+    /// untouched unless everything selected was removed.
+    func deletePins(ids: [UUID]) {
+        let targets = pins.filter { ids.contains($0.id) }
+        guard !targets.isEmpty else { return }
+        let fm = FileManager.default
+        for pin in targets {
+            try? fm.removeItem(at: root.appendingPathComponent(pin.image))
+            if let thumbnail = pin.thumbnail {
+                try? fm.removeItem(at: root.appendingPathComponent(thumbnail))
+            }
+            try? fm.removeItem(at: LorePaths.cardsDirectory(root: root)
+                .appendingPathComponent("\(pin.id.uuidString).jpg"))
+        }
+        pins.removeAll { ids.contains($0.id) }
+        selectedPinIDs.subtract(ids)
+        if let selectedPinID, ids.contains(selectedPinID) { self.selectedPinID = nil }
+        refreshSnapshot()
+        persist(debounce: 0.1)
+        showToast(targets.count == 1 ? T("Pin deleted") : TF("%ld pins deleted", targets.count),
+                  icon: "trash")
+        if isSelectingPins, selectedPinIDs.isEmpty {
+            endSelection()
+        }
+    }
+
     func copySelectedAgentContext() {
         let chosen = selectedPins
         guard !chosen.isEmpty else { return }
@@ -709,17 +741,25 @@ final class LibraryStore {
         } else {
             ids = [pinID]
         }
+        dragSession += 1
         activeDragPayload = .pins(ids)
+        isDraggingPins = !ids.isEmpty
         return "lore.pins:\(ids.count)"
     }
 
     func beginBoardDrag(parentKey: String, key: String) -> String {
+        dragSession += 1
         activeDragPayload = .board(parentKey: parentKey, key: key)
+        isDraggingPins = false
         return "lore.board:\(key)"
     }
 
-    func finishDrag() {
+    /// `session` is supplied by the delayed mouse-up cleanup so an old drag
+    /// cannot cancel a newer one started in the meantime.
+    func finishDrag(session: Int? = nil) {
+        if let session, session != dragSession { return }
         activeDragPayload = nil
+        isDraggingPins = false
     }
 
     /// Reorders one sidebar row inside its own group. `key`, `target` and their
@@ -997,7 +1037,7 @@ final class LibraryStore {
 
         if let objects = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
             let urls = objects.compactMap { ($0 as? NSURL) as URL? }
-            let imageURLs = urls.filter { Self.isLikelyImage($0) }
+            let imageURLs = urls.filter { Clipboard.isLikelyImage($0) }
             if !imageURLs.isEmpty {
                 await addFiles(imageURLs, sourceLabel: "Clipboard", board: board)
                 return true
@@ -1007,7 +1047,7 @@ final class LibraryStore {
         // Prefer GIF bytes before PNG/TIFF: browsers expose a static PNG
         // representation too, and copying from the wrong one would drop the
         // animation. Both the classic and modern pasteboard identifiers exist.
-        for type in Self.gifPasteboardTypes {
+        for type in Clipboard.gifTypes {
             if let gif = pasteboard.data(forType: type) {
                 await addImageData(
                     gif,
@@ -1075,9 +1115,13 @@ final class LibraryStore {
     }
 
     private func revealFreshlyAdded(board: String) {
+        // All Pins already contains the new pin; jumping into its board (often
+        // "Unsorted") just because of a paste is disorienting. Everywhere else
+        // keep the existing behavior of revealing the board that received it.
+        let staysInAllPins = section == .all && selectedBoard == nil
         withAnimation(.snappy(duration: 0.3)) {
             section = .all
-            selectedBoard = board
+            selectedBoard = staysInAllPins ? nil : board
             filter = .all
             colorFamilyFilter = nil
             toneFilter = nil
@@ -1525,13 +1569,4 @@ final class LibraryStore {
         Date().loreTime
     }
 
-    private static let gifPasteboardTypes: [NSPasteboard.PasteboardType] = [
-        NSPasteboard.PasteboardType("com.compuserve.gif"),
-        NSPasteboard.PasteboardType("public.gif")
-    ]
-
-    private static func isLikelyImage(_ url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        return ["png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "webp", "gif", "bmp"].contains(ext)
-    }
 }
