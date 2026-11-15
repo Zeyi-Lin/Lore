@@ -113,20 +113,6 @@ struct EmptyArtwork: View {
                 .rotationEffect(.degrees(-2))
                 .offset(x: 2, y: 0)
 
-            VStack(spacing: 0) {
-                ZStack {
-                    Circle().fill(Theme.red)
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Theme.red.opacity(0.28), radius: 10, y: 4)
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .rotationEffect(.degrees(32))
-                }
-                Spacer()
-            }
-            .offset(x: 138, y: -76)
-
             // small floating tag
             HStack(spacing: 5) {
                 Circle().fill(Theme.moss).frame(width: 5, height: 5)
