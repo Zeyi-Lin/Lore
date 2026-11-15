@@ -21,20 +21,36 @@ struct ProcessedImage: Sendable {
 enum ImageProcessingError: LocalizedError {
     case unreadable(String)
     case unsupported(String)
+    case invalidSVG(String)
     case writeFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .unreadable(let name): return TF("%@ isn't a readable image.", name)
         case .unsupported(let name): return TF("%@ uses an unsupported image format.", name)
+        case .invalidSVG(let name): return TF("%@ isn't a valid SVG document.", name)
         case .writeFailed(let message): return TF("Couldn't store the image: %@", message)
         }
     }
 }
 
 enum ImageProcessor {
+    /// Opaque fill behind vector renders: SVG artwork is usually transparent,
+    /// and the grid/detail JPEG derivatives have no alpha channel to keep.
+    private static let vectorBackground = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+
     static func process(fileURL: URL, root: URL, id: UUID) throws -> ProcessedImage {
+        if SVGRasterizer.isSVGFile(fileURL) {
+            return try process(svgFileURL: fileURL, root: root, id: id)
+        }
         guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            // A vector saved with the wrong extension still imports: sniff the
+            // bytes, but only for files small enough to be markup.
+            if let data = try? Data(contentsOf: fileURL),
+               data.count <= SVGRasterizer.maxDocumentBytes,
+               SVGRasterizer.isSVG(data: data) {
+                return try process(svgData: data, root: root, id: id, displayName: fileURL.lastPathComponent)
+            }
             throw ImageProcessingError.unreadable(fileURL.lastPathComponent)
         }
         guard CGImageSourceGetCount(source) > 0, CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else {
@@ -60,6 +76,9 @@ enum ImageProcessor {
     }
 
     static func process(data: Data, preferredExtension: String?, root: URL, id: UUID) throws -> ProcessedImage {
+        if preferredExtension?.caseInsensitiveCompare("svg") == .orderedSame || SVGRasterizer.isSVG(data: data) {
+            return try process(svgData: data, root: root, id: id, displayName: "Clipboard image")
+        }
         guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             throw ImageProcessingError.unreadable("Clipboard image")
         }
@@ -78,6 +97,76 @@ enum ImageProcessor {
         }
 
         return try finish(source: source, root: root, id: id, relativeImage: relativeImage, fileSize: data.count, kind: .screenshot)
+    }
+
+    /// Imports a `.svg` file: the markup is stored verbatim and the two JPEG
+    /// derivatives are rasterised from it, so the grid, the detail pane and the
+    /// Agent API all keep working without understanding vectors.
+    static func process(svgFileURL: URL, root: URL, id: UUID) throws -> ProcessedImage {
+        let data: Data
+        do {
+            data = try Data(contentsOf: svgFileURL)
+        } catch {
+            throw ImageProcessingError.unreadable(svgFileURL.lastPathComponent)
+        }
+        return try process(svgData: data, root: root, id: id, displayName: svgFileURL.lastPathComponent)
+    }
+
+    /// Imports raw SVG markup — a dropped `.svg`, an `image/svg+xml`
+    /// pasteboard payload, or code pasted into the SVG sheet.
+    static func process(svgData: Data, root: URL, id: UUID, displayName: String) throws -> ProcessedImage {
+        guard SVGRasterizer.isSVG(data: svgData),
+              let thumbnailImage = try? SVGRasterizer.rasterize(
+                  data: svgData, maxPixel: 1200, background: vectorBackground
+              ),
+              let cardImage = try? SVGRasterizer.rasterize(
+                  data: svgData, maxPixel: 640, background: vectorBackground
+              ) else {
+            throw ImageProcessingError.invalidSVG(displayName)
+        }
+        // A document without width/height falls back to the viewBox; AppKit
+        // resolves both, so the size here matches the rendered raster.
+        let intrinsic = SVGRasterizer.intrinsicSize(data: svgData)
+            ?? CGSize(width: thumbnailImage.width, height: thumbnailImage.height)
+
+        try LorePaths.ensureDirectories(root: root)
+        let fileManager = FileManager.default
+        let relativeImage = "Images/\(id.uuidString).svg"
+        let destination = root.appendingPathComponent(relativeImage)
+        do {
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try svgData.write(to: destination, options: .atomic)
+        } catch {
+            throw ImageProcessingError.writeFailed(error.localizedDescription)
+        }
+
+        var relativeThumbnail: String?
+        let thumbnailRelative = "Thumbnails/\(id.uuidString).jpg"
+        if writeJPEG(thumbnailImage, to: root.appendingPathComponent(thumbnailRelative)) {
+            relativeThumbnail = thumbnailRelative
+        }
+        _ = writeJPEG(
+            cardImage,
+            to: LorePaths.cardsDirectory(root: root).appendingPathComponent("\(id.uuidString).jpg")
+        )
+
+        let colors = extractPalette(from: thumbnailImage)
+        let profile = LoreColorAnalyzer.classify(image: thumbnailImage)
+        return ProcessedImage(
+            image: relativeImage,
+            thumbnail: relativeThumbnail,
+            width: Int(intrinsic.width.rounded()),
+            height: Int(intrinsic.height.rounded()),
+            fileSize: svgData.count,
+            colors: colors.isEmpty ? ["#E60023", "#171412", "#FAF8F5"] : colors,
+            colorFamilies: profile.families,
+            colorTone: profile.tone,
+            isAnimated: false,
+            frameCount: 1,
+            kind: .svg
+        )
     }
 
     private static func finish(
@@ -140,6 +229,17 @@ enum ImageProcessor {
     /// Regenerates the 640 px grid derivative for an existing pin.
     @discardableResult
     static func writeCardThumbnail(sourcePath: String, root: URL, id: UUID) -> Bool {
+        if sourcePath.lowercased().hasSuffix(".svg") {
+            guard let card = SVGRasterizer.rasterize(
+                fileURL: URL(fileURLWithPath: sourcePath),
+                maxPixel: 640,
+                background: vectorBackground
+            ) else { return false }
+            try? LorePaths.ensureDirectories(root: root)
+            let destination = LorePaths.cardsDirectory(root: root)
+                .appendingPathComponent("\(id.uuidString).jpg")
+            return writeJPEG(card, to: destination)
+        }
         guard let source = CGImageSourceCreateWithURL(
             URL(fileURLWithPath: sourcePath) as CFURL,
             [kCGImageSourceShouldCache: false] as CFDictionary

@@ -395,6 +395,10 @@ struct LibraryImage: View {
                 failed = true
             }
         }
+        // A decoded image settles into the card instead of snapping over the
+        // placeholder. Cached images are installed synchronously in `init`, so
+        // this only animates the first decode of a given card.
+        .animation(.easeOut(duration: 0.18), value: loadedKey)
     }
 }
 
@@ -579,7 +583,7 @@ enum ImportPanel {
         panel.prompt = T("Pin")
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif, .webP, .bmp]
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif, .webP, .bmp, .svg]
         panel.begin { response in
             guard response == .OK else { return }
             let urls = panel.urls

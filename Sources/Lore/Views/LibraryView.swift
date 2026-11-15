@@ -1,13 +1,22 @@
 import SwiftUI
 
 /// Lazy Pinterest-style masonry: one `LazyVStack` per column. Columns are
-/// balanced once from aspect ratios (see `MasonryComposer`), so the grid no
-/// longer instantiates or measures every card up front.
+/// balanced from aspect ratios (see `MasonryComposer`) over the prefix the
+/// feed has loaded, so neither the window opening nor a resize measures the
+/// whole library. Each column ends in a tail marker that asks the feed for the
+/// next page when it comes into view.
 struct MasonryColumns<Card: View>: View {
     let columns: [[PinCardModel]]
     let columnWidth: CGFloat
     let spacing: CGFloat
     let rowSpacing: CGFloat
+    /// Changes every time the feed grows. Re-identifying the column tails is
+    /// what lets a tail that is still on screen schedule the next page: the
+    /// old sentinel is replaced, and the new one reports its own appearance.
+    let tailGeneration: Int
+    /// Called when the end of any column comes into the lazy stack's window,
+    /// i.e. when the user is close to the bottom of the loaded feed.
+    let onReachTail: () -> Void
     private let card: (PinCardModel) -> Card
 
     init(
@@ -15,12 +24,16 @@ struct MasonryColumns<Card: View>: View {
         columnWidth: CGFloat,
         spacing: CGFloat,
         rowSpacing: CGFloat,
+        tailGeneration: Int,
+        onReachTail: @escaping () -> Void,
         @ViewBuilder card: @escaping (PinCardModel) -> Card
     ) {
         self.columns = columns
         self.columnWidth = columnWidth
         self.spacing = spacing
         self.rowSpacing = rowSpacing
+        self.tailGeneration = tailGeneration
+        self.onReachTail = onReachTail
         self.card = card
     }
 
@@ -32,6 +45,14 @@ struct MasonryColumns<Card: View>: View {
                         card(model)
                             .frame(width: columnWidth)
                     }
+
+                    // Zero-visual-cost end marker: `LazyVStack` only builds it
+                    // when it approaches the viewport, which is exactly the
+                    // moment to append the next page.
+                    Color.clear
+                        .frame(height: 1)
+                        .id("gallery-tail-\(index)-\(tailGeneration)")
+                        .onAppear(perform: onReachTail)
                 }
                 .frame(width: columnWidth)
             }
@@ -55,6 +76,23 @@ struct LibraryView: View {
     @State private var gridWidth: CGFloat = 0
     @State private var pendingDeleteID: UUID?
     @State private var widthSettle = TaskSlot()
+    /// How many cards the incremental feed has loaded. The grid only splits
+    /// and lays out this prefix, so a large library opens at the cost of its
+    /// first page instead of its whole contents; scrolling grows the prefix
+    /// (see `GalleryPaging`).
+    @State private var loadedCards = GalleryPaging.firstPage
+    /// One append is already queued on the next runloop. Column tails can
+    /// appear together (they are balanced to end at the same height), and each
+    /// of them would otherwise schedule its own page.
+    @State private var loadScheduled = false
+    /// The query `loadedCards` belongs to. A board or search change is
+    /// reflected in the body before `onChange` gets to reset the feed, so the
+    /// grid checks this on the way in and opens the new list at its first page
+    /// instead of briefly laying out the previous list's depth.
+    @State private var feedIdentity = ""
+    /// Bumped whenever the query changes, so an append queued for the previous
+    /// list cannot land on the new one.
+    @State private var feedGeneration = 0
 
     /// Granularity while the window is being dragged. A drag only re-lays the
     /// gallery out once per step; the frames in between keep their cached
@@ -137,11 +175,15 @@ struct LibraryView: View {
                     }
                 }
             }
-            .onAppear { applyGridWidth(columnWidth) }
+            .onAppear {
+                applyGridWidth(columnWidth)
+                feedIdentity = store.currentListIdentity
+            }
             .onChange(of: columnWidth) { _, width in
                 applyGridWidth(width)
             }
-            .onChange(of: store.currentListIdentity) { _, _ in
+            .onChange(of: store.currentListIdentity) { _, identity in
+                resetFeed(identity: identity)
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
@@ -154,10 +196,20 @@ struct LibraryView: View {
         }
     }
 
+    /// Width the masonry lays itself out at: the content column minus the
+    /// gallery's horizontal gutter, never below the narrowest usable grid.
+    private var availableGridWidth: CGFloat {
+        max((gridWidth > 0 ? gridWidth : columnWidth) - 68, 240)
+    }
+
     private var grid: some View {
-        let measuredWidth = gridWidth > 0 ? gridWidth : columnWidth
-        let available = max(measuredWidth - 68, 240)
-        let columns = store.columns(forWidth: available)
+        let available = availableGridWidth
+        // A query change lands one body pass before `onChange` runs. Reading
+        // the feed through the identity it was loaded for keeps that pass at
+        // the first page instead of measuring the previous board's depth.
+        let shown = store.currentListIdentity == feedIdentity ? loadedCards : GalleryPaging.firstPage
+        let limit = min(shown, store.visibleCards.count)
+        let columns = store.columns(forWidth: available, limit: limit)
         let spacing = store.cardColumnSpacing
         let cardWidth = MasonryComposer.columnWidth(
             availableWidth: available,
@@ -168,7 +220,9 @@ struct LibraryView: View {
             columns: columns,
             columnWidth: cardWidth,
             spacing: spacing,
-            rowSpacing: 28
+            rowSpacing: 28,
+            tailGeneration: limit,
+            onReachTail: scheduleNextPage
         ) { model in
             PinCard(
                 model: model,
@@ -184,6 +238,52 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 34)
         .padding(.bottom, 64)
+    }
+
+    /// Starts the feed over at the first page. Called whenever the query
+    /// changes, so a new board or search result opens small rather than
+    /// inheriting the previous list's loaded depth.
+    private func resetFeed(identity: String) {
+        feedGeneration &+= 1
+        loadScheduled = false
+        feedIdentity = identity
+        loadedCards = GalleryPaging.firstPage
+    }
+
+    /// Queues the next page when the end of a column reaches the lazy stack's
+    /// window. The append is deferred one runloop: the tail is discovered
+    /// during layout, and growing the grid in the middle of that pass is both
+    /// undefined behaviour and a chance to append several pages at once when
+    /// the balanced columns end together.
+    private func scheduleNextPage() {
+        guard store.currentListIdentity == feedIdentity else { return }
+        guard loadedCards < store.visibleCards.count, !loadScheduled else { return }
+        // A live resize is about to re-lay the grid anyway; wait for the
+        // settle so a drag does not pay for an append it will replace.
+        guard !widthSettle.pending else { return }
+        loadScheduled = true
+        let generation = feedGeneration
+        DispatchQueue.main.async {
+            loadScheduled = false
+            guard generation == feedGeneration else { return }
+            appendNextPage()
+        }
+    }
+
+    /// Allows the grid to lay out one more page. The cards are already on
+    /// disk, so "loading" is only "measure more of what the library has"; the
+    /// batch lands below the fold, which keeps the scroll position and every
+    /// visible card perfectly still.
+    private func appendNextPage() {
+        let total = store.visibleCards.count
+        guard loadedCards < total else { return }
+        let columns = MasonryComposer.columnCount(
+            width: availableGridWidth,
+            spacing: store.cardColumnSpacing
+        )
+        let next = GalleryPaging.nextLimit(current: loadedCards, total: total, columns: columns)
+        guard next > loadedCards else { return }
+        loadedCards = next
     }
 
     /// Coarsens the width the masonry reacts to while the window is moving,

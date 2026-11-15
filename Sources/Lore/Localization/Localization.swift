@@ -244,6 +244,7 @@ final class LanguageManager: ObservableObject {
         "Screenshot": "截图",
         "Image": "图片",
         "GIF": "GIF",
+        "SVG": "SVG",
         "GIF · %ld frames": "GIF · %ld 帧",
         "Pasted GIF · %@": "粘贴的 GIF · %@",
         "GIF added to %@": "GIF 已添加到 %@",
@@ -324,7 +325,8 @@ final class LanguageManager: ObservableObject {
         "Screenshots in, structure out. Lore reads pixels, palette, and dimensions for you.": "截图进来，结构化信息自动生成。Lore 会为你读取像素、色板与尺寸。",
         "Drop screenshots here": "拖入截图",
         "Release to pin": "松开即可收录",
-        "or press ⌘V to paste · PNG, JPEG, GIF, HEIC, TIFF": "或按 ⌘V 粘贴 · 支持 PNG、JPEG、GIF、HEIC、TIFF",
+        "or press ⌘V to paste · PNG, JPEG, GIF, SVG, HEIC, TIFF": "或按 ⌘V 粘贴 · 支持 PNG、JPEG、GIF、SVG、HEIC、TIFF",
+        "Paste SVG code instead": "改为粘贴 SVG 代码",
         "Take screenshot": "截取屏幕",
         "Choose images": "选择图片",
         "Paste": "粘贴",
@@ -362,10 +364,30 @@ final class LanguageManager: ObservableObject {
         "Untitled": "未命名",
         "%@ isn't a readable image.": "%@ 不是可读取的图片。",
         "%@ uses an unsupported image format.": "%@ 使用了不支持的图片格式。",
+        "%@ isn't a valid SVG document.": "%@ 不是有效的 SVG 文档。",
         "Couldn't store the image: %@": "无法保存图片：%@",
         "Clipboard image": "剪贴板图片",
         "No pins yet.": "还没有灵感。",
         "No pins in this library.": "图库中还没有灵感。",
+
+        // SVG capture
+        "SVG code": "SVG 代码",
+        "Pasted SVG · %@": "粘贴的 SVG · %@",
+        "SVG · %@": "SVG · %@",
+        "SVG added to %@": "SVG 已添加到 %@",
+        "Add SVG Code…": "添加 SVG 代码…",
+        "Paste SVG code": "粘贴 SVG 代码",
+        "PASTE VECTOR": "粘贴矢量图",
+        "Add SVG code.": "添加 SVG 代码。",
+        "Paste the markup of a logo, icon or illustration. Lore stores the vector itself and renders it at any size.": "粘贴 Logo、图标或插画的代码。Lore 会保存矢量源文件，并按任意尺寸渲染。",
+        "Paste <svg> markup here…": "在此粘贴 <svg> 代码…",
+        "Live preview": "实时预览",
+        "No markup yet": "还没有代码",
+        "Waiting for markup": "等待代码",
+        "That isn't a valid SVG document.": "这不是有效的 SVG 文档。",
+        "Title (optional)": "标题（可选）",
+        "Adding…": "添加中…",
+        "Pin SVG": "收录 SVG",
 
         // App menus
         "Library": "图库",
@@ -505,6 +527,7 @@ func localizedSourceLabel(_ source: String?) -> String? {
     case "Clipboard": return T("Clipboard")
     case "Screen capture": return T("Screen capture")
     case "Drag & drop": return T("Drag & drop")
+    case "SVG code": return T("SVG code")
     default: return source
     }
 }

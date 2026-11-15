@@ -33,6 +33,19 @@ struct PinCard: View, Equatable {
 
     @State private var hovering = false
     @State private var hoverPrefetchTask: Task<Void, Never>?
+    /// Cards fade and rise into place the first time they are ever shown, so
+    /// an incrementally loaded feed reads as content arriving rather than
+    /// snapping in. Seeded from `GalleryReveal` so recycled cards (scrolled
+    /// away and back) start fully visible instead of flashing at zero opacity.
+    @State private var appeared: Bool
+
+    init(model: PinCardModel, isSelected: Bool, isSelecting: Bool, actions: PinCardActions) {
+        self.model = model
+        self.isSelected = isSelected
+        self.isSelecting = isSelecting
+        self.actions = actions
+        _appeared = State(initialValue: GalleryReveal.shared.hasSeen(model.id))
+    }
 
     static func == (lhs: PinCard, rhs: PinCard) -> Bool {
         lhs.model == rhs.model && lhs.isSelected == rhs.isSelected && lhs.isSelecting == rhs.isSelecting
@@ -68,8 +81,15 @@ struct PinCard: View, Equatable {
                 }
             }
         }
+        .onAppear {
+            guard !appeared else { return }
+            GalleryReveal.shared.markSeen(model.id)
+            withAnimation(.easeOut(duration: 0.28)) { appeared = true }
+        }
         .onDisappear { hoverPrefetchTask?.cancel() }
         .contextMenu { contextMenu }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 10)
         .scaleEffect(hovering && !isSelecting ? 1.004 : 1)
         .shadow(
             color: .black.opacity(hovering && !isSelecting ? 0.10 : 0),

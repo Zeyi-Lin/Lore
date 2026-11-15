@@ -6,6 +6,7 @@ struct CaptureSheet: View {
     @State private var board = "Unsorted"
     @State private var dropTargeted = false
     @State private var boardMenuHovering = false
+    @State private var svgHovering = false
     @State private var pasteMonitor: Any?
 
     var body: some View {
@@ -104,9 +105,31 @@ struct CaptureSheet: View {
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(Theme.ink)
 
-            Text(T("or press ⌘V to paste · PNG, JPEG, GIF, HEIC, TIFF"))
+            Text(T("or press ⌘V to paste · PNG, JPEG, GIF, SVG, HEIC, TIFF"))
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.inkTertiary)
+
+            Button {
+                close()
+                store.svgPastePresented = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                    Text(T("Paste SVG code instead"))
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                .foregroundStyle(Theme.inkSecondary)
+                .padding(.horizontal, 10)
+                .frame(height: 24)
+                .background(Capsule().fill(svgHovering ? Theme.parchmentDeep : Color.white.opacity(0.7)))
+                .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .onHover { svgHovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: svgHovering)
+            .pointerCursor()
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 195)

@@ -94,6 +94,7 @@ struct RootView: View {
             }
 
             CaptureLayer()
+            SVGCodeLayer()
             BoardManagerLayer()
             DetailLayer()
             ToastLayer()
@@ -164,6 +165,8 @@ struct RootView: View {
                 withAnimation(.easeOut(duration: 0.16)) { store.boardManagerPresented = false }
             } else if store.selectedPin != nil {
                 store.dismissDetail()
+            } else if store.svgPastePresented {
+                withAnimation(.easeOut(duration: 0.18)) { store.svgPastePresented = false }
             } else if store.capturePresented {
                 withAnimation(.easeOut(duration: 0.18)) { store.capturePresented = false }
             } else if store.isSelectingPins {
@@ -186,7 +189,10 @@ struct RootView: View {
                   Clipboard.containsImage(),
                   event.window === NSApp.mainWindow else { return event }
             let galleryReady = MainActor.assumeIsolated {
-                !store.capturePresented && !store.boardManagerPresented && store.selectedPin == nil
+                !store.capturePresented
+                    && !store.svgPastePresented
+                    && !store.boardManagerPresented
+                    && store.selectedPin == nil
             }
             guard galleryReady else { return event }
             Task { @MainActor in _ = await store.pasteFromClipboard() }
@@ -244,6 +250,8 @@ struct RootView: View {
             }
         case "capture":
             store.capturePresented = true
+        case "svg":
+            store.svgPastePresented = true
         case "boards":
             store.boardManagerPresented = true
         case "batch":
@@ -346,6 +354,21 @@ private struct CaptureLayer: View {
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.84), value: store.capturePresented)
+    }
+}
+
+private struct SVGCodeLayer: View {
+    @Environment(LibraryStore.self) private var store
+
+    var body: some View {
+        Group {
+            if store.svgPastePresented {
+                SVGCodeSheet()
+                    .transition(.opacity)
+                    .zIndex(6)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.84), value: store.svgPastePresented)
     }
 }
 

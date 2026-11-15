@@ -171,12 +171,12 @@ enum OpenAPISpec {
             queryParameter("tags", description: "Comma-separated tags; trimmed, lower-cased, and de-duplicated.", schema: ["type": "string"], example: "mobile,checkout"),
             queryParameter("sourceURL", description: "Optional source URL for the inspiration.", schema: ["type": "string"]),
             queryParameter("sourceLabel", description: "Optional source label. Defaults to Agent API.", schema: ["type": "string"], example: "Claude Code"),
-            queryParameter("kind", description: "Pin kind. Defaults to screenshot, or image for animated GIFs.", schema: ["type": "string"], example: "screenshot"),
+            queryParameter("kind", description: "Pin kind. Defaults to screenshot, image for animated GIFs, or svg for vector markup.", schema: ["type": "string"], example: "screenshot"),
             queryParameter("favorite", description: "Whether the new pin is a favorite.", schema: ["type": "boolean"])
         ]
         let requestBody: [String: Any] = [
             "required": true,
-            "description": "Either an application/json document with imageBase64, or a raw image body with an image/* Content-Type. Raw metadata is supplied through the query parameters.",
+            "description": "Either an application/json document with imageBase64, or a raw image body with an image/* Content-Type (including image/svg+xml). Raw metadata is supplied through the query parameters.",
             "content": [
                 "application/json": ["schema": ref("CreatePinRequest")],
                 "image/png": ["schema": ["type": "string", "format": "binary"]],
@@ -186,7 +186,8 @@ enum OpenAPISpec {
                 "image/heic": ["schema": ["type": "string", "format": "binary"]],
                 "image/tiff": ["schema": ["type": "string", "format": "binary"]],
                 "image/bmp": ["schema": ["type": "string", "format": "binary"]],
-                "image/avif": ["schema": ["type": "string", "format": "binary"]]
+                "image/avif": ["schema": ["type": "string", "format": "binary"]],
+                "image/svg+xml": ["schema": ["type": "string", "format": "binary"]]
             ]
         ]
         let operationResponses: [String: Any] = [
@@ -200,7 +201,7 @@ enum OpenAPISpec {
         return operation(
             token: "createPin",
             summary: "Add a pin",
-            description: "Validates an image, writes the original and a JPEG thumbnail (max 1200 px) into the Lore library, appends the pin to library.json atomically, and returns the enriched pin. Send application/json with imageBase64, or a raw image body with an image/* Content-Type and metadata in query parameters.",
+            description: "Validates an image, writes the original and a JPEG thumbnail (max 1200 px) into the Lore library, appends the pin to library.json atomically, and returns the enriched pin. Send application/json with imageBase64, or a raw image body with an image/* Content-Type and metadata in query parameters. SVG bodies are stored as vectors and served back as image/svg+xml.",
             tags: ["Library"],
             parameters: rawMetadata,
             requestBody: requestBody,
@@ -472,7 +473,7 @@ enum OpenAPISpec {
                 "animated": ["type": "boolean", "description": "True when the original image has multiple frames (for example a GIF)."],
                 "frameCount": ["type": "integer", "minimum": 1, "description": "Frame count of the original image; 1 for still images."],
                 "favorite": ["type": "boolean"],
-                "kind": ["type": "string"],
+                "kind": ["type": "string", "description": "Pin kind: screenshot, image, or svg."],
                 "imageURL": ["type": ["string", "null"], "description": "Absolute loopback URL for the original image."],
                 "thumbnailURL": ["type": ["string", "null"], "description": "Absolute loopback URL for the thumbnail."]
             ],
@@ -488,14 +489,14 @@ enum OpenAPISpec {
             "description": "JSON form for POST /api/v1/pins. imageBase64 is required; a data URI prefix (data:image/png;base64,...) is accepted.",
             "properties": [
                 "imageBase64": ["type": "string", "description": "Base64-encoded image bytes. Data URI prefixes are accepted."],
-                "mimeType": ["type": "string", "description": "Optional declared media type, for example image/png."],
+                "mimeType": ["type": "string", "description": "Optional declared media type, for example image/png or image/svg+xml."],
                 "title": ["type": "string"],
                 "note": ["type": "string"],
                 "board": ["type": "string", "description": "Board the pin belongs to. Prefix the product name and nest with a slash, e.g. Linear/Settings."],
                 "tags": ["type": "array", "items": ["type": "string"]],
                 "sourceURL": nullableString,
                 "sourceLabel": nullableString,
-                "kind": ["type": "string"],
+                "kind": ["type": "string", "description": "Pin kind: screenshot, image, or svg."],
                 "favorite": ["type": "boolean"]
             ],
             "required": ["imageBase64"]
@@ -513,7 +514,7 @@ enum OpenAPISpec {
                 "sourceURL": nullableMetadataString,
                 "sourceLabel": nullableMetadataString,
                 "favorite": ["type": "boolean"],
-                "kind": ["type": "string", "enum": ["screenshot", "image"]]
+                "kind": ["type": "string", "enum": ["screenshot", "image", "svg"]]
             ]
         ]
         let pinList: [String: Any] = [

@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import LoreAgentKit
 
 /// Thread-safe holder so decoded `CGImage`s can live in `NSCache`.
 final class CGImageBox: @unchecked Sendable {
@@ -128,6 +129,19 @@ actor ImageLoader {
 
     private static func decode(paths: [String], maxPixel: Int) -> CGImage? {
         for path in paths {
+            // ImageIO has no SVG decoder, but AppKit rasterises vectors through
+            // `NSImage`. Decoding here (background queue, at the requested
+            // pixel size) keeps the cache contract identical for vectors and
+            // bitmaps: the view receives an already-drawn `CGImage`.
+            if path.lowercased().hasSuffix(".svg") {
+                if let vector = SVGRasterizer.rasterize(
+                    fileURL: URL(fileURLWithPath: path),
+                    maxPixel: maxPixel
+                ) {
+                    return vector
+                }
+                continue
+            }
             guard let source = CGImageSourceCreateWithURL(
                 URL(fileURLWithPath: path) as CFURL,
                 [kCGImageSourceShouldCache: false] as CFDictionary

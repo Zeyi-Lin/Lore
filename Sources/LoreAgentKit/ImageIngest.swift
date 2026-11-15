@@ -15,6 +15,9 @@ struct ProcessedImage {
     let isAnimated: Bool
     let frameCount: Int
     let thumbnailJPEG: Data
+    /// Kind used when the upload did not name one: `svg` for vectors, `image`
+    /// for animated uploads, `screenshot` for everything else.
+    let defaultKind: String
 }
 
 /// Validates upload bytes with ImageIO and derives the derived assets Lore
@@ -25,10 +28,16 @@ enum ImageIngestProcessor {
     private static let thumbnailJPEGQuality: CGFloat = 0.82
     private static let paletteColorLimit = 5
     private static let paletteSampleSize = 32
+    /// SVG artwork is usually transparent and JPEG cannot keep an alpha
+    /// channel, so vector thumbnails are composited onto white.
+    private static let vectorBackground = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
 
     static func process(_ data: Data, declaredMimeType: String?) throws -> ProcessedImage {
         guard !data.isEmpty else {
             throw PinIngestError.missingImage("The request did not include any image bytes.")
+        }
+        if SVGRasterizer.isSVG(data: data) {
+            return try processVector(data, declaredMimeType: declaredMimeType)
         }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else {
             throw PinIngestError.invalidImageData("The uploaded bytes are not a supported image format.")
@@ -56,7 +65,43 @@ enum ImageIngestProcessor {
             colorTone: profile.tone,
             isAnimated: animation.isAnimated,
             frameCount: animation.frameCount,
-            thumbnailJPEG: jpeg
+            thumbnailJPEG: jpeg,
+            defaultKind: animation.isAnimated ? "image" : "screenshot"
+        )
+    }
+
+    /// Vector uploads keep the markup verbatim and derive a raster thumbnail
+    /// from it. Agents get the original SVG back from the image endpoint, so a
+    /// reference stays resolution-free instead of being flattened at upload.
+    private static func processVector(_ data: Data, declaredMimeType: String?) throws -> ProcessedImage {
+        let thumbnail: CGImage
+        do {
+            thumbnail = try SVGRasterizer.rasterize(
+                data: data,
+                maxPixel: maxThumbnailPixelSize,
+                background: vectorBackground
+            )
+        } catch {
+            throw PinIngestError.invalidImageData("The SVG markup could not be rendered: \(error.localizedDescription)")
+        }
+        guard let jpeg = encodeJPEG(thumbnail) else {
+            throw PinIngestError.invalidImageData("The uploaded SVG could not be encoded as a JPEG thumbnail.")
+        }
+        let intrinsic = SVGRasterizer.intrinsicSize(data: data)
+            ?? CGSize(width: thumbnail.width, height: thumbnail.height)
+        let profile = LoreColorAnalyzer.classify(image: thumbnail)
+        return ProcessedImage(
+            originalData: data,
+            fileExtension: "svg",
+            width: max(1, Int(intrinsic.width.rounded())),
+            height: max(1, Int(intrinsic.height.rounded())),
+            colors: palette(from: thumbnail),
+            colorFamilies: profile.families,
+            colorTone: profile.tone,
+            isAnimated: false,
+            frameCount: 1,
+            thumbnailJPEG: jpeg,
+            defaultKind: "svg"
         )
     }
 

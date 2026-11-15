@@ -159,6 +159,10 @@ final class LibrarySnapshot {
                 words.append("gif animated")
                 words.append(T("GIF"))
             }
+            if pin.isSVG {
+                words.append("svg vector scalable")
+                words.append(T("SVG"))
+            }
             for family in profile.families {
                 words.append(family.rawValue)
                 words.append(family.localizedTitle)

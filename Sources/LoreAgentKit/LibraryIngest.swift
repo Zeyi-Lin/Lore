@@ -194,7 +194,7 @@ final class LibraryIngestor {
             sourceLabel: Self.normalizedText(request.sourceLabel) ?? "Agent API",
             colors: processed.colors,
             favorite: request.favorite ?? false,
-            kind: Self.normalizedText(request.kind) ?? (processed.isAnimated ? "image" : "screenshot"),
+            kind: Self.normalizedText(request.kind) ?? processed.defaultKind,
             colorFamilies: processed.colorFamilies,
             colorTone: processed.colorTone,
             isAnimated: processed.isAnimated,

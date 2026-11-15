@@ -604,6 +604,9 @@ final class LibraryStore {
                 if pin.isAnimated || pin.image.lowercased().hasSuffix(".gif") {
                     searchParts.append("gif animated")
                 }
+                if pin.image.lowercased().hasSuffix(".svg") {
+                    searchParts.append("svg vector")
+                }
                 let haystack = searchParts.joined(separator: " ").lowercased()
                 if !haystack.contains(search) { return false }
             }

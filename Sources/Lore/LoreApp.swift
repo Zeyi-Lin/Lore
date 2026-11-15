@@ -58,6 +58,12 @@ struct LoreApp: App {
             }
             .keyboardShortcut("o", modifiers: .command)
 
+            Button(T("Add SVG Code…")) {
+                store.capturePresented = false
+                store.svgPastePresented = true
+            }
+            .keyboardShortcut("v", modifiers: [.command, .option])
+
             Divider()
 
             Button(T("Paste Image")) {

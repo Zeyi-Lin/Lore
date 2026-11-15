@@ -6,7 +6,7 @@ enum LlmsTxt {
         return """
 # Lore Agent API
 
-> Lore is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, auto-detected colour families and tones, GIF/animation metadata, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. Agents can also add new pins with POST /api/v1/pins using a JSON base64 payload or a raw image body. The library is re-read from disk on every request.
+> Lore is a local macOS visual library of pinned UI screenshots. This loopback-only HTTP API exposes pin metadata, palettes, boards, tags, auto-detected colour families and tones, GIF/animation and SVG/vector metadata, design notes, and original or thumbnail image streams so coding agents can reference real designs when replicating UI. Agents can also add new pins with POST /api/v1/pins using a JSON base64 payload or a raw image body. The library is re-read from disk on every request.
 
 Base URL: \(baseURL)
 API version: v1
@@ -23,7 +23,7 @@ Human documentation: \(baseURL)/docs
 - [Health](\(baseURL)/health): liveness check with the bound port and current pin count. Alias: \(baseURL)/api/v1/health.
 - [Library](\(baseURL)/api/v1/library): the complete enriched library with stats, boards, tags, colour-family facets, tone facets, and every pin.
 - [Pins](\(baseURL)/api/v1/pins): filterable pin list. Query parameters: q, tag, board, color (neutral|red|orange|yellow|green|teal|blue|violet|pink|brown|multicolor), tone (light|pastel|vivid|muted|deep), favorite, kind, sort (recent|oldest|title), limit (1-200), offset.
-- [Create pin](\(baseURL)/api/v1/pins): POST a new pin. Send application/json with imageBase64 (data URI prefixes accepted) and optional metadata, or send a raw image body with Content-Type image/* and metadata as query parameters. Animated GIFs keep their frames; the response includes `animated` and `frameCount`. Bodies are limited to 20 MiB; responses are 201 with an EnrichedPin and a Location header. Board names are plain strings: use a Product/Screen name — e.g. board=Linear/Settings — so the pin nests under "Linear" in the app sidebar.
+- [Create pin](\(baseURL)/api/v1/pins): POST a new pin. Send application/json with imageBase64 (data URI prefixes accepted) and optional metadata, or send a raw image body with Content-Type image/* and metadata as query parameters. Animated GIFs keep their frames; SVG bodies are stored as vectors and served back as image/svg+xml. The response includes `animated` and `frameCount`. Bodies are limited to 20 MiB; responses are 201 with an EnrichedPin and a Location header. Board names are plain strings: use a Product/Screen name — e.g. board=Linear/Settings — so the pin nests under "Linear" in the app sidebar.
 - [Update pin](\(baseURL)/api/v1/pins/{id}): PATCH pin metadata. Send application/json with one or more of title, note, board, tags, sourceURL, sourceLabel, favorite, kind; null clears a nullable field. Bodies are limited to 256 KiB and the response is the updated EnrichedPin. The library owner can disable PATCH in Lore Settings; it then returns 403 metadata_edits_disabled.
 - [Pin](\(baseURL)/api/v1/pins/{id}): one enriched pin by its UUID.
 - [Pin image](\(baseURL)/api/v1/pins/{id}/image): raw image bytes. Use variant=original (default) or variant=thumb; thumb falls back to original.
@@ -65,6 +65,13 @@ Add an animated GIF (frames are preserved; `animated` and `frameCount` are retur
       "\(baseURL)/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
       | jq '{id, animated, frameCount, imageURL}'
 
+Add an SVG (the markup is stored as Images/<id>.svg; imageURL streams image/svg+xml):
+
+    curl -s -X POST --data-binary @mark.svg \
+      -H "Content-Type: image/svg+xml" \
+      "\(baseURL)/api/v1/pins?title=Mark&board=Brand&tags=logo" \
+      | jq '{id, kind, width, height, imageURL}'
+
 Add a pin with JSON base64 (data URI prefixes are accepted):
 
     curl -s -X POST "\(baseURL)/api/v1/pins" \\
@@ -96,6 +103,17 @@ card hover, in the detail card, and in large-image mode. Agent uploads are
 analysed automatically; `kind` defaults to `image` for animated GIFs when the
 agent does not supply one.
 
+## Vector images
+
+SVG uploads are stored verbatim as `Images/<id>.svg`; `imageURL` streams
+image/svg+xml with a sandboxing Content-Security-Policy, while `thumbnailURL`
+is a rasterised JPEG for previews. `width` and `height` report the document's
+intrinsic size, and `kind` defaults to `svg` when the agent does not supply one.
+The original stays vector, so an agent can recolor or rescale it without loss.
+In the app, SVG pins render at the requested size for the grid, the detail
+pane, and large-image mode; you can also add one by pasting markup into the
+SVG sheet (or copying it and pressing ⌘V).
+
 ## Board hierarchy
 
 Board names, titles, and tags are plain strings; only `/` is special. A pin on
@@ -116,7 +134,7 @@ product, prefix the board with the product name and keep one nesting level:
 - Upload bodies are limited to 20 MiB. JSON base64 payloads must fit within that limit (base64 adds ~33% overhead).
 - All endpoints support GET, HEAD, and OPTIONS (CORS preflight); POST is supported on /api/v1/pins only.
 - Errors are JSON: {"error": {"code": "...", "message": "..."}} with HTTP 400, 404, 405, 413, 415, or 500.
-- Image responses use the correct Content-Type for the stored file (for example image/png or image/jpeg).
+- Image responses use the correct Content-Type for the stored file (for example image/png, image/jpeg, or image/svg+xml).
 - No authentication is required because the API is loopback-only. Any local process can add pins; do not expose the port.
 """
     }
