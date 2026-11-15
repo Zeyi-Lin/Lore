@@ -5,11 +5,11 @@ Lore ships as a macOS app bundle inside a DMG attached to a GitHub release, and 
 | Property | Value |
 | --- | --- |
 | Repository | `Zeyi-Lin/Lore` (`https://github.com/Zeyi-Lin/Lore`) |
-| Version source | `Sources/Lore/Version.swift` → `LoreVersion.current` (currently `1.1.0`) |
+| Version source | `Sources/Lore/Version.swift` → `LoreVersion.current` (currently `1.2.0`) |
 | Version consumers | `Info.plist` → `CFBundleShortVersionString`; Settings → About; in-app updater |
 | App bundle | `dist/Lore.app`, bundle id `studio.lore.library` |
 | Release asset | `dist/Lore-vX.Y.Z.dmg`, uploaded as `Lore-vX.Y.Z.dmg` |
-| Current release | `v1.1.0`, asset `Lore-v1.1.0.dmg` |
+| Current release | `v1.2.0`, asset `Lore-v1.2.0.dmg` |
 | Updater feed | `https://api.github.com/repos/Zeyi-Lin/Lore/releases/latest` |
 | Download URL shape | `https://github.com/Zeyi-Lin/Lore/releases/download/vX.Y.Z/Lore-vX.Y.Z.dmg` |
 | Packaging script | `scripts/package-release.sh` — builds and packages, never publishes |
@@ -26,7 +26,7 @@ The app version is declared exactly once:
 ```swift
 // Sources/Lore/Version.swift
 enum LoreVersion {
-    static let current = "1.1.0"   // ← the only line to bump for a release
+    static let current = "1.2.0"   // ← the only line to bump for a release
     // ...
 }
 ```
@@ -36,7 +36,7 @@ Everything else derives from it:
 | Consumer | Where the number comes from | What a bump changes |
 | --- | --- | --- |
 | `CFBundleShortVersionString` | `scripts/build-app.sh` extracts the literal with `sed` and stamps it into `dist/Lore.app/Contents/Info.plist` | The packaged bundle version (Finder *Get Info*, app menu) |
-| Settings → About | `LoreVersion.installed` reads `Bundle.main`'s `CFBundleShortVersionString`, falling back to `current` for a bare `swift run` | The number users see, e.g. `Lore 1.1.0` |
+| Settings → About | `LoreVersion.installed` reads `Bundle.main`'s `CFBundleShortVersionString`, falling back to `current` for a bare `swift run` | The number users see, e.g. `Lore 1.2.0` |
 | In-app updater | `SemanticVersion(tag)` is compared against `LoreVersion.installed` | Which releases are offered as updates |
 | `CFBundleVersion` | Not from this line — `git rev-list --count HEAD` at build time | A monotonic build counter; never the marketing version |
 
@@ -70,16 +70,16 @@ If `gh` is missing: `brew install gh && gh auth login`.
 
 Use semver and make it **strictly greater** than the latest published tag:
 
-- **patch** (`1.1.0` → `1.1.1`) — fixes, packaging only
-- **minor** (`1.1.0` → `1.2.0`) — new features, backwards compatible
-- **major** (`1.1.0` → `2.0.0`) — breaking changes
+- **patch** (`1.2.0` → `1.2.1`) — fixes, packaging only
+- **minor** (`1.2.0` → `1.3.0`) — new features, backwards compatible
+- **major** (`1.2.0` → `2.0.0`) — breaking changes
 
 ### 2. Bump the one line
 
 Edit `Sources/Lore/Version.swift` (currently line 11 in the `LoreVersion` enum; search for `static let current` if the file has moved):
 
 ```swift
-static let current = "1.1.0"   →   static let current = "X.Y.Z"
+static let current = "1.2.0"   →   static let current = "X.Y.Z"
 ```
 
 That is the whole bump. Do not edit `dist/Lore.app/Contents/Info.plist` by hand — `scripts/build-app.sh` regenerates it on every build. User-facing documentation (README, `docs/`) belongs with the feature pull requests, not with this commit.
@@ -202,7 +202,7 @@ shasum -a 256 "/tmp/Lore-vX.Y.Z.dmg"   # must equal the packaging output
 
 ### What the app does
 
-- **Settings → About** shows `LoreVersion.installed` — rendered as `LoreVersion.display`, e.g. `Lore 1.1.0` — which is the bundle version, falling back to the compiled constant for bare `swift run` builds.
+- **Settings → About** shows `LoreVersion.installed` — rendered as `LoreVersion.display`, e.g. `Lore 1.2.0` — which is the bundle version, falling back to the compiled constant for bare `swift run` builds.
 - **Launch auto-check** runs at most once every 24 hours (the timestamp is persisted), is silent on failure, and does not cache a failed attempt, so the next launch retries. There is no polling loop and no background process that checks at intervals.
 - **Manual check** — Settings → About → *Check for Updates*, or the app menu's *Check for Updates…* — fetches on demand and surfaces the failure reason.
 - A check performs a single `GET https://api.github.com/repos/Zeyi-Lin/Lore/releases/latest`, decodes `tag_name`, `name`, `body`, `html_url`, and `assets`, and compares the tag as semver with the installed version.
