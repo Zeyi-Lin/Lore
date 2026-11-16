@@ -8,7 +8,7 @@ import Foundation
 /// therefore enough to move all three in lockstep. The release procedure lives in
 /// `docs/RELEASING.md`.
 enum LoreVersion {
-    static let current = "1.2.1"
+    static let current = "1.2.2"
 
     /// What the running app reports. A packaged `Lore.app` answers with its
     /// Info.plist; a bare `swift run Lore` (no bundle) falls back to the
