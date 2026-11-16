@@ -176,6 +176,27 @@ final class LibraryStore {
         )
     }
 
+    /// What the gallery is looking at, with the facet selections left out: the
+    /// filter bar's numbers are counted inside this scope, so they follow the
+    /// selected board instead of always describing the whole library.
+    private var currentScope: GalleryScope {
+        GalleryScope(
+            sectionRaw: section.rawValue,
+            board: selectedBoard?.trimmed.lowercased(),
+            needle: searchQuery,
+            languageRaw: LanguageManager.shared.resolved.rawValue,
+            revision: revision
+        )
+    }
+
+    /// Availability inside the current board/section/search. One pass per
+    /// scope change, then memoised; the filter chips and the colour popover
+    /// all read from here.
+    var scopeCounts: GalleryScopeCounts {
+        _ = revision
+        return projection.counts(for: currentScope)
+    }
+
     /// The pins visible for the current query. Memoised: the five reads that
     /// used to happen per `LibraryView` body now cost a dictionary lookup.
     var filteredPins: [Pin] { projection.visiblePins(for: currentQuery) }
@@ -251,28 +272,19 @@ final class LibraryStore {
         return projection.allTags()
     }
 
-    /// Multi-membership hue counts. A teal-and-yellow reference counts in both,
-    /// and `multicolor` counts pins with three or more named hues.
-    var colorFamilyCounts: [LoreColorFamily: Int] {
-        _ = revision
-        return snapshot.colorFamilyCounts
+    /// Multi-membership hue counts within the current scope. A teal-and-yellow
+    /// reference counts in both, and `multicolor` counts pins with three or
+    /// more named hues.
+    func colorFamilyCount(_ family: LoreColorFamily) -> Int {
+        scopeCounts.colorFamilies[family.rawValue] ?? 0
     }
 
-    var toneCounts: [LoreColorTone: Int] {
-        _ = revision
-        return snapshot.toneCounts
+    func toneCount(_ tone: LoreColorTone) -> Int {
+        scopeCounts.tones[tone.rawValue] ?? 0
     }
 
     var hasColorFilter: Bool {
         colorFamilyFilter != nil || toneFilter != nil
-    }
-
-    func colorFamilyCount(_ family: LoreColorFamily) -> Int {
-        colorFamilyCounts[family] ?? 0
-    }
-
-    func toneCount(_ tone: LoreColorTone) -> Int {
-        toneCounts[tone] ?? 0
     }
 
     /// Clicking a family in the gallery filter toggles it; `nil` clears.

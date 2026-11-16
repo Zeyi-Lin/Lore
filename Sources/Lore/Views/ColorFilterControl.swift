@@ -174,7 +174,7 @@ private struct ColorFilterPopover: View {
 
     private func toneChip(_ tone: LoreColorTone?) -> some View {
         let selected = store.toneFilter == tone
-        let count = tone.map { store.toneCount($0) } ?? store.toneCounts.values.reduce(0, +)
+        let count = tone.map { store.toneCount($0) } ?? store.scopeCounts.all
         let title = tone?.localizedTitle ?? T("Any tone")
         return ToneFilterChip(
             title: title,

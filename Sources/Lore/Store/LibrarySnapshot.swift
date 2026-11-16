@@ -36,6 +36,29 @@ struct GalleryQuery: Hashable {
     var revision: UInt64
 }
 
+/// What the gallery is looking at, independent of the facet selections: the
+/// sidebar section, the selected board and the search needle. Facet counts are
+/// computed against this scope, so the numbers under the filter chips describe
+/// the board you are in rather than the whole library.
+struct GalleryScope: Hashable {
+    var sectionRaw: String
+    var board: String?
+    var needle: String
+    var languageRaw: String
+    var revision: UInt64
+}
+
+/// Availability inside one `GalleryScope`: how many pins the scope holds in
+/// total and per facet value. Keyed by the raw filter keys (`LoreColorFamily`
+/// / `LoreColorTone` raw values) so it mirrors the snapshot's own indices.
+struct GalleryScopeCounts: Equatable {
+    var all = 0
+    var screenshots = 0
+    var favorites = 0
+    var colorFamilies: [String: Int] = [:]
+    var tones: [String: Int] = [:]
+}
+
 // MARK: - Snapshot
 
 /// Immutable view of the library plus the aggregate indices that used to be
@@ -55,12 +78,11 @@ final class LibrarySnapshot {
     /// tag -> count
     let tagCounts: [String: Int]
     /// Per-pin colour filter keys (families plus the derived "multicolor").
+    /// Colour availability is counted per board by `GalleryProjection`, not
+    /// here, because it has to follow the selected scope.
     let colorKeys: [[String]]
     /// Per-pin tone key.
     let toneKeys: [String]
-    /// Multi-membership family counts, so filters can surface availability.
-    let colorFamilyCounts: [LoreColorFamily: Int]
-    let toneCounts: [LoreColorTone: Int]
 
     private var cachedSearchKeys: [String]?
     private var cachedSearchKeyBytes: [[UInt8]]?
@@ -83,8 +105,6 @@ final class LibrarySnapshot {
         var toneKeys: [String] = []
         colorKeys.reserveCapacity(pins.count)
         toneKeys.reserveCapacity(pins.count)
-        var familyCounts: [LoreColorFamily: Int] = [:]
-        var toneCounts: [LoreColorTone: Int] = [:]
 
         for (offset, pin) in pins.enumerated() {
             index[pin.id] = offset
@@ -94,13 +114,6 @@ final class LibrarySnapshot {
             let profile = pin.colorProfile
             colorKeys.append(profile.filterKeys)
             toneKeys.append(profile.tone.rawValue)
-            for family in profile.families {
-                familyCounts[family, default: 0] += 1
-            }
-            if profile.isMulticolor {
-                familyCounts[.multicolor, default: 0] += 1
-            }
-            toneCounts[profile.tone, default: 0] += 1
 
             let trimmedBoard = pin.board.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayBoard = trimmedBoard.isEmpty ? "Unsorted" : trimmedBoard
@@ -126,8 +139,6 @@ final class LibrarySnapshot {
         self.tagCounts = tags
         self.colorKeys = colorKeys
         self.toneKeys = toneKeys
-        self.colorFamilyCounts = familyCounts
-        self.toneCounts = toneCounts
     }
 
     func pin(at index: Int) -> Pin { pins[index] }
@@ -210,6 +221,7 @@ final class GalleryProjection {
     private let root: URL
     private var pinsMemo: [GalleryQuery: [Pin]] = [:]
     private var modelsMemo: [GalleryQuery: [PinCardModel]] = [:]
+    private var scopeMemo: [GalleryScope: GalleryScopeCounts] = [:]
     private var recentOrder: [Int]?
     private var oldestOrder: [Int]?
     private var titleOrder: [Int]?
@@ -224,6 +236,7 @@ final class GalleryProjection {
         self.snapshot = snapshot
         pinsMemo.removeAll(keepingCapacity: true)
         modelsMemo.removeAll(keepingCapacity: true)
+        scopeMemo.removeAll(keepingCapacity: true)
         recentOrder = nil
         oldestOrder = nil
         titleOrder = nil
@@ -307,35 +320,55 @@ final class GalleryProjection {
 
     // MARK: Query evaluation
 
+    /// Facet counts for the scope the gallery is currently in. Memoised per
+    /// scope: a board switch or a settled search costs one pass, and every
+    /// body pass in between (hover, chip selection) is a dictionary hit.
+    func counts(for scope: GalleryScope) -> GalleryScopeCounts {
+        if let cached = scopeMemo[scope] { return cached }
+        let result = computeCounts(scope)
+        if scopeMemo.count > 8 { scopeMemo.removeAll(keepingCapacity: true) }
+        scopeMemo[scope] = result
+        return result
+    }
+
+    private func computeCounts(_ scope: GalleryScope) -> GalleryScopeCounts {
+        let pins = snapshot.pins
+        let matcher = ScopeMatcher(
+            snapshot: snapshot,
+            sectionRaw: scope.sectionRaw,
+            board: scope.board,
+            needle: scope.needle
+        )
+        var counts = GalleryScopeCounts()
+        for index in pins.indices {
+            let pin = pins[index]
+            guard matcher.contains(pin, at: index) else { continue }
+            counts.all += 1
+            if pin.kind == .screenshot { counts.screenshots += 1 }
+            if pin.isFavorite { counts.favorites += 1 }
+            for family in snapshot.colorKeys[index] {
+                counts.colorFamilies[family, default: 0] += 1
+            }
+            counts.tones[snapshot.toneKeys[index], default: 0] += 1
+        }
+        return counts
+    }
+
     private func compute(_ query: GalleryQuery) -> [Pin] {
         let pins = snapshot.pins
         let order = orderedIndices(for: query.sortRaw)
-        let cutoff: Date? = query.sectionRaw == "recent"
-            ? Calendar.current.date(byAdding: .day, value: -30, to: Date())
-            : nil
-        let boardKey = query.board
-        let boardKeys = boardKey != nil ? snapshot.boardKeys() : nil
-        let tokens: [String]? = query.needle.isEmpty
-            ? nil
-            : query.needle.split(separator: " ").map(String.init)
-        let searchKeyBytes = tokens != nil ? snapshot.searchKeyBytes() : nil
-        let needleBytes: [[UInt8]] = tokens?.map { Array($0.utf8) } ?? []
+        let scope = ScopeMatcher(
+            snapshot: snapshot,
+            sectionRaw: query.sectionRaw,
+            board: query.board,
+            needle: query.needle
+        )
 
         var result: [Pin] = []
         result.reserveCapacity(min(order.count, pins.count))
         for index in order {
             let pin = pins[index]
-
-            switch query.sectionRaw {
-            case "favorites":
-                guard pin.isFavorite else { continue }
-            case "recent":
-                if let cutoff, pin.createdAt < cutoff { continue }
-            default:
-                break
-            }
-
-            if let boardKey, let boardKeys, boardKeys[index] != boardKey { continue }
+            guard scope.contains(pin, at: index) else { continue }
 
             switch query.filterRaw {
             case "screenshots":
@@ -355,19 +388,57 @@ final class GalleryProjection {
                 continue
             }
 
-            if let searchKeyBytes {
-                let haystack = searchKeyBytes[index]
-                var matched = true
-                for needle in needleBytes where !Self.byteContains(haystack, needle) {
-                    matched = false
-                    break
-                }
-                if !matched { continue }
-            }
-
             result.append(pin)
         }
         return result
+    }
+
+    /// Section, board and search membership: the part of a query that says
+    /// *where* you are, as opposed to which facet is selected. Shared by the
+    /// gallery query and the scope counts, so the two can never disagree about
+    /// what a board contains.
+    private struct ScopeMatcher {
+        let sectionRaw: String
+        let cutoff: Date?
+        let boardKey: String?
+        let boardKeys: [String]?
+        let searchKeyBytes: [[UInt8]]?
+        let needleBytes: [[UInt8]]
+
+        init(snapshot: LibrarySnapshot, sectionRaw: String, board: String?, needle: String) {
+            self.sectionRaw = sectionRaw
+            self.cutoff = sectionRaw == "recent"
+                ? Calendar.current.date(byAdding: .day, value: -30, to: Date())
+                : nil
+            self.boardKey = board
+            self.boardKeys = board != nil ? snapshot.boardKeys() : nil
+            let tokens: [String]? = needle.isEmpty
+                ? nil
+                : needle.split(separator: " ").map(String.init)
+            self.searchKeyBytes = tokens != nil ? snapshot.searchKeyBytes() : nil
+            self.needleBytes = tokens?.map { Array($0.utf8) } ?? []
+        }
+
+        func contains(_ pin: Pin, at index: Int) -> Bool {
+            switch sectionRaw {
+            case "favorites":
+                guard pin.isFavorite else { return false }
+            case "recent":
+                if let cutoff, pin.createdAt < cutoff { return false }
+            default:
+                break
+            }
+
+            if let boardKey, let boardKeys, boardKeys[index] != boardKey { return false }
+
+            if let searchKeyBytes {
+                let haystack = searchKeyBytes[index]
+                for needle in needleBytes where !GalleryProjection.byteContains(haystack, needle) {
+                    return false
+                }
+            }
+            return true
+        }
     }
 
     private static func byteContains(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {

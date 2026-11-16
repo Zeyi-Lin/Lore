@@ -373,14 +373,17 @@ struct LibraryView: View {
     }
 
     private var filterBar: some View {
-        HStack(spacing: 8) {
-            FilterChip(title: T("All"), count: store.pins.count, isSelected: store.filter == .all) {
+        // Counts describe the current board (and section/search), not the whole
+        // library, so the chips agree with the header and the grid.
+        let counts = store.scopeCounts
+        return HStack(spacing: 8) {
+            FilterChip(title: T("All"), count: counts.all, isSelected: store.filter == .all) {
                 store.filter = .all
             }
-            FilterChip(title: T("Screenshots"), count: store.screenshotCount, isSelected: store.filter == .screenshots) {
+            FilterChip(title: T("Screenshots"), count: counts.screenshots, isSelected: store.filter == .screenshots) {
                 store.filter = .screenshots
             }
-            FilterChip(title: T("Favorites"), count: store.favoriteCount, isSelected: store.filter == .favorites) {
+            FilterChip(title: T("Favorites"), count: counts.favorites, isSelected: store.filter == .favorites) {
                 store.filter = .favorites
             }
             ColorFilterControl()
