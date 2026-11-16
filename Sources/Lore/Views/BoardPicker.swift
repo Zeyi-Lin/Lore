@@ -1,42 +1,29 @@
 import SwiftUI
 
-/// Board picker behind the pin's board pill.
-///
-/// It replaced a flat list of every board in the library, which grew into a
-/// screen-tall menu as soon as a library had nested boards (`Anthropic/…`
-/// alone was twenty-eight rows). The picker folds sub-boards into their group,
-/// keeps every other group closed, and lays rows out lazily, so opening it
-/// costs the same whether the library holds six boards or sixty. Search covers
-/// the board you want inside a group you would rather not open.
-/// Shared with the row modifier, which draws the same 30 pt rhythm.
-private enum BoardPickerMetrics {
-    static let width: CGFloat = 244
-    static let rowHeight: CGFloat = 30
-    static let rowSpacing: CGFloat = 1
-    static let listPadding: CGFloat = 12
-    /// Roughly ten rows. Past that the list scrolls instead of outgrowing the
-    /// window, which is what made the old menu so tall.
-    static let maxListHeight: CGFloat = 336
-    /// Below this many boards there is nothing to search through.
-    static let searchThreshold = 8
+/// Bounds of the board pill, so the picker can be anchored under it without
+/// ever measuring the card itself. An `Anchor` resolves against whichever
+/// coordinate space the reader is in, which keeps the panel correct across
+/// window resizes.
+struct BoardPillAnchorKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
 }
 
-
-/// The pin's board pill and its picker. The presented state lives here, not on
-/// the card: toggling it used to re-evaluate the whole detail card, which made
-/// opening the menu cost more than the menu itself.
+/// The pin's board pill. It only reports a tap; the picker itself is drawn by
+/// the detail overlay, which keeps the pill (and the card around it) out of the
+/// picker's layout path.
 struct BoardPill: View {
     let board: String
-    let onPick: (String) -> Void
-    let onNewBoard: () -> Void
+    let isOpen: Bool
+    let onToggle: () -> Void
 
-    @State private var presented = false
     @State private var hovering = false
 
     var body: some View {
-        Button {
-            presented.toggle()
-        } label: {
+        Button(action: onToggle) {
             HStack(spacing: 6) {
                 Circle()
                     .fill(Theme.boardColor(board))
@@ -47,10 +34,11 @@ struct BoardPill: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7.5, weight: .bold))
                     .foregroundStyle(Theme.inkTertiary)
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
             }
             .padding(.horizontal, 10)
             .frame(height: 31)
-            .background(Capsule().fill(hovering ? Theme.parchmentDeep : Theme.parchment))
+            .background(Capsule().fill(hovering || isOpen ? Theme.parchmentDeep : Theme.parchment))
             .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
@@ -58,23 +46,26 @@ struct BoardPill: View {
         .focusEffectDisabled()
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.14), value: hovering)
-        .popover(isPresented: $presented, arrowEdge: .bottom) {
-            BoardPicker(
-                current: board,
-                onPick: { name in
-                    onPick(name)
-                    presented = false
-                },
-                onNewBoard: {
-                    onNewBoard()
-                    presented = false
-                }
-            )
-        }
     }
 }
 
+/// Board picker behind the pin's board pill.
+///
+/// It replaced a flat list of every board in the library, which grew into a
+/// screen-tall menu as soon as a library had nested boards (`Anthropic/…`
+/// alone was twenty-eight rows). The picker folds sub-boards into their group,
+/// keeps every other group closed, and lays rows out lazily, so opening it
+/// costs the same whether the library holds six boards or sixty. Search covers
+/// the board you want inside a group you would rather not open.
+///
+/// The panel is an in-window overlay rather than a system popover: creating an
+/// `NSPopover` costs about 100 ms before a single row is laid out, which is
+/// exactly the pause this menu used to have.
+///
 struct BoardPicker: View {
+    /// Width the panel occupies, so the overlay can keep it on screen.
+    static let panelWidth = BoardPickerMetrics.width
+
     let current: String
     let onPick: (String) -> Void
     let onNewBoard: () -> Void
@@ -377,6 +368,19 @@ struct BoardPicker: View {
 }
 
 // MARK: - Row model
+
+/// Shared with the row modifier, which draws the same 30 pt rhythm.
+private enum BoardPickerMetrics {
+    static let width: CGFloat = 244
+    static let rowHeight: CGFloat = 30
+    static let rowSpacing: CGFloat = 1
+    static let listPadding: CGFloat = 12
+    /// Roughly ten rows. Past that the list scrolls instead of outgrowing the
+    /// window, which is what made the old menu so tall.
+    static let maxListHeight: CGFloat = 336
+    /// Below this many boards there is nothing to search through.
+    static let searchThreshold = 8
+}
 
 private struct BoardPickerItem: Identifiable {
     enum Kind {

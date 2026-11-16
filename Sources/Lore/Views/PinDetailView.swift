@@ -18,6 +18,10 @@ struct PinDetailOverlay: View {
     @State private var isEditingTitle = false
     @State private var isEditingNote = false
     @State private var moreMenuHovering = false
+    /// The board picker is drawn by this overlay rather than by a system
+    /// popover, so it can appear on the same frame as the click. The anchor is
+    /// the pill's frame in the overlay's own coordinate space.
+    @State private var boardPickerShown = false
     @State private var noteHovering = false
     @State private var tagHovering = false
     @FocusState private var titleFieldFocused: Bool
@@ -58,6 +62,14 @@ struct PinDetailOverlay: View {
                     }
                 }
             }
+            .overlayPreferenceValue(BoardPillAnchorKey.self) { anchor in
+                GeometryReader { proxy in
+                    if boardPickerShown, let anchor {
+                        boardPickerLayer(rect: proxy[anchor], container: proxy.size)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+                    }
+                }
+            }
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .transition(.opacity)
@@ -87,6 +99,7 @@ struct PinDetailOverlay: View {
             isEditingNote = false
         }
         .onChange(of: pin.id) { _, _ in
+            boardPickerShown = false
             titleFieldFocused = false
             noteFieldFocused = false
             tagFieldFocused = false
@@ -109,6 +122,10 @@ struct PinDetailOverlay: View {
             }
         }
         .onExitCommand {
+            if boardPickerShown {
+                closeBoardPicker()
+                return
+            }
             if isEditingTitle {
                 isEditingTitle = false
                 return
@@ -173,6 +190,10 @@ struct PinDetailOverlay: View {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
+            if event.keyCode == 53, boardPickerShown {
+                closeBoardPicker()
+                return nil
+            }
             if event.keyCode == 53 {
                 if isEditingTitle {
                     titleFieldFocused = false
@@ -222,6 +243,7 @@ struct PinDetailOverlay: View {
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard !isImageMode else { return event }
+            guard !boardPickerShown else { return event }
             guard let mainWindow = NSApp.mainWindow, event.window === mainWindow else { return event }
             if let responder = event.window?.firstResponder,
                responder is NSTextView || responder is NSTextField {
@@ -337,6 +359,7 @@ struct PinDetailOverlay: View {
     }
 
     private func enterImageMode() {
+        boardPickerShown = false
         withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
     }
 
@@ -466,11 +489,63 @@ struct PinDetailOverlay: View {
     private var boardMenu: some View {
         BoardPill(
             board: pin.board,
-            onPick: { board in
-                store.movePin(pin.id, toBoard: board)
-            },
-            onNewBoard: { showNewBoardField = true }
+            isOpen: boardPickerShown,
+            onToggle: toggleBoardPicker
         )
+        .anchorPreference(key: BoardPillAnchorKey.self, value: .bounds) { $0 }
+    }
+
+    /// The picker sits in the overlay's ZStack, right under the pill: an
+    /// in-window panel costs a layout pass, where a popover costs a window.
+    private func boardPickerLayer(rect: CGRect, container: CGSize) -> some View {
+        let width = BoardPicker.panelWidth
+        let x = min(
+            max(rect.minX - 4, 12),
+            max(container.width - width - 12, 12)
+        )
+        let y = rect.maxY + 7
+
+        return ZStack(alignment: .topLeading) {
+            Color.black.opacity(0.001)
+                .contentShape(Rectangle())
+                .onTapGesture { closeBoardPicker() }
+
+            BoardPicker(
+                current: pin.board,
+                onPick: { board in
+                    store.movePin(pin.id, toBoard: board)
+                    closeBoardPicker()
+                },
+                onNewBoard: {
+                    showNewBoardField = true
+                    closeBoardPicker()
+                }
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.paper)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.hairline, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 8)
+            .offset(x: x, y: y)
+        }
+        .frame(width: container.width, height: container.height, alignment: .topLeading)
+        .zIndex(8)
+    }
+
+    private func toggleBoardPicker() {
+        withAnimation(.easeOut(duration: 0.1)) {
+            boardPickerShown.toggle()
+        }
+    }
+
+    private func closeBoardPicker() {
+        withAnimation(.easeOut(duration: 0.1)) {
+            boardPickerShown = false
+        }
     }
 
     private var moreMenu: some View {
