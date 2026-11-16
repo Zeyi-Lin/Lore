@@ -18,9 +18,10 @@ Lore 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinterest
 设计参考通常散落在截图文件夹、聊天记录或十几个浏览器标签页里。Agent 看不到这些东西。Lore 是一个小巧、本地优先的“视觉品味记忆”：
 
 - **快速收录**：拖入文件、粘贴剪贴板（⌘V），或截取屏幕区域（⇧⌘2）。
-- **属于参考的 Pinterest**：平衡的瀑布流画廊，悬停收藏、画板、搜索、最近添加与收藏夹。
+- **属于参考的 Pinterest**：平衡的瀑布流画廊，滚动时增量加载——首屏只铺一批，接近底部再补下一批，卡片与图片入场时柔和淡入；悬停收藏、画板、搜索、最近添加与收藏夹。
 - **有用的元数据**：可编辑标题、设计笔记、标签、画板、来源、尺寸、文件大小、主色板与时间。
 - **GIF 动图**：导入、拖拽、粘贴或 Agent 上传 GIF 时保留原动画；宫格悬停播放，详情与大图模式持续播放，卡片带 GIF 标识。原图会附带 `animated` 与 `frameCount` 元数据供 Agent 使用。
+- **SVG 矢量图**：导入 `.svg` 文件、把文件拖进窗口，或直接粘贴 SVG 代码——复制代码后按 ⌘V 即可收录，⌥⌘V 则打开带实时预览、可先命名和选画板的代码面板。Lore 保存矢量源码，网格、详情与大图模式按需渲染；Agent 拿到的 `imageURL` 也是原始 `image/svg+xml`，放大任意倍数都不会糊。
 - **自动色系**：每张灵感都会自动分析出「色相家族 + 色调」——色相可多值（蓝、青、绿、黄、红、紫、粉、棕、中性、多彩），色调分为明亮、柔和、高饱和、低饱和、深色。图库筛选栏可按色系与色调快速检索，Agent 也能用 `color` / `tone` 过滤；旧图会在后台自动补算。
 - **默认对 Agent 友好**：本地 API 提供增强 JSON、原图/缩略图流、Markdown 设计上下文、OpenAPI 3.1、`llms.txt`，以及应用内文档页；Agent 也可以反向写入图片。
 - **可回写元数据**：Agent 还能通过 `PATCH /api/v1/pins/{id}` 修改标题、笔记、画板、标签、收藏等元数据；设置里可以关闭这项能力。
@@ -40,8 +41,9 @@ Lore 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinterest
 | 操作 | 快捷键 |
 | --- | --- |
 | 打开快速收录面板 | ⌘N |
-| 导入图片 | ⌘O |
-| 粘贴剪贴板图片 | ⌘V（也可 ⇧⌘V） |
+| 导入图片（含 SVG 文件） | ⌘O |
+| 粘贴剪贴板图片或 SVG 代码 | ⌘V（也可 ⇧⌘V） |
+| 打开 SVG 代码面板 | ⌥⌘V |
 | 截取屏幕区域 | ⇧⌘2 |
 | 搜索灵感 | ⌘F |
 | 打开 Agent 访问 | ⌘4 |
@@ -69,6 +71,8 @@ Lore 是一个原生 macOS 应用，用来快速收录 UI 截图、在 Pinterest
 
 也可以把文件拖到窗口任意位置。Lore 会自动读取像素尺寸、文件大小和最多五色调色板（GIF 还会保留动画与帧数），并分析出可检索的色系与色调；标题由文件名生成，可在灵感详情中修改。
 
+矢量参考同样简单：拖入 `.svg` 文件，或复制 SVG 代码后在窗口里直接按 ⌘V；想先看一眼预览、取个标题或选画板，就用 ⌥⌘V 打开 SVG 代码面板。SVG 会按文档的固有尺寸（`width`/`height` 或 `viewBox`）记录大小，缩略图、详情和大图都由矢量按需栅格化。
+
 > 区域截图使用 macOS 自带的 `screencapture -i`。首次使用时系统可能请求屏幕录制权限。
 
 ## Agent 接入
@@ -86,6 +90,11 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true"
 curl -s -X POST --data-binary @loading.gif \
   -H "Content-Type: image/gif" \
   "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" | jq
+
+# 上传 SVG：保存矢量源码，imageURL 返回 image/svg+xml
+curl -s -X POST --data-binary @mark.svg \
+  -H "Content-Type: image/svg+xml" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Brand%20mark&board=Brand&tags=logo" | jq
 
 # 按色系与色调筛选（color=teal&tone=deep，或 color=multicolor）
 curl -s "http://127.0.0.1:4242/api/v1/pins?color=teal&tone=deep" | jq
@@ -114,7 +123,7 @@ open http://127.0.0.1:4242/docs
 
 Agent 可以通过 `PATCH /api/v1/pins/{id}` 更新已有灵感的标题、笔记、画板、标签、来源、收藏与类型；这项能力可以在 **设置 → Agent API → 允许修改元数据** 中关闭。
 
-每个灵感都包含 `imageURL` 和 `thumbnailURL`，Agent 可以直接读取真实图片，而不只是阅读描述。
+每个灵感都包含 `imageURL` 和 `thumbnailURL`，Agent 可以直接读取真实图片，而不只是阅读描述。SVG 灵感保存原始矢量：`imageURL` 返回 `image/svg+xml`（带 CSP 沙箱），`thumbnailURL` 返回栅格化 JPEG，`kind` 为 `svg`。
 
 Agent 添加截图时，建议把画板名写成「产品/界面」，例如 `board=Linear/Settings`——Lore 会把它归到侧栏的 `Linear` 组下。原始图片上传时，查询串里的斜杠要写成 `%2F`。
 
@@ -170,7 +179,7 @@ swift build --disable-sandbox --manifest-cache local --cache-path .build/spm-cac
 ```
 ~/Library/Application Support/Lore/
 ├── library.json      # 灵感与元数据
-├── Images/           # 原始截图
+├── Images/           # 原图（位图或 .svg 矢量源码）
 ├── Thumbnails/       # 1200px JPEG 缩略图（详情/Agent）
 └── Cards/            # 640px JPEG 网格缩略图（导入时生成，旧库首次启动后台补齐）
 ```
@@ -218,10 +227,10 @@ Lore 借用了 Pinterest 的自信——图片优先、留白充分、标志性�
   ./scripts/agent-smoke-test.sh
   ```
 
-  脚本会在临时端口启动真实服务，覆盖所有端点族、JSON/原始图片上传、元数据 PATCH 更新（含空值清除、画板移动、校验失败、未知灵感、关闭修改后的 403）、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护（共 192 项检查）。
-- `Tests/LoreAgentKitTests` 中有 49 个 Swift Testing 用例。在本机纯 Command Line Tools 环境下编译通过，但缺少 XCTest runner 无法执行；因此上述 smoke test 是本地权威验证。
-- 截图可复现：`./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`，支持 `SCREENSHOT_LANG=en|zh`。
+  脚本会在临时端口启动真实服务，覆盖所有端点族、JSON/原始图片上传、元数据 PATCH 更新（含空值清除、画板移动、校验失败、未知灵感、关闭修改后的 403）、HEAD/OPTIONS/CORS 行为、JSON 结构、筛选、图片字节与路径穿越防护（共 210 项检查）。
+- `Tests/LoreAgentKitTests` 中有 80 个 Swift Testing 用例。在本机纯 Command Line Tools 环境下编译通过，但缺少 XCTest runner 无法执行；因此上述 smoke test 是本地权威验证。
+- 截图可复现：`./scripts/screenshot-app.sh gallery|agent|capture|svg|detail|batch|large`，支持 `SCREENSHOT_LANG=en|zh`。
 
 ## 状态
 
-Lore 1.1 是一个完整的本地优先 macOS 应用。示例图库全部由手写 HTML/CSS 渲染生成，运行时不请求任何外部资源或网络。
+Lore 1.2 是一个完整的本地优先 macOS 应用。示例图库全部由手写 HTML/CSS 渲染生成，运行时不请求任何外部资源或网络。

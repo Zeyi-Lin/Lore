@@ -10,7 +10,6 @@ struct PinDetailOverlay: View {
     @State private var tagEntry = ""
     @State private var showNewBoardField = false
     @State private var newBoardName = ""
-    @State private var showBoardMenu = false
     @State private var isImageMode = UserDefaults.standard.bool(forKey: "lore.debugLargeImage")
     @State private var keyMonitor: Any?
     @State private var scrollMonitor: Any?
@@ -18,8 +17,11 @@ struct PinDetailOverlay: View {
     @State private var detailStage = 0
     @State private var isEditingTitle = false
     @State private var isEditingNote = false
-    @State private var boardMenuHovering = false
     @State private var moreMenuHovering = false
+    /// The board picker is drawn by this overlay rather than by a system
+    /// popover, so it can appear on the same frame as the click. The anchor is
+    /// the pill's frame in the overlay's own coordinate space.
+    @State private var boardPickerShown = false
     @State private var noteHovering = false
     @State private var tagHovering = false
     @FocusState private var titleFieldFocused: Bool
@@ -60,6 +62,14 @@ struct PinDetailOverlay: View {
                     }
                 }
             }
+            .overlayPreferenceValue(BoardPillAnchorKey.self) { anchor in
+                GeometryReader { proxy in
+                    if boardPickerShown, let anchor {
+                        boardPickerLayer(rect: proxy[anchor], container: proxy.size)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+                    }
+                }
+            }
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .transition(.opacity)
@@ -89,6 +99,7 @@ struct PinDetailOverlay: View {
             isEditingNote = false
         }
         .onChange(of: pin.id) { _, _ in
+            boardPickerShown = false
             titleFieldFocused = false
             noteFieldFocused = false
             tagFieldFocused = false
@@ -97,7 +108,6 @@ struct PinDetailOverlay: View {
             tagEntry = ""
             noteHovering = false
             tagHovering = false
-            boardMenuHovering = false
             scrollNavigator.reset()
             store.prefetchNeighbors(around: pin)
         }
@@ -112,6 +122,10 @@ struct PinDetailOverlay: View {
             }
         }
         .onExitCommand {
+            if boardPickerShown {
+                closeBoardPicker()
+                return
+            }
             if isEditingTitle {
                 isEditingTitle = false
                 return
@@ -176,6 +190,10 @@ struct PinDetailOverlay: View {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return event }
+            if event.keyCode == 53, boardPickerShown {
+                closeBoardPicker()
+                return nil
+            }
             if event.keyCode == 53 {
                 if isEditingTitle {
                     titleFieldFocused = false
@@ -225,6 +243,7 @@ struct PinDetailOverlay: View {
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard !isImageMode else { return event }
+            guard !boardPickerShown else { return event }
             guard let mainWindow = NSApp.mainWindow, event.window === mainWindow else { return event }
             if let responder = event.window?.firstResponder,
                responder is NSTextView || responder is NSTextField {
@@ -340,6 +359,7 @@ struct PinDetailOverlay: View {
     }
 
     private func enterImageMode() {
+        boardPickerShown = false
         withAnimation(.snappy(duration: 0.28)) { isImageMode = true }
     }
 
@@ -467,76 +487,64 @@ struct PinDetailOverlay: View {
     }
 
     private var boardMenu: some View {
-        Button {
-            showBoardMenu.toggle()
-        } label: {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Theme.boardColor(pin.board))
-                    .frame(width: 6, height: 6)
-                Text(localizedBoard(pin.board))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.inkSecondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7.5, weight: .bold))
-                    .foregroundStyle(Theme.inkTertiary)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 31)
-            .background(Capsule().fill(boardMenuHovering ? Theme.parchmentDeep : Theme.parchment))
-            .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(PointerPlainButtonStyle())
-        .focusEffectDisabled()
-        .onHover { boardMenuHovering = $0 }
-        .animation(.easeOut(duration: 0.14), value: boardMenuHovering)
-        .popover(isPresented: $showBoardMenu, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(store.allBoardNames, id: \.self) { board in
-                    Button {
-                        store.movePin(pin.id, toBoard: board)
-                        showBoardMenu = false
-                    } label: {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(Theme.boardColor(board))
-                                .frame(width: 6, height: 6)
-                            Text(localizedBoard(board))
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Theme.ink)
-                            Spacer()
-                            if board.caseInsensitiveCompare(pin.board) == .orderedSame {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(Theme.red)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .contentShape(Rectangle())
-                        .menuRowHover(isSelected: board.caseInsensitiveCompare(pin.board) == .orderedSame)
-                    }
-                    .buttonStyle(PointerPlainButtonStyle())
-                }
-                Divider()
-                Button {
+        BoardPill(
+            board: pin.board,
+            isOpen: boardPickerShown,
+            onToggle: toggleBoardPicker
+        )
+        .anchorPreference(key: BoardPillAnchorKey.self, value: .bounds) { $0 }
+    }
+
+    /// The picker sits in the overlay's ZStack, right under the pill: an
+    /// in-window panel costs a layout pass, where a popover costs a window.
+    private func boardPickerLayer(rect: CGRect, container: CGSize) -> some View {
+        let width = BoardPicker.panelWidth
+        let x = min(
+            max(rect.minX - 4, 12),
+            max(container.width - width - 12, 12)
+        )
+        let y = rect.maxY + 7
+
+        return ZStack(alignment: .topLeading) {
+            Color.black.opacity(0.001)
+                .contentShape(Rectangle())
+                .onTapGesture { closeBoardPicker() }
+
+            BoardPicker(
+                current: pin.board,
+                onPick: { board in
+                    store.movePin(pin.id, toBoard: board)
+                    closeBoardPicker()
+                },
+                onNewBoard: {
                     showNewBoardField = true
-                    showBoardMenu = false
-                } label: {
-                    Label(T("New board…"), systemImage: "plus")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 30)
-                        .contentShape(Rectangle())
-                        .menuRowHover()
+                    closeBoardPicker()
                 }
-                .buttonStyle(PointerPlainButtonStyle())
-            }
-            .padding(6)
-            .frame(width: 210)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.paper)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.hairline, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 8)
+            .offset(x: x, y: y)
+        }
+        .frame(width: container.width, height: container.height, alignment: .topLeading)
+        .zIndex(8)
+    }
+
+    private func toggleBoardPicker() {
+        withAnimation(.easeOut(duration: 0.1)) {
+            boardPickerShown.toggle()
+        }
+    }
+
+    private func closeBoardPicker() {
+        withAnimation(.easeOut(duration: 0.1)) {
+            boardPickerShown = false
         }
     }
 
@@ -1041,14 +1049,15 @@ struct PinDetailOverlay: View {
     private var metadataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel(text: T("Details"))
-            HStack(alignment: .top, spacing: 0) {
+            DetailStatRow {
                 detailStat(label: T("PIXELS"), value: pin.pixelLabel)
-                detailDivider
-                detailStat(label: T("FILE"), value: pin.byteLabel)
-                detailDivider
-                detailStat(label: T("FORMAT"), value: (pin.image as NSString).pathExtension.uppercased())
-                detailDivider
-                detailStat(label: T("CAPTURED"), value: pin.createdAt.loreShort)
+                detailStat(label: T("FILE"), value: pin.byteLabel, ruleBefore: true)
+                detailStat(
+                    label: T("FORMAT"),
+                    value: (pin.image as NSString).pathExtension.uppercased(),
+                    ruleBefore: true
+                )
+                detailStat(label: T("CAPTURED"), value: pin.createdAt.loreShort, ruleBefore: true)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 12)
@@ -1059,7 +1068,10 @@ struct PinDetailOverlay: View {
         }
     }
 
-    private func detailStat(label: String, value: String) -> some View {
+    /// One cell of the details row. The hairline rule lives inside the cell
+    /// that follows it (rather than as a column of its own) so the row layout
+    /// only has to divide space between the four stats.
+    private func detailStat(label: String, value: String, ruleBefore: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.system(size: 7.5, weight: .bold))
@@ -1071,13 +1083,15 @@ struct PinDetailOverlay: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var detailDivider: some View {
-        Rectangle()
-            .fill(Theme.hairline)
-            .frame(width: 1, height: 24)
-            .padding(.horizontal, 8)
+        .padding(.leading, ruleBefore ? 17 : 0)
+        .overlay(alignment: .topLeading) {
+            if ruleBefore {
+                Rectangle()
+                    .fill(Theme.hairline)
+                    .frame(width: 1, height: 24)
+                    .padding(.leading, 8)
+            }
+        }
     }
 
     private var footerActions: some View {
@@ -1162,7 +1176,17 @@ private struct DetailCardMetrics {
     static let widthFraction: CGFloat = 0.86
     static let heightFraction: CGFloat = 0.88
     static let minMetaWidth: CGFloat = 392
-    static let maxMetaWidth: CGFloat = 560
+    /// The metadata column itself: the reading column on the card's right.
+    static let maxMetaWidth: CGFloat = 500
+    /// The metadata column's share of the card. It holds the title, note,
+    /// tags, palette and agent card at a comfortable reading width; 0.38
+    /// keeps it clear of the image, which gets the larger half of the card.
+    static let metaShare: CGFloat = 0.38
+    /// The card still sizes itself around the reading column the composition
+    /// was drawn for, not the slimmer one: whatever the column gives up makes
+    /// the image pane wider, so the card keeps its original footprint.
+    static let cardMetaShare: CGFloat = 0.425
+    static let cardMetaMaxWidth: CGFloat = 560
     /// The hero image occupies about this share of the image pane. Keeping it
     /// constant preserves the original card's visual balance at every size.
     static let imageShare: CGFloat = 0.52
@@ -1184,16 +1208,16 @@ private struct DetailCardMetrics {
         )
         let imagePadding = Self.imagePadding(for: height)
         let imageWidth = max((height - imagePadding * 2) * max(aspectRatio, 0.05), 1)
-        let estimatedMeta = min(
-            max(maxWidth * 0.425, Self.minMetaWidth),
-            Self.maxMetaWidth
+        let cardMeta = min(
+            max(maxWidth * Self.cardMetaShare, Self.minMetaWidth),
+            Self.cardMetaMaxWidth
         )
-        let idealWidth = estimatedMeta + imageWidth / Self.imageShare
+        let idealWidth = cardMeta + imageWidth / Self.imageShare
 
         cardHeight = height
         cardWidth = min(max(idealWidth, Self.minCardWidth), maxWidth)
         metaWidth = min(
-            max(cardWidth * 0.425, Self.minMetaWidth),
+            max(cardWidth * Self.metaShare, Self.minMetaWidth),
             Self.maxMetaWidth
         )
     }
@@ -1213,6 +1237,56 @@ private struct DetailCardMetrics {
     var metaPadding: CGFloat { min(max(cardWidth * 0.022, 24), 40) }
 
     var sectionSpacing: CGFloat { min(max(cardHeight * 0.026, 18), 26) }
+}
+
+/// The details row: four stats side by side. Equal columns are the intended
+/// look and they fit whenever the card is wide, but the captured date is much
+/// wider than "PNG" — an equal split truncates it as soon as the metadata
+/// column narrows. So every column gets its intrinsic width when a share is
+/// too small, and only the leftover space is divided evenly.
+private struct DetailStatRow: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+        let width = proposal.width ?? ideals.reduce(0) { $0 + $1.width }
+        return CGSize(width: width, height: ideals.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let widths = columnWidths(total: bounds.width, subviews: subviews)
+        var x = bounds.minX
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                proposal: ProposedViewSize(width: widths[index], height: bounds.height)
+            )
+            x += widths[index]
+        }
+    }
+
+    private func columnWidths(total: CGFloat, subviews: Subviews) -> [CGFloat] {
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified).width }
+        var widths = ideals
+        var loose = Array(subviews.indices)
+        var remaining = total
+
+        // Pin the columns that cannot fit an equal share, then share what is
+        // left among the rest. Each pass pins at least one column, so the loop
+        // is bounded by the number of columns.
+        while !loose.isEmpty {
+            let share = remaining / CGFloat(loose.count)
+            let pinned = loose.filter { ideals[$0] > share }
+            guard !pinned.isEmpty else {
+                for index in loose { widths[index] = max(share, 0) }
+                break
+            }
+            for index in pinned {
+                widths[index] = ideals[index]
+                remaining -= ideals[index]
+            }
+            loose.removeAll { ideals[$0] > share }
+        }
+        return widths
+    }
 }
 
 struct SmallPillButton: View {

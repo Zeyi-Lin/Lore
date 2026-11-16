@@ -1,4 +1,6 @@
 import AppKit
+import UniformTypeIdentifiers
+import LoreAgentKit
 
 /// Clipboard inspection shared by the paste buttons, the app menu, and the ⌘V
 /// shortcut. Keeping the image-type list in one place means the importer, the
@@ -10,9 +12,29 @@ enum Clipboard {
         NSPasteboard.PasteboardType("public.gif")
     ]
 
+    /// `public.svg-image`: set by Finder for an SVG file copy and by browsers
+    /// and design tools that put the markup on the pasteboard directly.
+    static let svgType = NSPasteboard.PasteboardType(UTType.svg.identifier)
+
     static func isLikelyImage(_ url: URL) -> Bool {
-        ["png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "webp", "gif", "bmp"]
+        ["png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "webp", "gif", "bmp", "svg"]
             .contains(url.pathExtension.lowercased())
+    }
+
+    /// The SVG markup on the pasteboard, or nil. Copying code from a text
+    /// editor puts a plain string on the clipboard, so the text itself is
+    /// checked for a standalone `<svg>` document; HTML pages that merely embed
+    /// one are rejected by `SVGRasterizer`.
+    static func svgCode(from pasteboard: NSPasteboard = .general) -> String? {
+        if let data = pasteboard.data(forType: svgType) {
+            if let text = String(data: data, encoding: .utf8),
+               let markup = SVGRasterizer.normalizedMarkup(text) {
+                return markup
+            }
+        }
+        guard let text = pasteboard.string(forType: .string),
+              text.utf8.count <= SVGRasterizer.maxDocumentBytes else { return nil }
+        return SVGRasterizer.normalizedMarkup(text)
     }
 
     /// True when a paste would import something. Only inspects pasteboard types
@@ -28,10 +50,17 @@ enum Clipboard {
         }
 
         let types = Set(pasteboard.types ?? [])
+        if types.contains(svgType), svgCode(from: pasteboard) != nil { return true }
         if gifTypes.contains(where: { types.contains($0) }) { return true }
-        return types.contains(.png)
+        if types.contains(.png)
             || types.contains(.tiff)
-            || types.contains(NSPasteboard.PasteboardType("public.jpeg"))
+            || types.contains(NSPasteboard.PasteboardType("public.jpeg")) {
+            return true
+        }
+        // Copied markup is text: no image type is advertised, but ⌘V should
+        // still pin it. The check is intentionally strict about the root
+        // element so a copied paragraph is never mistaken for a vector.
+        return svgCode(from: pasteboard) != nil
     }
 
     /// ⌘V exactly: ⇧⌘V still belongs to the app-menu command, and ⌘⌥V is not a

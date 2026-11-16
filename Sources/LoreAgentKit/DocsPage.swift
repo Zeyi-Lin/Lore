@@ -229,7 +229,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
       </article>
       <article class="card">
         <h3><span class="step">6</span>Add a pin (raw image)</h3>
-        <p>Stream the file directly with an <span class="inline-code">image/*</span> Content-Type and metadata as query parameters. Great for large screenshots; 20 MiB limit. Prefix the board with the product name (<span class="inline-code">Linear/Settings</span>) so captures file under that product's group.</p>
+        <p>Stream the file directly with an <span class="inline-code">image/*</span> Content-Type and metadata as query parameters. Great for large screenshots; 20 MiB limit. SVG bodies (<span class="inline-code">image/svg+xml</span>) are stored as vectors, not flattened. Prefix the board with the product name (<span class="inline-code">Linear/Settings</span>) so captures file under that product's group.</p>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">curl + jq</span><button class="copy" type="button" data-copy="snip-create-raw">Copy</button></div>
           <pre id="snip-create-raw"><code>curl -s -X POST --data-binary @settings.png \\
@@ -266,7 +266,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><span class="method method-post">POST</span></td><td><code>/api/v1/pins</code></td><td><code>application/json</code></td><td>Add a pin: JSON <span class="inline-code">imageBase64</span> body, or raw <span class="inline-code">image/*</span> body with metadata query parameters. Returns <span class="inline-code">201</span> and a <span class="inline-code">Location</span> header.</td></tr>
           <tr><td><span class="method method-post">PATCH</span></td><td><code>/api/v1/pins/{id}</code></td><td><code>application/json</code></td><td>Update metadata: title, note, board, tags, source, favorite, or kind. Null clears a nullable field. Returns the updated pin, or <span class="inline-code">403 metadata_edits_disabled</span> when the owner turned edits off.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}</code></td><td><code>application/json</code></td><td>A single enriched pin, or a 404 JSON error.</td></tr>
-          <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}/image</code></td><td><code>image/png</code> · <code>image/jpeg</code> · …</td><td>Raw image bytes. <span class="inline-code">variant=original|thumb</span>, defaults to original.</td></tr>
+          <tr><td><span class="method">GET</span></td><td><code>/api/v1/pins/{id}/image</code></td><td><code>image/png</code> · <code>image/jpeg</code> · <code>image/svg+xml</code> · …</td><td>Raw image bytes. <span class="inline-code">variant=original|thumb</span>, defaults to original. SVG originals stream the vector markup.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/boards</code></td><td><code>application/json</code></td><td>Board names with pin counts. A <code>/</code> in a name nests it under a group in the app — <code>Linear/Settings</code> folds into <code>Linear</code>.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/tags</code></td><td><code>application/json</code></td><td>Tag names with pin counts.</td></tr>
           <tr><td><span class="method">GET</span></td><td><code>/api/v1/stats</code></td><td><code>application/json</code></td><td>Library counters: pins, boards, tags, favorites, images.</td></tr>
@@ -360,6 +360,17 @@ curl -s "\(baseURL)/api/v1/pins?favorite=true&limit=200" \\
   "\(baseURL)/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
   | jq '{id, animated, frameCount, imageURL}'</code></pre>
         </div>
+        <h3 style="margin-top:22px">Add an SVG</h3>
+        <div class="snippet">
+          <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-create-svg">Copy</button></div>
+          <pre id="ex-create-svg"><code>curl -s -X POST --data-binary @mark.svg \
+  -H "Content-Type: image/svg+xml" \
+  "\(baseURL)/api/v1/pins?title=Mark&board=Brand&tags=logo" \
+  | jq '{id, kind, width, height, imageURL}'</code></pre>
+        </div>
+        <div class="note" style="margin-top:18px">
+          <strong>Vectors stay vectors.</strong> An SVG upload is stored verbatim as <span class="inline-code">Images/&lt;id&gt;.svg</span>; <span class="inline-code">imageURL</span> streams <span class="inline-code">image/svg+xml</span> (with a sandboxing Content-Security-Policy) and <span class="inline-code">thumbnailURL</span> serves a rasterised JPEG for previews. <span class="inline-code">width</span>/<span class="inline-code">height</span> report the document's intrinsic size and <span class="inline-code">kind</span> defaults to <span class="inline-code">svg</span>.
+        </div>
         <h3 style="margin-top:22px">Add a pin from JSON base64</h3>
         <div class="snippet">
           <div class="snippet-head"><span class="snippet-label">shell</span><button class="copy" type="button" data-copy="ex-create-json">Copy</button></div>
@@ -401,7 +412,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><code>thumbnail</code></td><td><code>string | null</code></td><td>Library-relative thumbnail path, or <code>null</code>.</td></tr>
           <tr><td><code>imageURL</code></td><td><code>string | null</code></td><td>Absolute loopback URL for the original image.</td></tr>
           <tr><td><code>thumbnailURL</code></td><td><code>string | null</code></td><td>Absolute loopback URL for the thumbnail; <code>null</code> if the pin has none.</td></tr>
-          <tr><td><code>width</code>, <code>height</code></td><td><code>integer</code></td><td>Pixel dimensions of the original image.</td></tr>
+          <tr><td><code>width</code>, <code>height</code></td><td><code>integer</code></td><td>Pixel dimensions of the original image; the intrinsic width/height for an SVG.</td></tr>
           <tr><td><code>fileSize</code></td><td><code>integer</code></td><td>Original image size in bytes.</td></tr>
           <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td><code>string</code></td><td>ISO 8601 timestamps.</td></tr>
           <tr><td><code>tags</code></td><td><code>string[]</code></td><td>Lower-case filter labels.</td></tr>
@@ -414,7 +425,7 @@ curl -s -X POST "\(baseURL)/api/v1/pins" \\
           <tr><td><code>animated</code></td><td><code>boolean</code></td><td>True when the original image has multiple frames, such as an animated GIF.</td></tr>
           <tr><td><code>frameCount</code></td><td><code>integer</code></td><td>Frame count of the original; <code>1</code> for still images.</td></tr>
           <tr><td><code>favorite</code></td><td><code>boolean</code></td><td>Whether the pin is marked as a favorite.</td></tr>
-          <tr><td><code>kind</code></td><td><code>string</code></td><td>Pin kind, e.g. <code>screenshot</code>.</td></tr>
+          <tr><td><code>kind</code></td><td><code>string</code></td><td>Pin kind: <code>screenshot</code>, <code>image</code>, or <code>svg</code>. Uploads default to <code>svg</code> for vector markup and <code>image</code> for animated files.</td></tr>
         </tbody>
       </table>
     </div>

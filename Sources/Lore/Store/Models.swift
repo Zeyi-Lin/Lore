@@ -4,11 +4,13 @@ import LoreAgentKit
 enum PinKind: String, Codable, CaseIterable {
     case screenshot
     case image
+    case svg
 
     var label: String {
         switch self {
         case .screenshot: return T("Screenshot")
         case .image: return T("Image")
+        case .svg: return T("SVG")
         }
     }
 
@@ -16,6 +18,7 @@ enum PinKind: String, Codable, CaseIterable {
         switch self {
         case .screenshot: return "macwindow"
         case .image: return "photo"
+        case .svg: return "chevron.left.forwardslash.chevron.right"
         }
     }
 }
@@ -161,13 +164,26 @@ struct Pin: Identifiable, Codable, Hashable {
         (image as NSString).pathExtension.caseInsensitiveCompare("gif") == .orderedSame
     }
 
+    /// True when the stored original is vector markup. Extension-based so pins
+    /// written by an older app or the Agent API still get the vector treatment.
+    var isSVG: Bool {
+        (image as NSString).pathExtension.caseInsensitiveCompare("svg") == .orderedSame
+    }
+
     /// Icon/label for the image type badge. GIFs win over screenshot/image so
     /// animated references are recognisable at a glance.
-    var mediaIcon: String { isGIF ? "play.rectangle.fill" : kind.icon }
+    var mediaIcon: String {
+        if isGIF { return "play.rectangle.fill" }
+        if isSVG { return PinKind.svg.icon }
+        return kind.icon
+    }
 
     var mediaLabel: String {
-        guard isGIF else { return kind.label }
-        return frameCount > 1 ? TF("GIF · %ld frames", frameCount) : T("GIF")
+        if isGIF {
+            return frameCount > 1 ? TF("GIF · %ld frames", frameCount) : T("GIF")
+        }
+        if isSVG { return T("SVG") }
+        return kind.label
     }
 
     var byteLabel: String {

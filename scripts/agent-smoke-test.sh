@@ -157,6 +157,15 @@ pins.extend([hostile, absolute, symlinked])
 with open(os.path.join(library, "library.json"), "w", encoding="utf-8") as handle:
     json.dump({"version": 1, "pins": pins}, handle, indent=2)
 
+svg = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">'
+    '<rect width="120" height="80" fill="#e51a26"/>'
+    '<rect x="40" width="40" height="80" fill="#1a994d"/>'
+    '<rect x="80" width="40" height="80" fill="#1f33a6"/>'
+    "</svg>"
+).encode("utf-8")
+with open(os.path.join(root, "expected-svg.bin"), "wb") as handle:
+    handle.write(svg)
 with open(os.path.join(root, "expected-png.bin"), "wb") as handle:
     handle.write(png)
 with open(os.path.join(root, "expected-jpeg.bin"), "wb") as handle:
@@ -273,6 +282,7 @@ base, disabled_base, fixture, library = sys.argv[1:5]
 png = open(os.path.join(fixture, "expected-png.bin"), "rb").read()
 jpeg = open(os.path.join(fixture, "expected-jpeg.bin"), "rb").read()
 secret = open(os.path.join(fixture, "secret-marker.txt"), "r", encoding="utf-8").read().strip()
+svg = open(os.path.join(fixture, "expected-svg.bin"), "rb").read()
 port = int(base.rsplit(":", 1)[1])
 
 failures = 0
@@ -520,6 +530,47 @@ record("default board", default_created.get("board") == "Unsorted", str(default_
 record("default sourceLabel", default_created.get("sourceLabel") == "Agent API", str(default_created.get("sourceLabel")))
 record("default kind", default_created.get("kind") == "screenshot", str(default_created.get("kind")))
 
+status, headers, body = request(
+    "/api/v1/pins?title=Vector%20smoke&board=Brand&tags=vector,logo",
+    method="POST",
+    data=svg,
+    content_type="image/svg+xml",
+)
+svg_created = parse_created("POST SVG -> 201", status, headers, body)
+svg_id = svg_created.get("id", "")
+record("SVG kind defaults to svg", svg_created.get("kind") == "svg", str(svg_created.get("kind")))
+record("SVG original stored as .svg", str(svg_created.get("image", "")).endswith(".svg"), str(svg_created.get("image")))
+record("SVG thumbnail is jpeg path", str(svg_created.get("thumbnail", "")).endswith(".jpg"), str(svg_created.get("thumbnail")))
+record("SVG intrinsic dimensions", svg_created.get("width") == 120 and svg_created.get("height") == 80, str((svg_created.get("width"), svg_created.get("height"))))
+record("SVG fileSize", svg_created.get("fileSize") == len(svg), str(svg_created.get("fileSize")))
+record("SVG animated false", svg_created.get("animated") is False and svg_created.get("frameCount") == 1, str(svg_created.get("frameCount")))
+record("SVG colors non-empty", isinstance(svg_created.get("colors"), list) and len(svg_created.get("colors")) > 0, str(svg_created.get("colors")))
+
+status, headers, image_body = request("/api/v1/pins/" + svg_id + "/image")
+record("SVG original bytes", status == 200 and image_body == svg, str(status))
+record("SVG content type", headers.get("content-type") == "image/svg+xml", headers.get("content-type", ""))
+record("SVG sandbox CSP", "sandbox" in headers.get("content-security-policy", ""), headers.get("content-security-policy", ""))
+status, headers, thumb_body = request("/api/v1/pins/" + svg_id + "/image?variant=thumb")
+record("SVG thumbnail jpeg", status == 200 and headers.get("content-type") == "image/jpeg" and thumb_body[:2] == b"\xff\xd8", str(status))
+record("SVG thumbnail rasterised at 1200", len(thumb_body) > 1000, str(len(thumb_body)))
+
+status, headers, body = request("/api/v1/pins", method="POST", data=b"<svg><g></svg>", content_type="image/svg+xml")
+record("malformed SVG -> 400 invalid_image_data", status == 400 and b"invalid_image_data" in body, str(status))
+status, headers, body = request(
+    "/api/v1/pins/" + svg_id,
+    method="PATCH",
+    data=json.dumps({"kind": "svg"}).encode("utf-8"),
+    content_type="application/json",
+)
+record("PATCH SVG kind -> svg", status == 200 and json.loads(body).get("kind") == "svg", str(status))
+
+status, headers, body = request("/api/v1/pins?q=vector")
+vector_hits = json.loads(body).get("pins", []) if status == 200 else []
+record("SVG searchable by vector", any(pin.get("id") == svg_id for pin in vector_hits), str(status))
+status, headers, body = request("/api/v1/pins?kind=svg")
+svg_hits = json.loads(body).get("pins", []) if status == 200 else []
+record("SVG filterable by kind", any(pin.get("id") == svg_id for pin in svg_hits), str(status))
+
 status, headers, body = request("/api/v1/pins", method="POST", data=b"{ not valid json", content_type="application/json")
 record("invalid JSON -> 400 invalid_json", status == 400 and b"invalid_json" in body, str(status))
 status, headers, body = request("/api/v1/pins", method="POST", data=b'{"title":"no image"}', content_type="application/json")
@@ -649,7 +700,7 @@ status, headers, body = request("/api/v1/pins/" + created_id, root=base)
 record("main server title unchanged after disabled PATCH", b"Should not stick" not in body)
 
 final_library = json.loads(request("/api/v1/library")[2])
-record("final library has 10 pins", final_library.get("stats", {}).get("pins") == 10, str(final_library.get("stats", {}).get("pins")))
+record("final library has 11 pins", final_library.get("stats", {}).get("pins") == 11, str(final_library.get("stats", {}).get("pins")))
 
 print("")
 if failures:

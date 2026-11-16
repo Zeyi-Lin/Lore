@@ -540,14 +540,14 @@ struct AgentRouter {
         }
         if keys.contains("kind") {
             if dictionary["kind"] is NSNull {
-                throw PinIngestError.invalidMetadata("\"kind\" cannot be null; use \"screenshot\" or \"image\".")
+                throw PinIngestError.invalidMetadata("\"kind\" cannot be null; use \"screenshot\", \"image\", or \"svg\".")
             }
             guard let raw = try optionalString(dictionary["kind"], field: "kind") else {
-                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\" or \"image\".")
+                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\", \"image\", or \"svg\".")
             }
             let normalized = raw.lowercased()
-            guard normalized == "screenshot" || normalized == "image" else {
-                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\" or \"image\".")
+            guard normalized == "screenshot" || normalized == "image" || normalized == "svg" else {
+                throw PinIngestError.invalidMetadata("\"kind\" must be \"screenshot\", \"image\", or \"svg\".")
             }
             patch.kind = normalized
         }

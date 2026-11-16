@@ -6,6 +6,7 @@
 #   ./scripts/screenshot-app.sh agent
 #   ./scripts/screenshot-app.sh settings
 #   ./scripts/screenshot-app.sh capture
+#   ./scripts/screenshot-app.sh svg        # SVG code sheet (prefills from the clipboard)
 #   ./scripts/screenshot-app.sh detail "Aurora"
 #   ./scripts/screenshot-app.sh batch
 #   ./scripts/screenshot-app.sh large "Miso"

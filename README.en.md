@@ -18,9 +18,10 @@ Lore is a native macOS app for capturing UI screenshots, keeping them in a Pinte
 Design reference usually lives in a messy folder of screenshots, a chat thread, or a dozen browser tabs. Agents can't see any of it. Lore is a small, local-first memory for visual taste:
 
 - **Fast to capture** — drag files in, paste from the clipboard (⌘V), or grab a screen region (⇧⌘2).
-- **Pinterest, but for references** — a balanced masonry gallery with hover save, boards, search, and favorites.
+- **Pinterest, but for references** — a balanced masonry gallery that loads in pages as you scroll (a first batch on open, the next before you reach the bottom), with cards and images fading in; hover save, boards, search, and favorites.
 - **Metadata that matters** — editable titles, design notes, tags, boards, source attribution, dimensions, file size, dominant palette, and timestamps.
 - **GIF support** — import, drop, paste, or upload a GIF through the Agent API and the original animation is preserved. Cards play it on hover, the detail card and large-image mode keep it looping, and the API exposes `animated` and `frameCount`.
+- **SVG support** — import an `.svg` file, drop it on the window, or paste its code: copy markup and press ⌘V to pin it, or ⌥⌘V for a code sheet with a live preview, title, and board picker. Lore keeps the vector source and renders it on demand for the grid, the detail pane, and large-image mode; agents get the original `image/svg+xml` from `imageURL`, so it stays sharp at any size.
 - **Automatic color families** — every pin is analysed into multi-valued hue families (blue, teal, green, yellow, red, violet, pink, brown, neutral, multicolor) plus a tone (light, pastel, vivid, muted, deep). The gallery filters by both, agents can query `color` and `tone`, and older pins are backfilled in the background.
 - **Agent-readable by default** — a localhost API exposes enriched JSON plus original/thumbnail image streams, Markdown design context, an OpenAPI 3.1 spec, llms.txt, and an in-app documentation site. Agents can also add images back into the library.
 - **Agent-editable metadata** — agents can also update titles, notes, boards, tags, and favorites through `PATCH /api/v1/pins/{id}`; a Settings switch can disable it.
@@ -39,8 +40,9 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 | Action | Shortcut |
 | --- | --- |
 | Quick capture sheet | ⌘N |
-| Import images | ⌘O |
-| Paste image from clipboard | ⌘V (or ⇧⌘V) |
+| Import images (including SVG files) | ⌘O |
+| Paste image or SVG code from the clipboard | ⌘V (or ⇧⌘V) |
+| Open the SVG code sheet | ⌥⌘V |
 | Capture a screen region | ⇧⌘2 |
 | Search pins | ⌘F |
 | Open Agent access | ⌘4 |
@@ -68,6 +70,8 @@ In selection mode, cards get a check circle and the bottom bar can select all, f
 
 You can also drop files anywhere on the window. Lore reads pixel dimensions, file size, and a five-color palette automatically (GIFs keep their animation and frame count), then classifies searchable color families and tone; titles are derived from filenames and can be edited in the pin close-up.
 
+Vectors are just as quick: drop an `.svg` file, or copy SVG markup and press ⌘V while Lore is frontmost. Use ⌥⌘V to open the SVG code sheet when you want a live preview, a title, or a specific board first. SVG pins record the document's intrinsic size (`width`/`height` or `viewBox`), and the grid, detail pane, and large-image mode rasterise the vector at the size they need.
+
 > Screen region capture uses macOS's built-in `screencapture -i`. The first run may ask for Screen Recording permission.
 
 ## Agent access
@@ -85,6 +89,11 @@ curl -s "http://127.0.0.1:4242/api/v1/pins?board=Web%20dashboards&favorite=true"
 curl -s -X POST --data-binary @loading.gif \
   -H "Content-Type: image/gif" \
   "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" | jq
+
+# Upload an SVG: the vector markup is stored, imageURL returns image/svg+xml
+curl -s -X POST --data-binary @mark.svg \
+  -H "Content-Type: image/svg+xml" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Brand%20mark&board=Brand&tags=logo" | jq
 
 # Filter by colour family and tone (or color=multicolor)
 curl -s "http://127.0.0.1:4242/api/v1/pins?color=teal&tone=deep" | jq
@@ -113,7 +122,7 @@ open http://127.0.0.1:4242/docs
 
 Agents can update a pin's title, note, board, tags, source, favorite, and kind with `PATCH /api/v1/pins/{id}`; turn this off in **Settings → Agent API → Allow metadata edits**.
 
-Each pin exposes `imageURL` and `thumbnailURL` fields that stream raw bytes, so an agent can inspect the reference itself, not just its description.
+Each pin exposes `imageURL` and `thumbnailURL` fields that stream raw bytes, so an agent can inspect the reference itself, not just its description. SVG pins keep the original vector: `imageURL` serves `image/svg+xml` (with a sandboxing CSP), `thumbnailURL` serves a rasterised JPEG, and `kind` is `svg`.
 
 When an agent adds screenshots, prefix the board with the product name, e.g. `board=Linear/Settings` — Lore groups them under `Linear` in the sidebar. On raw uploads, encode the slash in the query string as `%2F`.
 
@@ -169,7 +178,7 @@ Everything is plain files under:
 ```
 ~/Library/Application Support/Lore/
 ├── library.json      # pins + metadata
-├── Images/           # original captures
+├── Images/           # originals, including .svg vector sources
 ├── Thumbnails/       # 1200 px JPEG previews (detail / agent)
 └── Cards/            # 640 px JPEG grid thumbnails (generated on import; backfilled in the background for older libraries)
 ```
@@ -216,10 +225,10 @@ Lore ships with **English** and **Simplified Chinese** interfaces. It follows th
   ./scripts/agent-smoke-test.sh
   ```
 
-  It starts the real server on an ephemeral port and checks every endpoint family, JSON/raw image uploads, metadata PATCH updates (including null clearing, board moves, validation failures, unknown pins, and the disabled-editing 403), HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection (192 checks).
-- The Swift Testing suite in `Tests/LoreAgentKitTests` contains 49 tests. Executing it requires Xcode's XCTest runner; the Command Line Tools-only environment here compiles the suite but cannot run it, so the smoke test is the authoritative local check.
-- Automated screenshots are reproducible with `./scripts/screenshot-app.sh gallery|agent|capture|detail|batch|large`; set `SCREENSHOT_LANG=en|zh` to capture either language.
+  It starts the real server on an ephemeral port and checks every endpoint family, JSON/raw image uploads, metadata PATCH updates (including null clearing, board moves, validation failures, unknown pins, and the disabled-editing 403), HEAD/OPTIONS/CORS behavior, JSON shape, filters, image bytes, and traversal protection (210 checks).
+- The Swift Testing suite in `Tests/LoreAgentKitTests` contains 80 tests. Executing it requires Xcode's XCTest runner; the Command Line Tools-only environment here compiles the suite but cannot run it, so the smoke test is the authoritative local check.
+- Automated screenshots are reproducible with `./scripts/screenshot-app.sh gallery|agent|capture|svg|detail|batch|large`; set `SCREENSHOT_LANG=en|zh` to capture either language.
 
 ## Status
 
-Lore 1.1 is a complete, local-first macOS app. The seed library is designed from scratch and rendered from hand-written HTML/CSS; no external assets or network requests are used at runtime.
+Lore 1.2 is a complete, local-first macOS app. The seed library is designed from scratch and rendered from hand-written HTML/CSS; no external assets or network requests are used at runtime.

@@ -55,6 +55,12 @@ curl -s -X POST --data-binary @loading.gif \
   "http://127.0.0.1:4242/api/v1/pins?title=Loading%20loop&board=Mobile%20flows&kind=image" \
   | jq '{id, animated, frameCount, imageURL}'
 
+# SVG: the markup is stored as the original vector (imageURL returns image/svg+xml)
+curl -s -X POST --data-binary @mark.svg \
+  -H "Content-Type: image/svg+xml" \
+  "http://127.0.0.1:4242/api/v1/pins?title=Brand%20mark&board=Brand&tags=logo" \
+  | jq '{id, kind, width, height, imageURL}'
+
 # JSON base64 form (data URI prefixes are accepted)
 B64=$(base64 -i shot.png)
 curl -s -X POST "http://127.0.0.1:4242/api/v1/pins" \
@@ -248,7 +254,7 @@ Metadata fields and defaults:
 | `tags` | `tags` array | `?tags=` comma-separated | empty array |
 | `sourceURL` | `sourceURL` | `?sourceURL=` | `null` |
 | `sourceLabel` | `sourceLabel` | `?sourceLabel=` | `Agent API` |
-| `kind` | `kind` | `?kind=` | `screenshot` |
+| `kind` | `kind` | `?kind=` | `screenshot`; `svg` for vector uploads, `image` for animated files |
 | `favorite` | `favorite` boolean | `?favorite=` | `false` |
 
 **Naming captures.** When you capture screenshots for a product, prefix the board with the product name — e.g. `board=Linear/Settings` — so Lore files them under the Linear group. Prefer one level of nesting. Include the product name in the title too (e.g. `Settings — Linear`) so the pin reads well in search and design context.
@@ -257,6 +263,7 @@ Processing and response:
 
 - The image is validated and decoded with ImageIO. Unsupported, corrupt, or non-image payloads return `400 invalid_image_data`; a body with no image returns `400 missing_image`.
 - The original bytes are written to `<libraryRoot>/Images/<uuid>.<ext>`; a JPEG thumbnail (max 1200 px on the longest side) is written to `<libraryRoot>/Thumbnails/<uuid>.jpg`.
+- SVG payloads are detected from their markup and stored verbatim at `<libraryRoot>/Images/<uuid>.svg`; the thumbnail is rasterised from the vector, `width`/`height` report the document's intrinsic size, and `kind` defaults to `svg`. The image endpoint serves them as `image/svg+xml` with a sandboxing `Content-Security-Policy`.
 - Pixel dimensions, `fileSize`, timestamps, and up to five dominant palette colours are computed and stored.
 - Tags are trimmed, lower-cased, and de-duplicated.
 - The pin is appended to `library.json`, which is rewritten atomically as pretty-printed, sorted JSON. Existing pins and fields are preserved.
@@ -437,7 +444,7 @@ A pin contains every field Lore persists plus two absolute URLs. Responses **nev
 | `note` | string | Design note usable as an agent brief |
 | `image` | string | Library-relative original path, for example `Images/aurora.png` |
 | `thumbnail` | string \| null | Library-relative thumbnail path, or `null` |
-| `width`, `height` | integer | Pixel dimensions of the original |
+| `width`, `height` | integer | Pixel dimensions of the original; intrinsic size for an SVG |
 | `fileSize` | integer | Original file size in bytes |
 | `createdAt`, `updatedAt` | string | ISO 8601 timestamps |
 | `tags` | string[] | Lower-case filter labels |
@@ -451,11 +458,11 @@ A pin contains every field Lore persists plus two absolute URLs. Responses **nev
 | `animated` | boolean | `true` when the original image has multiple frames (for example a GIF) |
 | `frameCount` | integer | Frame count of the original image; `1` for still images |
 | `favorite` | boolean | Whether the pin is marked as a favorite |
-| `kind` | string | Pin kind, for example `screenshot`; animated GIF uploads default to `image` when `kind` is omitted |
+| `kind` | string | Pin kind: `screenshot`, `image`, or `svg`; animated GIF uploads default to `image`, SVG uploads to `svg`, when `kind` is omitted |
 | `imageURL` | string \| null | Absolute loopback URL for the original image |
 | `thumbnailURL` | string \| null | Absolute loopback URL for the thumbnail; `null` when the pin has no thumbnail |
 
-`imageURL` and `thumbnailURL` are built from the port the server actually bound, so they remain correct on custom ports and ephemeral test ports. For animated GIFs, `imageURL` streams the animated original; `thumbnailURL` streams a static first-frame JPEG.
+`imageURL` and `thumbnailURL` are built from the port the server actually bound, so they remain correct on custom ports and ephemeral test ports. For animated GIFs, `imageURL` streams the animated original; `thumbnailURL` streams a static first-frame JPEG. For SVG pins, `imageURL` streams the vector markup and `thumbnailURL` a rasterised JPEG.
 
 ---
 
@@ -519,7 +526,7 @@ and can add new pins from images you capture.
 - Pin:      GET /api/v1/pins/{id}
 - Image:    GET /api/v1/pins/{id}/image?variant=original|thumb
 - Library:  GET /api/v1/library
-- Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB; GIF frames are preserved)
+- Add pin:  POST /api/v1/pins   (JSON imageBase64, or raw image/* body with query metadata; 20 MiB; GIF frames are preserved; SVG stays vector)
 - Update:   PATCH /api/v1/pins/{id}   (partial metadata: title, note, board, tags, source, favorite, kind; null clears)
 - Board naming: add captures on Product/Screen boards (e.g. Linear/Settings); Lore groups them under Product in the sidebar.
 - Docs:     GET /docs            OpenAPI: GET /openapi.json    Index: GET /llms.txt
@@ -623,7 +630,7 @@ curl -s -o reference.png "http://127.0.0.1:4242/api/v1/pins/$PIN/image?variant=o
 | `403 metadata_edits_disabled` | Metadata edits are turned off in Settings | Enable **Allow metadata edits** in Lore → Settings → Agent API |
 | `413 request_body_too_large` | Upload body exceeds 20 MiB, or a PATCH body exceeds 256 KiB | Downscale the screenshot, or send a smaller metadata patch |
 | `415 unsupported_media_type` | Upload used a non-JSON, non-image Content-Type | Send `application/json` with `imageBase64`, or a raw image body with `image/png`/`image/jpeg`/… |
-| `400 invalid_image_data` | Base64 did not decode to an image, or the bytes are not a supported image | Verify the file opens as PNG/JPEG/WebP/GIF/HEIC/TIFF/BMP/AVIF |
+| `400 invalid_image_data` | Base64 did not decode to an image, or the bytes are not a supported image or are malformed SVG | Verify the file opens as PNG/JPEG/WebP/GIF/HEIC/TIFF/BMP/AVIF, or that the SVG renders |
 | Browser CORS error | Custom browser code without preflight | Send an `OPTIONS` preflight; CORS headers are always present |
 
 ---

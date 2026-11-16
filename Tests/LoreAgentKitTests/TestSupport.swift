@@ -498,6 +498,21 @@ enum Fixture {
         return Data(referencing: output)
     }
 
+    /// A 120 × 80 SVG of red/green/blue bands, matching `makePNG` so palette
+    /// assertions can expect the same hue families.
+    static func makeSVG(width: Int = 120, height: Int = 80) -> Data {
+        let band = Double(width) / 3.0
+        let third = Double(width) - band * 2
+        let svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)">
+          <rect width="\(width)" height="\(height)" fill="#e51a26"/>
+          <rect x="\(band)" width="\(band)" height="\(height)" fill="#1a994d"/>
+          <rect x="\(band * 2)" width="\(third)" height="\(height)" fill="#1f33a6"/>
+        </svg>
+        """
+        return Data(svg.utf8)
+    }
+
     /// Decodes image dimensions from in-memory bytes, for thumbnail assertions.
     static func imageDimensions(_ data: Data) -> (width: Int, height: Int)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),

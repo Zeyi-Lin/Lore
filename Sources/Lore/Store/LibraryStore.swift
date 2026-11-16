@@ -30,6 +30,9 @@ final class LibraryStore {
     var selectedPinIDs: Set<UUID> = []
     var capturePresented = false
     var boardManagerPresented = false
+    /// The "paste SVG code" sheet. Kept next to the capture sheet because both
+    /// are modal capture surfaces.
+    var svgPastePresented = false
     var isImporting = false
     var toast: ToastMessage?
     var startupError: String?
@@ -95,6 +98,11 @@ final class LibraryStore {
     private struct ColumnsKey: Hashable {
         var query: GalleryQuery
         var columns: Int
+        /// How many cards the gallery asked for. The feed appends a page at a
+        /// time, so the same query can be split at several prefixes; keying on
+        /// the shown count means a growth step is one recompute and every
+        /// other body pass in between is a cache hit.
+        var shown: Int
     }
 
 
@@ -166,6 +174,27 @@ final class LibraryStore {
             languageRaw: LanguageManager.shared.resolved.rawValue,
             revision: revision
         )
+    }
+
+    /// What the gallery is looking at, with the facet selections left out: the
+    /// filter bar's numbers are counted inside this scope, so they follow the
+    /// selected board instead of always describing the whole library.
+    private var currentScope: GalleryScope {
+        GalleryScope(
+            sectionRaw: section.rawValue,
+            board: selectedBoard?.trimmed.lowercased(),
+            needle: searchQuery,
+            languageRaw: LanguageManager.shared.resolved.rawValue,
+            revision: revision
+        )
+    }
+
+    /// Availability inside the current board/section/search. One pass per
+    /// scope change, then memoised; the filter chips and the colour popover
+    /// all read from here.
+    var scopeCounts: GalleryScopeCounts {
+        _ = revision
+        return projection.counts(for: currentScope)
     }
 
     /// The pins visible for the current query. Memoised: the five reads that
@@ -243,28 +272,19 @@ final class LibraryStore {
         return projection.allTags()
     }
 
-    /// Multi-membership hue counts. A teal-and-yellow reference counts in both,
-    /// and `multicolor` counts pins with three or more named hues.
-    var colorFamilyCounts: [LoreColorFamily: Int] {
-        _ = revision
-        return snapshot.colorFamilyCounts
+    /// Multi-membership hue counts within the current scope. A teal-and-yellow
+    /// reference counts in both, and `multicolor` counts pins with three or
+    /// more named hues.
+    func colorFamilyCount(_ family: LoreColorFamily) -> Int {
+        scopeCounts.colorFamilies[family.rawValue] ?? 0
     }
 
-    var toneCounts: [LoreColorTone: Int] {
-        _ = revision
-        return snapshot.toneCounts
+    func toneCount(_ tone: LoreColorTone) -> Int {
+        scopeCounts.tones[tone.rawValue] ?? 0
     }
 
     var hasColorFilter: Bool {
         colorFamilyFilter != nil || toneFilter != nil
-    }
-
-    func colorFamilyCount(_ family: LoreColorFamily) -> Int {
-        colorFamilyCounts[family] ?? 0
-    }
-
-    func toneCount(_ tone: LoreColorTone) -> Int {
-        toneCounts[tone] ?? 0
     }
 
     /// Clicking a family in the gallery filter toggles it; `nil` clears.
@@ -372,19 +392,29 @@ final class LibraryStore {
     }
 
     /// Column partitions for the masonry grid, balanced from aspect ratios
-    /// alone. Cached per query + column count, so a width change inside the
-    /// same column band reuses the partition instead of rebalancing N cards.
+    /// alone. Cached per query + column count + shown cardinality, so a width
+    /// change inside the same column band reuses the partition instead of
+    /// rebalancing N cards, and the incremental feed only pays for the page it
+    /// just appended.
+    ///
+    /// `limit` is the number of cards the gallery has loaded so far. The split
+    /// is greedy over the prefix, so appending a page never moves a card that
+    /// was already placed: the first `limit` assignments are the same on every
+    /// growth step.
     func columns(
         forWidth width: CGFloat,
         spacing: CGFloat = 20,
-        rowSpacing: CGFloat = 28
+        rowSpacing: CGFloat = 28,
+        limit: Int = .max
     ) -> [[PinCardModel]] {
         let count = MasonryComposer.columnCount(width: width, spacing: spacing)
         let query = currentQuery
-        let key = ColumnsKey(query: query, columns: count)
+        let models = projection.cards(for: query)
+        let shown = limit >= models.count ? models : Array(models.prefix(max(0, limit)))
+        let key = ColumnsKey(query: query, columns: count, shown: shown.count)
         if let columnsMemo, columnsMemo.key == key { return columnsMemo.columns }
         let columns = MasonryComposer.split(
-            models: projection.cards(for: query),
+            models: shown,
             columns: count,
             availableWidth: width,
             spacing: spacing,
@@ -985,6 +1015,13 @@ final class LibraryStore {
     }
 
     func addImageData(_ data: Data, preferredExtension: String? = nil, sourceLabel: String = "Clipboard", title: String? = nil, board: String? = nil) async {
+        // `image/svg+xml` payloads arrive through the same drop/paste channels
+        // as bitmaps; route them to the vector importer so the pin gets the
+        // right kind, badge and message.
+        if preferredExtension?.caseInsensitiveCompare("svg") == .orderedSame || SVGRasterizer.isSVG(data: data) {
+            await addSVGData(data, title: title, sourceLabel: sourceLabel, board: board)
+            return
+        }
         guard !isImporting else {
             showToast(T("Lore is still importing"), icon: "hourglass")
             return
@@ -1031,6 +1068,81 @@ final class LibraryStore {
         }
     }
 
+    /// Adds a pin from SVG markup. `code` may be a full document copied out of
+    /// an editor; it is normalised (BOM/prolog stripped) before storage so the
+    /// file always starts at the root element.
+    @discardableResult
+    func addSVGCode(
+        _ code: String,
+        title: String? = nil,
+        sourceLabel: String = "SVG code",
+        board: String? = nil
+    ) async -> Bool {
+        guard let markup = SVGRasterizer.normalizedMarkup(code),
+              let data = markup.data(using: .utf8) else {
+            showToast(T("That isn't a valid SVG document."), icon: "exclamationmark.triangle")
+            return false
+        }
+        return await addSVGData(data, title: title, sourceLabel: sourceLabel, board: board)
+    }
+
+    /// Adds a pin from raw SVG bytes — a dropped `.svg`, an SVG pasteboard
+    /// payload, or markup already normalised by `addSVGCode`.
+    @discardableResult
+    func addSVGData(
+        _ data: Data,
+        title: String? = nil,
+        sourceLabel: String = "SVG code",
+        board explicitBoard: String? = nil
+    ) async -> Bool {
+        guard !isImporting else {
+            showToast(T("Lore is still importing"), icon: "hourglass")
+            return false
+        }
+        isImporting = true
+        defer { isImporting = false }
+
+        let targetBoard = (explicitBoard ?? selectedBoard ?? defaultBoard).trimmed.nilIfEmpty ?? "Unsorted"
+        let id = UUID()
+        do {
+            let processed = try await Task.detached(priority: .userInitiated) {
+                try ImageProcessor.process(
+                    svgData: data,
+                    root: self.root,
+                    id: id,
+                    displayName: T("SVG code")
+                )
+            }.value
+            let pin = Pin(
+                id: id,
+                title: title?.trimmed.nilIfEmpty ?? TF("SVG · %@", Self.captureStamp()),
+                image: processed.image,
+                thumbnail: processed.thumbnail,
+                width: processed.width,
+                height: processed.height,
+                fileSize: processed.fileSize,
+                tags: [],
+                board: targetBoard,
+                sourceLabel: sourceLabel,
+                colors: processed.colors,
+                kind: processed.kind,
+                colorFamilies: processed.colorFamilies,
+                colorTone: processed.colorTone,
+                isAnimated: false,
+                frameCount: 1
+            )
+            pins.append(pin)
+            refreshSnapshot()
+            persist(debounce: 0.05)
+            revealFreshlyAdded(board: targetBoard)
+            showToast(TF("SVG added to %@", localizedBoard(targetBoard)), icon: PinKind.svg.icon)
+            return true
+        } catch {
+            showToast(error.localizedDescription, icon: "exclamationmark.triangle")
+            return false
+        }
+    }
+
     @discardableResult
     func pasteFromClipboard(board: String? = nil) async -> Bool {
         let pasteboard = NSPasteboard.general
@@ -1042,6 +1154,19 @@ final class LibraryStore {
                 await addFiles(imageURLs, sourceLabel: "Clipboard", board: board)
                 return true
             }
+        }
+
+        // Copied markup before the bitmap types: a vector copied from a code
+        // editor only advertises text, and a browser copy of an SVG page often
+        // carries a raster fallback that would otherwise win.
+        if let markup = Clipboard.svgCode() {
+            await addSVGData(
+                Data(markup.utf8),
+                title: TF("Pasted SVG · %@", Self.captureStamp()),
+                sourceLabel: "Clipboard",
+                board: board
+            )
+            return true
         }
 
         // Prefer GIF bytes before PNG/TIFF: browsers expose a static PNG
@@ -1197,6 +1322,8 @@ final class LibraryStore {
             lines.append(pin.frameCount > 1
                 ? "- Format: GIF · \(pin.frameCount) frames"
                 : "- Format: GIF")
+        } else if pin.isSVG {
+            lines.append("- Format: SVG · vector (scales without loss)")
         }
         if !pin.colors.isEmpty { lines.append("- Palette: " + pin.colors.joined(separator: ", ")) }
         let profile = pin.colorProfile
