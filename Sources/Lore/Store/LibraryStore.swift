@@ -145,10 +145,15 @@ final class LibraryStore {
             loadError = TF("Lore couldn't read your library. New pins will start a fresh one. (%@)", error.localizedDescription)
         }
 
+        let order = BoardOrderFile.load(root: resolvedRoot)
         self.revision = 1
-        self.boardOrder = BoardOrderFile.load(root: resolvedRoot)
+        self.boardOrder = order
         self.pins = library.pins
-        let snapshot = LibrarySnapshot(revision: 1, pins: library.pins)
+        let snapshot = LibrarySnapshot(
+            revision: 1,
+            pins: library.pins,
+            declaredBoards: order.declared
+        )
         self.snapshot = snapshot
         self.projection = GalleryProjection(snapshot: snapshot, root: resolvedRoot)
         self.startupError = loadError
@@ -825,6 +830,41 @@ final class LibraryStore {
 
     // MARK: - Board management
 
+    /// Creates a board, empty is the point: a board is usually created before
+    /// there is anything to file under it. The name follows the app's `/`
+    /// convention (`Anthropic/News` lands inside the `Anthropic` group), and
+    /// the board is remembered in `boards.json` because `library.json` can only
+    /// derive boards from pins. Returns false — with a toast — for an empty,
+    /// reserved, or already-used name.
+    /// Why `rawName` cannot be a new board, or nil when it can. Shared so the
+    /// sidebar form can show the message inline and `createBoard` can toast it.
+    func boardCreationProblem(_ rawName: String) -> String? {
+        let name = BoardPath.canonicalName(rawName)
+        guard !name.isEmpty else { return T("Board name can't be empty.") }
+        let key = BoardPath.key(name)
+        if key == "unsorted" || boardPathExists(key) {
+            return T("A board with this name already exists.")
+        }
+        return nil
+    }
+
+    @discardableResult
+    func createBoard(_ rawName: String) -> Bool {
+        if let problem = boardCreationProblem(rawName) {
+            showToast(problem, icon: "exclamationmark.triangle")
+            return false
+        }
+        let name = BoardPath.canonicalName(rawName)
+
+        var order = boardOrder
+        order.declared.append(name)
+        applyBoardOrder(order)
+        refreshSnapshot()
+        select(board: name)
+        showToast(TF("Board “%@” created.", localizedBoard(name)), icon: "folder.badge.plus")
+        return true
+    }
+
     /// Renames a board across every pin. A path rename carries the whole
     /// subtree with it (`Studio/Home` under `Studio` becomes `Suite/Home`),
     /// and renaming onto an existing board merges the two. Returns false when
@@ -852,6 +892,13 @@ final class LibraryStore {
             pins[index].updatedAt = Date()
             changed += 1
         }
+        // An empty board has no pins to carry its new name, so the declared
+        // list has to move too — including when the renamed node is only a
+        // group holding empty boards.
+        let declaredOld = boardOrder.declared.contains {
+            let key = BoardPath.key($0)
+            return key == oldKey || key.hasPrefix(oldKey + "/")
+        }
 
         if let selected = selectedBoard,
            let moved = BoardPath.replacingPrefix(in: selected, old: oldParts, new: newParts) {
@@ -861,11 +908,19 @@ final class LibraryStore {
             defaultBoard = moved
         }
 
-        guard changed > 0 else { return true }
+        guard changed > 0 || declaredOld else { return true }
         // Keep a reordered board where the user put it instead of dropping it
         // back to the alphabetical slot.
         var order = boardOrder
         order.remap(old: oldKey, new: newKey)
+        order.remapDeclared(old: oldParts, new: newParts)
+        // Renaming onto an existing board merges the two: one entry is enough,
+        // and the renamed path no longer needs to be declared.
+        var seenDeclared = Set<String>()
+        order.declared = order.declared.filter { seenDeclared.insert(BoardPath.key($0)).inserted }
+        if targetExists {
+            order.declared.removeAll { BoardPath.key($0) == newKey }
+        }
         applyBoardOrder(order)
         refreshSnapshot()
         persist(debounce: 0.2)
@@ -902,17 +957,31 @@ final class LibraryStore {
             defaultBoard = "Unsorted"
         }
 
-        guard moved > 0 else { return }
+        let key = BoardPath.key(parts.joined(separator: "/"))
+        let declaredRemoved = boardOrder.declared.contains { BoardPath.key($0) == key || BoardPath.key($0).hasPrefix(key + "/") }
+        guard moved > 0 || declaredRemoved else { return }
         var order = boardOrder
-        order.removeSubtree(BoardPath.key(parts.joined(separator: "/")))
+        order.removeSubtree(key)
         applyBoardOrder(order)
         refreshSnapshot()
         persist(debounce: 0.2)
-        showToast(TF("%ld pins moved to Unsorted.", moved), icon: "tray")
+        showToast(
+            moved > 0 ? TF("%ld pins moved to Unsorted.", moved) : T("Board deleted."),
+            icon: "tray"
+        )
     }
 
-    /// True when any pin sits on this path or on one of its descendants.
+    /// True when any pin — or a board the user created — sits on this path or
+    /// on one of its descendants.
     private func boardPathExists(_ key: String) -> Bool {
+        for board in boardOrder.declared {
+            let parts = BoardPath.segments(board)
+            for depth in 1...max(parts.count, 1) {
+                if parts.prefix(depth).joined(separator: "/").lowercased() == key {
+                    return true
+                }
+            }
+        }
         for pin in pins {
             let parts = BoardPath.segments(pin.board)
             for depth in 1...max(parts.count, 1) {
@@ -1572,7 +1641,11 @@ final class LibraryStore {
 
     private func refreshSnapshot() {
         revision &+= 1
-        let snapshot = LibrarySnapshot(revision: revision, pins: pins)
+        let snapshot = LibrarySnapshot(
+            revision: revision,
+            pins: pins,
+            declaredBoards: boardOrder.declared
+        )
         self.snapshot = snapshot
         projection.update(snapshot: snapshot)
         columnsMemo = nil

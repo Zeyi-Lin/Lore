@@ -8,6 +8,8 @@ struct SidebarView: View {
     /// Group keys the user has opened. Empty by default, so prefix groups
     /// arrive folded into a single row ("收起").
     @AppStorage("lore.expandedBoardGroups") private var expandedBoardGroups = ""
+    /// The sidebar's inline "new board" popover.
+    @State private var newBoardPresented = false
     /// Which row currently shows a drop affordance, and what kind.
     @State private var dropHint: BoardDropHint?
     /// The row being renamed inline, keyed by `BoardNode.id`, plus its draft
@@ -59,6 +61,25 @@ struct SidebarView: View {
                 SectionLabel(text: T("Boards"), trailing: "\(store.boardSummaries.count)")
 
                 Button {
+                    newBoardPresented.toggle()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(PointerPlainButtonStyle())
+                .help(T("New board"))
+                .popover(isPresented: $newBoardPresented, arrowEdge: .bottom) {
+                    NewBoardForm(
+                        onCancel: { newBoardPresented = false },
+                        onCreated: { _ in newBoardPresented = false }
+                    )
+                    .frame(width: 276)
+                }
+
+                Button {
                     store.boardManagerPresented = true
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -79,12 +100,26 @@ struct SidebarView: View {
                         boardRow(item)
                     }
                     if store.boardSummaries.isEmpty {
-                        Text(T("Boards appear here as you pin."))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.inkTertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 22)
-                            .padding(.top, 4)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(T("Boards appear here as you pin."))
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.inkTertiary)
+                            Button {
+                                newBoardPresented = true
+                            } label: {
+                                Label(T("New board"), systemImage: "plus")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.inkSecondary)
+                                    .padding(.horizontal, 8)
+                                    .frame(height: 24)
+                                    .background(Capsule().fill(Theme.parchment))
+                                    .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+                            }
+                            .buttonStyle(PointerPlainButtonStyle())
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 4)
                     }
                 }
                 .padding(.horizontal, 10)

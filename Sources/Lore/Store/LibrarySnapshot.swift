@@ -89,7 +89,11 @@ final class LibrarySnapshot {
     private var cachedSearchLanguage: String?
     private var cachedBoardKeys: [String]?
 
-    init(revision: UInt64, pins: [Pin]) {
+    /// `declaredBoards` are the boards the user created explicitly, including
+    /// ones that hold no pins. They join `boardCounts` with a count of 0 so the
+    /// sidebar, the pickers and the filters can see them; the counts themselves
+    /// still come from the pins.
+    init(revision: UInt64, pins: [Pin], declaredBoards: [String] = []) {
         self.revision = revision
         self.pins = pins
         var index: [UUID: Int] = [:]
@@ -127,6 +131,20 @@ final class LibrarySnapshot {
             }
             for tag in pin.tags where !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 tags[tag, default: 0] += 1
+            }
+        }
+
+        // An empty board is invisible to `library.json`; it exists because the
+        // user made it. Keep the spelling they typed unless a pin already uses
+        // the same path in another casing.
+        for raw in declaredBoards {
+            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let key = name.lowercased()
+            if boards.keys.contains(where: { $0.lowercased() == key }) { continue }
+            boards[name] = 0
+            if seenBoards.insert(name).inserted {
+                boardNames.append(name)
             }
         }
 

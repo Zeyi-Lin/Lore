@@ -134,6 +134,21 @@ struct LibraryView: View {
             }
     }
 
+    /// Why the grid is empty: no pins at all, a board that has not been filled
+    /// yet, or a search/filter that matched nothing. The middle case is new —
+    /// boards can be created empty — and it deserves its own copy and actions
+    /// rather than "No pins match".
+    private var emptyMode: EmptyMode {
+        if store.pins.isEmpty { return .emptyLibrary }
+        let scoped = store.selectedBoard != nil
+            && store.searchText.isEmpty
+            && store.searchQuery.isEmpty
+            && store.filter == .all
+            && !store.hasColorFilter
+            && store.section == .all
+        return scoped ? .emptyBoard : .noResults
+    }
+
     private var libraryScroll: some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
@@ -153,7 +168,7 @@ struct LibraryView: View {
 
                     Group {
                         if store.visibleCards.isEmpty {
-                            EmptyStateView(mode: store.pins.isEmpty ? .emptyLibrary : .noResults)
+                            EmptyStateView(mode: emptyMode)
                                 .padding(.horizontal, 34)
                                 .padding(.top, 8)
                                 .transition(.opacity)

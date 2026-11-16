@@ -2,6 +2,9 @@ import SwiftUI
 
 enum EmptyMode {
     case emptyLibrary
+    /// A board that exists but holds no pins yet — the sidebar can create one
+    /// before there is anything to file under it.
+    case emptyBoard
     case noResults
 }
 
@@ -15,6 +18,14 @@ struct EmptyStateView: View {
                 EmptyArtwork()
                     .frame(width: 300, height: 208)
                     .padding(.bottom, 26)
+            } else if mode == .emptyBoard {
+                ZStack {
+                    Circle().fill(Theme.parchment).frame(width: 104, height: 104)
+                    Image(systemName: "folder")
+                        .font(.system(size: 29, weight: .light))
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+                .padding(.bottom, 22)
             } else {
                 ZStack {
                     Circle().fill(Theme.parchment).frame(width: 104, height: 104)
@@ -25,7 +36,7 @@ struct EmptyStateView: View {
                 .padding(.bottom, 22)
             }
 
-            Text(mode == .emptyLibrary ? T("Your library is waiting") : T("No pins match"))
+            Text(title)
                 .font(Theme.display(24, weight: .bold))
                 .tracking(-0.7)
                 .foregroundStyle(Theme.ink)
@@ -39,12 +50,15 @@ struct EmptyStateView: View {
                 .padding(.top, 8)
 
             HStack(spacing: 9) {
-                if mode == .emptyLibrary {
+                if mode == .emptyLibrary || mode == .emptyBoard {
                     LoreButton(title: T("Capture screenshot"), icon: "viewfinder", variant: .primary) {
                         store.capturePresented = true
                     }
                     LoreButton(title: T("Import images"), icon: "square.and.arrow.down", variant: .secondary) {
-                        ImportPanel.present(store: store)
+                        ImportPanel.present(
+                            store: store,
+                            board: mode == .emptyBoard ? store.selectedBoard : nil
+                        )
                     }
                 } else {
                     LoreButton(title: T("Clear search & filters"), icon: "arrow.counterclockwise", variant: .secondary) {
@@ -77,10 +91,20 @@ struct EmptyStateView: View {
         .padding(.vertical, 38)
     }
 
+    private var title: String {
+        switch mode {
+        case .emptyLibrary: return T("Your library is waiting")
+        case .emptyBoard: return T("This board is empty")
+        case .noResults: return T("No pins match")
+        }
+    }
+
     private var subtitle: String {
         switch mode {
         case .emptyLibrary:
             return T("Pin the interfaces that make you stop scrolling.\nEvery capture keeps its pixels, palette, and context — ready for your agent.")
+        case .emptyBoard:
+            return T("Drop images here, press ⌘V, or move pins over from another board.")
         case .noResults:
             return T("Try a different phrase, or loosen the filters.\nBoards, tags, and colors are searchable too.")
         }

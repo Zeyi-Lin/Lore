@@ -18,6 +18,7 @@ struct BoardManagerSheet: View {
     @State private var inlineError: String?
     @State private var pendingDelete: BoardNode?
     @State private var hoveredPath: String?
+    @State private var creatingBoard = false
     @FocusState private var nameFocused: Bool
 
     private var rows: [Row] {
@@ -160,29 +161,74 @@ struct BoardManagerSheet: View {
     // MARK: - List
 
     private var boardList: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 1) {
-                if rows.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 20, weight: .light))
-                            .foregroundStyle(Theme.inkTertiary)
-                        Text(T("Boards appear as you add pins."))
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.inkTertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 42)
-                } else {
-                    ForEach(rows) { item in
-                        row(item)
+        VStack(spacing: 10) {
+            createRow
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 1) {
+                    if rows.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundStyle(Theme.inkTertiary)
+                            Text(T("No boards yet — create one above."))
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Theme.inkTertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 42)
+                    } else {
+                        ForEach(rows) { item in
+                            row(item)
+                        }
                     }
                 }
+                .padding(.vertical, 6)
             }
-            .padding(.vertical, 6)
+            .frame(height: listHeight)
         }
-        .frame(height: listHeight)
         .padding(.top, 10)
+    }
+
+    /// Creating a board lives here as well as in the sidebar: an empty board is
+    /// exactly what this sheet is for, and it can be named before it has pins.
+    private var createRow: some View {
+        Group {
+            if creatingBoard {
+                NewBoardForm(
+                    onCancel: { creatingBoard = false },
+                    onCreated: { _ in creatingBoard = false }
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Theme.parchment.opacity(0.6))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
+            } else {
+                Button {
+                    creatingBoard = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                        Text(T("New board"))
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Text(T("Use “/” to nest"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.inkTertiary)
+                    }
+                    .foregroundStyle(Theme.inkSecondary)
+                    .padding(.horizontal, 11)
+                    .frame(height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.parchment))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PointerPlainButtonStyle())
+            }
+        }
     }
 
     /// Size the list to its rows, capped so large libraries scroll.

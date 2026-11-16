@@ -1,26 +1,49 @@
 import Foundation
 import os
 
-/// Sidebar display order for the board tree.
+/// Sidebar display order for the board tree, plus the boards the user created
+/// explicitly.
 ///
 /// `library.json` deliberately stays untouched: the board of a pin is still
 /// just its `board` string, and the Agent API keeps seeing the same data. This
-/// sidecar only decides how those boards are *ordered* in the sidebar, so an
-/// older build — or an Agent writing pins — cannot corrupt it.
+/// sidecar only decides how those boards are *ordered* in the sidebar — and,
+/// since v1.2.2, remembers boards that hold no pins yet, because an empty board
+/// has no other home: `library.json` only knows the boards pins point at.
 ///
 /// Keys are lowercased board paths (`BoardPath.key`), the same ids `BoardNode`
-/// uses; `""` is the root level. Casing and spelling always come from the
-/// pins, so an order entry for a renamed board is simply ignored.
+/// uses; `""` is the root level. Casing and spelling come from the pins, or
+/// from `declared` for a board no pin uses yet.
 struct BoardOrder: Codable, Equatable, Sendable {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     var version: Int
     /// Parent path key (`""` = root) -> ordered child path keys.
     var order: [String: [String]]
+    /// Board paths the user created, in creation order. A declared board that
+    /// later gets pins stays declared (it just stops being empty), so deleting
+    /// it in one release and re-adding it later keeps working the same way.
+    var declared: [String]
 
-    init(version: Int = BoardOrder.currentVersion, order: [String: [String]] = [:]) {
+    init(
+        version: Int = BoardOrder.currentVersion,
+        order: [String: [String]] = [:],
+        declared: [String] = []
+    ) {
         self.version = version
         self.order = order
+        self.declared = declared
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, order, declared
+    }
+
+    /// v1 files predate `declared`; they must keep opening.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        order = try container.decodeIfPresent([String: [String]].self, forKey: .order) ?? [:]
+        declared = try container.decodeIfPresent([String].self, forKey: .declared) ?? []
     }
 
     func children(of parent: String) -> [String]? {
@@ -62,7 +85,22 @@ struct BoardOrder: Codable, Equatable, Sendable {
         order = updated
     }
 
-    /// Drops a deleted board (and its subtree) from the order.
+    /// Renames declared boards with the casing the user typed. `order` keys are
+    /// lowercased, but the declared list keeps the spelling of the board, so it
+    /// is matched case-insensitively and rewritten with `new`.
+    mutating func remapDeclared(old: [String], new: [String]) {
+        guard !old.isEmpty else { return }
+        declared = declared.compactMap { entry in
+            let parts = BoardPath.segments(entry)
+            guard parts.count >= old.count, BoardPath.segmentsHasPrefix(parts, old) else {
+                return entry
+            }
+            return (new + parts.dropFirst(old.count)).joined(separator: "/")
+        }
+    }
+
+    /// Drops a deleted board (and its subtree) from the order and from the
+    /// declared list.
     mutating func removeSubtree(_ key: String) {
         guard !key.isEmpty else { return }
         var updated: [String: [String]] = [:]
@@ -70,6 +108,11 @@ struct BoardOrder: Codable, Equatable, Sendable {
             updated[parent] = children.filter { !Self.isWithin($0, key) }
         }
         order = updated
+        // Declared boards keep their display casing, so compare by key.
+        declared.removeAll { entry in
+            let entryKey = BoardPath.key(entry)
+            return entryKey == key || entryKey.hasPrefix(key + "/")
+        }
     }
 
     private static func isWithin(_ candidate: String, _ key: String) -> Bool {
@@ -98,7 +141,7 @@ enum BoardOrderFile {
             log.error("boards.json is unreadable; falling back to the default order")
             return BoardOrder()
         }
-        return BoardOrder(version: order.version, order: order.order)
+        return order
     }
 
     static func save(_ order: BoardOrder, root: URL) {
