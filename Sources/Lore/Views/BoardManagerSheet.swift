@@ -19,6 +19,9 @@ struct BoardManagerSheet: View {
     @State private var pendingDelete: BoardNode?
     @State private var hoveredPath: String?
     @State private var creatingBoard = false
+    /// Folder the create form is nested under, when it was opened from a group
+    /// row rather than from the general "New board" button.
+    @State private var creatingParent: String?
     @FocusState private var nameFocused: Bool
 
     private var rows: [Row] {
@@ -195,8 +198,15 @@ struct BoardManagerSheet: View {
         Group {
             if creatingBoard {
                 NewBoardForm(
-                    onCancel: { creatingBoard = false },
-                    onCreated: { _ in creatingBoard = false }
+                    parent: creatingParent,
+                    onCancel: {
+                        creatingBoard = false
+                        creatingParent = nil
+                    },
+                    onCreated: { _ in
+                        creatingBoard = false
+                        creatingParent = nil
+                    }
                 )
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -208,6 +218,7 @@ struct BoardManagerSheet: View {
                 )
             } else {
                 Button {
+                    creatingParent = nil
                     creatingBoard = true
                 } label: {
                     HStack(spacing: 8) {
@@ -315,6 +326,17 @@ struct BoardManagerSheet: View {
                             .help(T("Unsorted is the fallback inbox and can't be removed."))
                     } else {
                         HStack(spacing: 2) {
+                            if !node.children.isEmpty {
+                                iconButton("plus", help: T("New board in this group")) {
+                                    creatingParent = path
+                                    creatingBoard = true
+                                }
+                            }
+                            if let board = node.boardName {
+                                iconButton("photo", help: T("Change board logo")) {
+                                    store.boardLogoEditor = board
+                                }
+                            }
                             iconButton("pencil", help: T("Rename board")) {
                                 beginEdit(node)
                             }
@@ -360,9 +382,13 @@ struct BoardManagerSheet: View {
         return ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(accent.opacity(0.14))
-            Image(systemName: node.isBoard ? "rectangle.stack.fill" : "folder.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent)
+            if let board = node.boardName, let display = store.boardLogoDisplay(for: board) {
+                BoardLogoBadge(display: display, accent: accent, size: 24, cornerRadius: 7)
+            } else {
+                Image(systemName: node.isBoard ? "rectangle.stack.fill" : "folder.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
         }
         .frame(width: 24, height: 24)
     }

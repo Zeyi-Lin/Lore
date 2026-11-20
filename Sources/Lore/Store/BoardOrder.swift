@@ -1,20 +1,43 @@
 import Foundation
 import os
 
-/// Sidebar display order for the board tree, plus the boards the user created
-/// explicitly.
+/// A board's chosen sidebar logo. Both cases keep their data inside the
+/// library sidecar instead of `library.json`: a logo is presentation, and the
+/// Agent API should not have to know about it.
+///
+/// - `.pin` points at an inspiration (no copy is made; the pin's derived
+///   thumbnails are shown, and deleting the pin falls back to the default).
+/// - `.image` is a relative path under the library root. Uploaded logos are
+///   normalised into `Logos/` and never shared with a pin's original.
+struct BoardLogo: Codable, Equatable, Sendable {
+    var pinID: UUID?
+    var image: String?
+
+    static func pin(_ id: UUID) -> BoardLogo {
+        BoardLogo(pinID: id, image: nil)
+    }
+
+    static func image(_ path: String) -> BoardLogo {
+        BoardLogo(pinID: nil, image: path)
+    }
+
+}
+
+/// Sidebar display order for the board tree, the boards the user created
+/// explicitly, and the logo chosen for each board.
 ///
 /// `library.json` deliberately stays untouched: the board of a pin is still
 /// just its `board` string, and the Agent API keeps seeing the same data. This
 /// sidecar only decides how those boards are *ordered* in the sidebar — and,
 /// since v1.2.2, remembers boards that hold no pins yet, because an empty board
 /// has no other home: `library.json` only knows the boards pins point at.
+/// Since format v3 it also remembers a per-board logo.
 ///
 /// Keys are lowercased board paths (`BoardPath.key`), the same ids `BoardNode`
 /// uses; `""` is the root level. Casing and spelling come from the pins, or
 /// from `declared` for a board no pin uses yet.
 struct BoardOrder: Codable, Equatable, Sendable {
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     var version: Int
     /// Parent path key (`""` = root) -> ordered child path keys.
@@ -23,27 +46,34 @@ struct BoardOrder: Codable, Equatable, Sendable {
     /// later gets pins stays declared (it just stops being empty), so deleting
     /// it in one release and re-adding it later keeps working the same way.
     var declared: [String]
+    /// Lowercased board path -> chosen logo. A missing entry means "use the
+    /// board's first image", which is the default; no entry is written for
+    /// that, so old libraries and default boards stay untouched.
+    var logos: [String: BoardLogo]
 
     init(
         version: Int = BoardOrder.currentVersion,
         order: [String: [String]] = [:],
-        declared: [String] = []
+        declared: [String] = [],
+        logos: [String: BoardLogo] = [:]
     ) {
         self.version = version
         self.order = order
         self.declared = declared
+        self.logos = logos
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, order, declared
+        case version, order, declared, logos
     }
 
-    /// v1 files predate `declared`; they must keep opening.
+    /// v1 files predate `declared`, v2 predates `logos`; they must keep opening.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         order = try container.decodeIfPresent([String: [String]].self, forKey: .order) ?? [:]
         declared = try container.decodeIfPresent([String].self, forKey: .declared) ?? []
+        logos = try container.decodeIfPresent([String: BoardLogo].self, forKey: .logos) ?? [:]
     }
 
     func children(of parent: String) -> [String]? {
@@ -99,8 +129,27 @@ struct BoardOrder: Codable, Equatable, Sendable {
         }
     }
 
-    /// Drops a deleted board (and its subtree) from the order and from the
-    /// declared list.
+    /// Keeps a renamed board's logo (and the logos of everything nested under
+    /// it) attached to the new path. When the destination already has a logo —
+    /// a rename onto an existing board merges the two — the destination wins;
+    /// the abandoned custom image is removed by `LibraryStore`.
+    mutating func remapLogos(old: String, new: String) {
+        guard old != new else { return }
+        var moves: [(String, BoardLogo)] = []
+        for key in logos.keys where Self.isWithin(key, old) {
+            guard let logo = logos[key] else { continue }
+            moves.append((new + key.dropFirst(old.count), logo))
+        }
+        for key in logos.keys where Self.isWithin(key, old) {
+            logos.removeValue(forKey: key)
+        }
+        for (key, logo) in moves where logos[key] == nil {
+            logos[key] = logo
+        }
+    }
+
+    /// Drops a deleted board (and its subtree) from the order, the declared
+    /// list, and the logo map.
     mutating func removeSubtree(_ key: String) {
         guard !key.isEmpty else { return }
         var updated: [String: [String]] = [:]
@@ -113,6 +162,7 @@ struct BoardOrder: Codable, Equatable, Sendable {
             let entryKey = BoardPath.key(entry)
             return entryKey == key || entryKey.hasPrefix(key + "/")
         }
+        logos = logos.filter { !Self.isWithin($0.key, key) }
     }
 
     private static func isWithin(_ candidate: String, _ key: String) -> Bool {
@@ -147,7 +197,11 @@ enum BoardOrderFile {
     static func save(_ order: BoardOrder, root: URL) {
         let fileURL = url(root: root)
         do {
-            let data = try JSONEncoder().encode(order)
+            // Normalise the on-disk version: an old file that just gained a
+            // logo should not keep claiming the format it was read from.
+            var stored = order
+            stored.version = BoardOrder.currentVersion
+            let data = try JSONEncoder().encode(stored)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             log.error("couldn't save boards.json: \(error.localizedDescription, privacy: .public)")

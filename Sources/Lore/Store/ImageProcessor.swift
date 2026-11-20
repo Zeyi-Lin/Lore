@@ -256,6 +256,104 @@ enum ImageProcessor {
         return bitmap.representation(using: .png, properties: [:])
     }
 
+    /// Normalises an uploaded board logo into `Logos/` and returns its relative
+    /// path. Raster images are re-encoded as a ≤512 px PNG so transparency
+    /// survives and a huge upload never becomes a huge sidebar decode; vectors
+    /// are kept as-is and rendered on demand.
+    static func processBoardLogo(fileURL: URL, root: URL, id: UUID) throws -> String {
+        if SVGRasterizer.isSVGFile(fileURL) {
+            guard let data = try? Data(contentsOf: fileURL) else {
+                throw ImageProcessingError.unreadable(fileURL.lastPathComponent)
+            }
+            return try processBoardLogo(
+                data: data,
+                preferredExtension: "svg",
+                root: root,
+                id: id,
+                displayName: fileURL.lastPathComponent
+            )
+        }
+        guard let source = CGImageSourceCreateWithURL(
+            fileURL as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else {
+            throw ImageProcessingError.unreadable(fileURL.lastPathComponent)
+        }
+        return try storeBoardLogoRaster(
+            source: source,
+            root: root,
+            id: id,
+            displayName: fileURL.lastPathComponent
+        )
+    }
+
+    /// The clipboard counterpart of `processBoardLogo(fileURL:)`: the pasteboard
+    /// can hand over raw PNG/TIFF/JPEG/GIF bytes or SVG markup with no filename.
+    static func processBoardLogo(
+        data: Data,
+        preferredExtension: String?,
+        root: URL,
+        id: UUID,
+        displayName: String = "Clipboard image"
+    ) throws -> String {
+        if preferredExtension?.caseInsensitiveCompare("svg") == .orderedSame || SVGRasterizer.isSVG(data: data) {
+            guard data.count <= SVGRasterizer.maxDocumentBytes,
+                  SVGRasterizer.isSVG(data: data) else {
+                throw ImageProcessingError.invalidSVG(displayName)
+            }
+            try LorePaths.ensureDirectories(root: root)
+            let relative = "Logos/\(id.uuidString).svg"
+            do {
+                try data.write(to: root.appendingPathComponent(relative), options: .atomic)
+            } catch {
+                throw ImageProcessingError.writeFailed(error.localizedDescription)
+            }
+            return relative
+        }
+
+        guard let source = CGImageSourceCreateWithData(
+            data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else {
+            throw ImageProcessingError.unreadable(displayName)
+        }
+        return try storeBoardLogoRaster(source: source, root: root, id: id, displayName: displayName)
+    }
+
+    private static func storeBoardLogoRaster(
+        source: CGImageSource,
+        root: URL,
+        id: UUID,
+        displayName: String
+    ) throws -> String {
+        try LorePaths.ensureDirectories(root: root)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 512,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let logo = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            throw ImageProcessingError.unsupported(displayName)
+        }
+
+        let relative = "Logos/\(id.uuidString).png"
+        let destination = root.appendingPathComponent(relative)
+        guard let imageDestination = CGImageDestinationCreateWithURL(
+            destination as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw ImageProcessingError.writeFailed(displayName)
+        }
+        CGImageDestinationAddImage(imageDestination, logo, nil)
+        guard CGImageDestinationFinalize(imageDestination) else {
+            throw ImageProcessingError.writeFailed(displayName)
+        }
+        return relative
+    }
+
     private static func fileExtension(for source: CGImageSource) -> String? {
         guard let type = CGImageSourceGetType(source) else { return nil }
         return UTType(type as String)?.preferredFilenameExtension

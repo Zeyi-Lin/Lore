@@ -96,6 +96,7 @@ struct RootView: View {
             CaptureLayer()
             SVGCodeLayer()
             BoardManagerLayer()
+            BoardLogoLayer()
             DetailLayer()
             ToastLayer()
         }
@@ -161,7 +162,9 @@ struct RootView: View {
             removeDragEndMonitor()
         }
         .onExitCommand {
-            if store.boardManagerPresented {
+            if store.boardLogoEditor != nil {
+                withAnimation(.easeOut(duration: 0.16)) { store.boardLogoEditor = nil }
+            } else if store.boardManagerPresented {
                 withAnimation(.easeOut(duration: 0.16)) { store.boardManagerPresented = false }
             } else if store.selectedPin != nil {
                 store.dismissDetail()
@@ -192,6 +195,7 @@ struct RootView: View {
                 !store.capturePresented
                     && !store.svgPastePresented
                     && !store.boardManagerPresented
+                    && store.boardLogoEditor == nil
                     && store.selectedPin == nil
             }
             guard galleryReady else { return event }
@@ -235,6 +239,9 @@ struct RootView: View {
             mode = arguments[index + 1]
         }
         guard let mode, mode != "gallery" else { return }
+        if let board = UserDefaults.standard.string(forKey: "lore.debugBoard"), !board.isEmpty {
+            store.select(board: board)
+        }
         switch mode {
         case "agent":
             store.select(section: .agent)
@@ -254,6 +261,11 @@ struct RootView: View {
             store.svgPastePresented = true
         case "boards":
             store.boardManagerPresented = true
+        case "logo":
+            if let board = store.selectedBoard ?? firstBoardName(in: store.boardTree) {
+                store.select(board: board)
+                store.boardLogoEditor = board
+            }
         case "batch":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 let ids = store.filteredPins.prefix(4).map(\.id)
@@ -276,6 +288,14 @@ struct RootView: View {
         default:
             break
         }
+    }
+
+    private func firstBoardName(in nodes: [BoardNode]) -> String? {
+        for node in nodes {
+            if let board = node.boardName { return board }
+            if let nested = firstBoardName(in: node.children) { return nested }
+        }
+        return nil
     }
 
     @ViewBuilder
@@ -384,6 +404,21 @@ private struct BoardManagerLayer: View {
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: store.boardManagerPresented)
+    }
+}
+
+private struct BoardLogoLayer: View {
+    @Environment(LibraryStore.self) private var store
+
+    var body: some View {
+        Group {
+            if store.boardLogoEditor != nil {
+                BoardLogoPicker()
+                    .transition(.opacity)
+                    .zIndex(8)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: store.boardLogoEditor)
     }
 }
 

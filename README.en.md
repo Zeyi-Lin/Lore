@@ -27,6 +27,8 @@ Design reference usually lives in a messy folder of screenshots, a chat thread, 
 - **Agent-editable metadata** — agents can also update titles, notes, boards, tags, and favorites through `PATCH /api/v1/pins/{id}`; a Settings switch can disable it.
 - **Hierarchical boards** — board names containing `/` group into collapsible groups in the sidebar, so `Linear/Settings` files under `Linear`; agents should prefix captures with the product name (e.g. `board=Linear/Settings`).
 - **Empty boards** — the `+` beside *Boards* in the sidebar (or *New board* in the manager) creates a board before it holds anything: it stays in the sidebar with a count of 0, appears in a pin's board menu, and offers capture/import actions when opened.
+- **Quick add inside a folder** — hover a board group in the sidebar and click its `+`, or right-click and choose *New board in "…"*, to create a board directly inside that group; the manager's group rows offer the same shortcut.
+- **Board logos** — a board defaults to its first image as the logo shown in the sidebar and above the board. Click that logo (or right-click the board and choose *Set board logo…*) to pick any inspiration, upload your own image, or paste one from the clipboard (PNG, JPEG, SVG, and more); switch back to the first image at any time.
 - **Board management** — right-click a board in the sidebar to rename it inline (Enter saves, Esc cancels); the button beside *Boards* opens a manager to rename a board or a whole group (sub-boards follow), merge by renaming onto an existing board, or delete a board and re-file its pins under Unsorted while keeping every image.
 - **Batch work** — enter selection mode to favorite, move, copy agent context, or delete several cards at once; right-click a single card for a confirmed quick delete.
 - **Drag to delete** — drag a card (or the selected cards in selection mode) onto the sidebar footer; it turns into a trash target and deletes on release.
@@ -181,7 +183,9 @@ Everything is plain files under:
 ├── library.json      # pins + metadata
 ├── Images/           # originals, including .svg vector sources
 ├── Thumbnails/       # 1200 px JPEG previews (detail / agent)
-└── Cards/            # 640 px JPEG grid thumbnails (generated on import; backfilled in the background for older libraries)
+├── Cards/            # 640 px JPEG grid thumbnails (generated on import; backfilled in the background for older libraries)
+├── boards.json       # sidebar order, custom empty boards, and board logos
+└── Logos/            # uploaded or pasted board logos (SVG, or a ≤512 px PNG)
 ```
 
 `library.json` is the single source of truth and is re-read by the API on every request. The schema is documented in [docs/AGENT_API.md](docs/AGENT_API.md). Set `LORE_HOME` to point the app at a different library for development.

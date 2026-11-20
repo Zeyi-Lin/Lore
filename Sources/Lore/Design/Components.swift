@@ -299,6 +299,9 @@ struct LibraryImage: View {
     var placeholderMaxPixel: Int = 640
     var contentMode: ContentMode = .fill
     var placeholderIcon: String = "photo"
+    /// Mat behind a fitted image. Cards keep the warm parchment; a board logo
+    /// asks for paper so an uploaded transparent logo sits on white.
+    var background: Color = Theme.parchmentDeep
 
     @State private var image: CGImage?
     @State private var placeholderImage: CGImage?
@@ -312,7 +315,8 @@ struct LibraryImage: View {
         placeholderPaths: [String] = [],
         placeholderMaxPixel: Int = 640,
         contentMode: ContentMode = .fill,
-        placeholderIcon: String = "photo"
+        placeholderIcon: String = "photo",
+        background: Color = Theme.parchmentDeep
     ) {
         self.paths = paths
         self.maxPixel = maxPixel
@@ -320,6 +324,7 @@ struct LibraryImage: View {
         self.placeholderMaxPixel = placeholderMaxPixel
         self.contentMode = contentMode
         self.placeholderIcon = placeholderIcon
+        self.background = background
 
         let key = "\(maxPixel)|" + paths.joined(separator: "|")
         let cached = ImageLoader.shared.cachedImage(paths: paths, maxPixel: maxPixel)
@@ -336,7 +341,7 @@ struct LibraryImage: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(Theme.parchmentDeep)
+            Rectangle().fill(background)
             if let image, loadedKey == loadKey {
                 Image(decorative: image, scale: 2)
                     .resizable()
@@ -399,6 +404,57 @@ struct LibraryImage: View {
         // placeholder. Cached images are installed synchronously in `init`, so
         // this only animates the first decode of a given card.
         .animation(.easeOut(duration: 0.18), value: loadedKey)
+    }
+}
+
+// MARK: - Board logo
+
+/// Square badge used for a board's logo in the sidebar, the board header and
+/// the logo picker. A pin thumbnail fills the square (it is a reference image);
+/// an uploaded logo is fitted with a small inset and a hairline edge, because
+/// wordmarks should not be cropped and often have transparency.
+struct BoardLogoBadge: View {
+    var display: BoardLogoDisplay?
+    var accent: Color
+    var size: CGFloat = 22
+    var cornerRadius: CGFloat = 6
+    var placeholderIcon: String = "photo"
+
+    /// A chosen inspiration is still a full-bleed reference image; only an
+    /// uploaded logo is fitted, because a wordmark should not be cropped.
+    private var fitsImage: Bool {
+        display?.isCustom == true && display?.pinID == nil
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(fitsImage ? Theme.paper : accent.opacity(0.14))
+
+            if let display, !display.paths.isEmpty {
+                LibraryImage(
+                    paths: display.paths,
+                    maxPixel: Int(size * 3),
+                    contentMode: fitsImage ? .fit : .fill,
+                    placeholderIcon: placeholderIcon,
+                    background: fitsImage ? Theme.paper : Theme.parchmentDeep
+                )
+                .padding(fitsImage ? max(1, size * 0.10) : 0)
+            } else {
+                Image(systemName: placeholderIcon)
+                    .font(.system(size: size * 0.34, weight: .medium))
+                    .foregroundStyle(accent.opacity(0.85))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    fitsImage ? Theme.hairline : Color.clear,
+                    lineWidth: 1
+                )
+        )
     }
 }
 

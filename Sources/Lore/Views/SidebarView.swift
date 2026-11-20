@@ -8,8 +8,11 @@ struct SidebarView: View {
     /// Group keys the user has opened. Empty by default, so prefix groups
     /// arrive folded into a single row ("收起").
     @AppStorage("lore.expandedBoardGroups") private var expandedBoardGroups = ""
-    /// The sidebar's inline "new board" popover.
+    /// The sidebar's inline "new board" popover, for the top-level + button.
     @State private var newBoardPresented = false
+    /// The folder row that is currently showing its own "new board" popover.
+    /// Stored by `BoardNode.id` so nested rows anchor their own form.
+    @State private var newBoardParentKey: String?
     /// Which row currently shows a drop affordance, and what kind.
     @State private var dropHint: BoardDropHint?
     /// The row being renamed inline, keyed by `BoardNode.id`, plus its draft
@@ -78,7 +81,6 @@ struct SidebarView: View {
                     )
                     .frame(width: 276)
                 }
-
                 Button {
                     store.boardManagerPresented = true
                 } label: {
@@ -254,6 +256,14 @@ struct SidebarView: View {
                     store: store
                 ))
                 .help(node.boardName == nil ? T("Drag to reorder") : T("Drag to reorder · drop a pin here to file it"))
+                .popover(isPresented: newBoardPopoverBinding(for: node), arrowEdge: .trailing) {
+                    NewBoardForm(
+                        parent: node.fullName,
+                        onCancel: { newBoardParentKey = nil },
+                        onCreated: { _ in newBoardParentKey = nil }
+                    )
+                    .frame(width: 276)
+                }
         }
     }
 
@@ -301,6 +311,22 @@ struct SidebarView: View {
                         .truncationMode(.middle)
 
                     Spacer(minLength: 4)
+                }
+
+                if !node.children.isEmpty, hovered, !editing {
+                    Button {
+                        beginNewBoard(in: node)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.inkSecondary)
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(Theme.paper.opacity(0.9)))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(PointerPlainButtonStyle())
+                    .help(T("New board in this group"))
+                    .transition(.opacity)
                 }
 
                 Text("\(node.totalCount)")
@@ -357,6 +383,24 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func boardContextMenu(for node: BoardNode) -> some View {
+        if !node.children.isEmpty {
+            Button(TF("New board in “%@”", localizedBoard(node.title))) {
+                beginNewBoard(in: node)
+            }
+            Divider()
+        }
+        if let board = node.boardName {
+            Button(store.hasCustomBoardLogo(board) ? T("Change board logo…") : T("Set board logo…")) {
+                cancelRename()
+                store.boardLogoEditor = board
+            }
+            if store.hasCustomBoardLogo(board) {
+                Button(T("Use first image as logo")) {
+                    store.resetBoardLogo(for: board)
+                }
+            }
+            Divider()
+        }
         if BoardPath.key(node.fullName) != "unsorted" {
             Button(node.isBoard ? T("Rename board") : T("Rename group")) {
                 beginRename(node)
@@ -369,9 +413,30 @@ struct SidebarView: View {
         }
     }
 
+    /// Opens the folder's own new-board form and makes sure the group is open,
+    /// so the board that gets created is visible right away.
+    private func beginNewBoard(in node: BoardNode) {
+        withAnimation(.snappy(duration: 0.22)) {
+            setGroup(node.id, expanded: true)
+        }
+        newBoardParentKey = node.id
+    }
+
+    private func newBoardPopoverBinding(for node: BoardNode) -> Binding<Bool> {
+        Binding(
+            get: { newBoardParentKey == node.id },
+            set: { presented in
+                if !presented, newBoardParentKey == node.id {
+                    newBoardParentKey = nil
+                }
+            }
+        )
+    }
+
     // MARK: - Inline rename
 
     private func beginRename(_ node: BoardNode) {
+        newBoardParentKey = nil
         renamingBoardKey = node.id
         // The field edits the row's own label, so nested boards keep their
         // parent path (`Anthropic/Commitments` stays under Anthropic).
@@ -534,8 +599,13 @@ struct SidebarView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(accent.opacity(0.14))
-            if let board = node.boardName, let representative = store.representativePin(forBoard: board) {
-                LibraryImage(paths: store.cardImageCandidates(for: representative), maxPixel: 64, contentMode: .fill)
+            if let board = node.boardName, let display = store.boardLogoDisplay(for: board) {
+                BoardLogoBadge(
+                    display: display,
+                    accent: accent,
+                    size: 22,
+                    cornerRadius: 6
+                )
             } else if node.children.isEmpty {
                 Circle().fill(accent).frame(width: 6, height: 6)
             } else {

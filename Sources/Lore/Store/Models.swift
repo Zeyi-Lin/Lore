@@ -214,6 +214,16 @@ struct BoardSummary: Identifiable, Hashable {
     let count: Int
 }
 
+/// What a board's sidebar/header logo should draw right now. `paths` are image
+/// candidates in the same order `LibraryImage` expects; `isCustom` tells the
+/// badge whether to crop the image (a pin thumbnail fills a square) or fit it
+/// with breathing room (an uploaded wordmark usually should not be cropped).
+struct BoardLogoDisplay: Equatable {
+    var paths: [String]
+    var isCustom: Bool
+    var pinID: UUID?
+}
+
 struct ToastMessage: Identifiable, Equatable {
     let id = UUID()
     let text: String

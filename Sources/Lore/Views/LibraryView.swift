@@ -76,6 +76,7 @@ struct LibraryView: View {
     @State private var gridWidth: CGFloat = 0
     @State private var pendingDeleteID: UUID?
     @State private var widthSettle = TaskSlot()
+    @State private var logoHovered = false
     /// How many cards the incremental feed has loaded. The grid only splits
     /// and lays out this prefix, so a large library opens at the cost of its
     /// first page instead of its whole contents; scrolling grows the prefix
@@ -361,18 +362,24 @@ struct LibraryView: View {
 
     private var header: some View {
         HStack(alignment: .bottom, spacing: 20) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(store.pageTitle)
-                    .font(.system(size: 35, weight: .bold))
-                    .tracking(-1.35)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+            HStack(alignment: .center, spacing: 14) {
+                if let board = store.selectedBoard {
+                    boardLogoButton(board)
+                }
 
-                Text(store.pageSubtitle)
-                    .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(Theme.inkTertiary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(store.pageTitle)
+                        .font(.system(size: 35, weight: .bold))
+                        .tracking(-1.35)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Text(store.pageSubtitle)
+                        .font(.system(size: 12.5, weight: .regular))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 12)
@@ -385,6 +392,41 @@ struct LibraryView: View {
             }
             .padding(.bottom, 3)
         }
+    }
+
+    /// The board's logo doubles as its "set logo" affordance: clicking the
+    /// badge opens the picker, exactly like the sidebar's context menu item.
+    private func boardLogoButton(_ board: String) -> some View {
+        let accent = Theme.boardColor(BoardPath.segments(board).first ?? board)
+        return Button {
+            store.boardLogoEditor = board
+        } label: {
+            BoardLogoBadge(
+                display: store.boardLogoDisplay(for: board),
+                accent: accent,
+                size: 48,
+                cornerRadius: 14,
+                placeholderIcon: "photo.badge.plus"
+            )
+            .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+            .overlay(alignment: .bottomTrailing) {
+                if logoHovered {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 17, height: 17)
+                        .background(Circle().fill(Theme.ink.opacity(0.9)))
+                        .overlay(Circle().strokeBorder(Theme.paper, lineWidth: 1.5))
+                        .offset(x: 4, y: 4)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+            }
+            .scaleEffect(logoHovered ? 1.03 : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.8), value: logoHovered)
+        }
+        .buttonStyle(PointerPlainButtonStyle())
+        .onHover { logoHovered = $0 }
+        .help(T("Change board logo"))
     }
 
     private var filterBar: some View {

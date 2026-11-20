@@ -30,6 +30,9 @@ final class LibraryStore {
     var selectedPinIDs: Set<UUID> = []
     var capturePresented = false
     var boardManagerPresented = false
+    /// The board whose logo picker is open, if any. Kept on the store so the
+    /// sidebar, the board header and the overlay layer can all reach it.
+    var boardLogoEditor: String?
     /// The "paste SVG code" sheet. Kept next to the capture sheet because both
     /// are modal capture surfaces.
     var svgPastePresented = false
@@ -354,6 +357,153 @@ final class LibraryStore {
     func representativePin(forBoard board: String) -> Pin? {
         _ = revision
         return projection.representativePin(forBoard: board)
+    }
+
+    // MARK: - Board logos
+
+    /// The logo a board should show: the chosen inspiration or uploaded image,
+    /// otherwise its first pin. Nil means the board has no image to show at all
+    /// (an empty board without a custom logo).
+    func boardLogoDisplay(for board: String) -> BoardLogoDisplay? {
+        _ = revision
+        let key = BoardPath.key(board)
+        if let logo = boardOrder.logos[key] {
+            if let pinID = logo.pinID, let pin = pin(id: pinID) {
+                return BoardLogoDisplay(
+                    paths: cardImageCandidates(for: pin),
+                    isCustom: true,
+                    pinID: pinID
+                )
+            }
+            if let image = logo.image {
+                return BoardLogoDisplay(
+                    paths: [root.path + "/" + image],
+                    isCustom: true,
+                    pinID: nil
+                )
+            }
+        }
+        guard let representative = representativePin(forBoard: board) else { return nil }
+        return BoardLogoDisplay(
+            paths: cardImageCandidates(for: representative),
+            isCustom: false,
+            pinID: representative.id
+        )
+    }
+
+    /// True when the board has an explicit logo in `boards.json`, rather than
+    /// falling back to its first pin.
+    func hasCustomBoardLogo(_ board: String) -> Bool {
+        boardOrder.logos[BoardPath.key(board)] != nil
+    }
+
+    func setBoardLogo(pinID: UUID, for board: String) {
+        guard pin(id: pinID) != nil else { return }
+        updateBoardLogo(.pin(pinID), for: board)
+        showToast(T("Board logo updated."), icon: "photo")
+    }
+
+    func resetBoardLogo(for board: String) {
+        guard hasCustomBoardLogo(board) else { return }
+        updateBoardLogo(nil, for: board)
+        showToast(T("Board logo reset to the first image."), icon: "photo")
+    }
+
+    /// Copies an uploaded image into `Logos/` off the main actor, then points
+    /// the board at it. The picker calls this from an open panel; a failure
+    /// leaves the previous logo in place and surfaces a toast.
+    @discardableResult
+    func importBoardLogo(from url: URL, for board: String) async -> Bool {
+        let id = UUID()
+        do {
+            let relative = try await Task.detached(priority: .userInitiated) {
+                try ImageProcessor.processBoardLogo(fileURL: url, root: self.root, id: id)
+            }.value
+            return commitImportedBoardLogo(relative, for: board)
+        } catch {
+            showToast(error.localizedDescription, icon: "exclamationmark.triangle")
+            return false
+        }
+    }
+
+    /// Imports a logo from the pasteboard. Mirrors `pasteFromClipboard`'s
+    /// precedence — file URLs, then SVG markup, then GIF before the static
+    /// bitmap representations — because copying from a browser often advertises
+    /// several of them at once.
+    @discardableResult
+    func importBoardLogoFromClipboard(for board: String) async -> Bool {
+        let pasteboard = NSPasteboard.general
+
+        if let objects = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) {
+            let urls = objects.compactMap { ($0 as? NSURL) as URL? }
+                .filter { Clipboard.isLikelyImage($0) }
+            if let url = urls.first {
+                return await importBoardLogo(from: url, for: board)
+            }
+        }
+
+        if let markup = Clipboard.svgCode() {
+            return await importBoardLogo(data: Data(markup.utf8), preferredExtension: "svg", for: board)
+        }
+
+        for type in Clipboard.gifTypes {
+            if let gif = pasteboard.data(forType: type) {
+                return await importBoardLogo(data: gif, preferredExtension: "gif", for: board)
+            }
+        }
+        if let png = pasteboard.data(forType: .png) {
+            return await importBoardLogo(data: png, preferredExtension: "png", for: board)
+        }
+        if let tiff = pasteboard.data(forType: .tiff) {
+            return await importBoardLogo(data: tiff, preferredExtension: "tiff", for: board)
+        }
+        if let jpeg = pasteboard.data(forType: NSPasteboard.PasteboardType("public.jpeg")) {
+            return await importBoardLogo(data: jpeg, preferredExtension: "jpg", for: board)
+        }
+
+        showToast(T("No image on the clipboard"), icon: "doc.on.clipboard")
+        return false
+    }
+
+    @discardableResult
+    private func importBoardLogo(data: Data, preferredExtension: String, for board: String) async -> Bool {
+        let id = UUID()
+        do {
+            let relative = try await Task.detached(priority: .userInitiated) {
+                try ImageProcessor.processBoardLogo(
+                    data: data,
+                    preferredExtension: preferredExtension,
+                    root: self.root,
+                    id: id
+                )
+            }.value
+            return commitImportedBoardLogo(relative, for: board)
+        } catch {
+            showToast(error.localizedDescription, icon: "exclamationmark.triangle")
+            return false
+        }
+    }
+
+    @discardableResult
+    private func commitImportedBoardLogo(_ relative: String, for board: String) -> Bool {
+        updateBoardLogo(.image(relative), for: board)
+        showToast(T("Board logo updated."), icon: "photo")
+        return true
+    }
+
+    private func updateBoardLogo(_ logo: BoardLogo?, for board: String) {
+        let key = BoardPath.key(board)
+        var order = boardOrder
+        if let logo {
+            order.logos[key] = logo
+        } else {
+            order.logos.removeValue(forKey: key)
+        }
+        guard order != boardOrder else { return }
+        applyBoardOrder(order)
     }
 
     func originalURL(for pin: Pin) -> URL { root.appendingPathComponent(pin.image) }
@@ -684,6 +834,17 @@ final class LibraryStore {
             try? fm.removeItem(at: LorePaths.cardsDirectory(root: root)
                 .appendingPathComponent("\(pin.id.uuidString).jpg"))
         }
+        let deletedIDs = Set(targets.map(\.id))
+        if boardOrder.logos.values.contains(where: { logo in
+            logo.pinID.map(deletedIDs.contains) ?? false
+        }) {
+            var order = boardOrder
+            order.logos = order.logos.filter { logo in
+                guard let logoPin = logo.value.pinID else { return true }
+                return !deletedIDs.contains(logoPin)
+            }
+            applyBoardOrder(order)
+        }
         pins.removeAll { ids.contains($0.id) }
         selectedPinIDs.subtract(ids)
         if let selectedPinID, ids.contains(selectedPinID) { self.selectedPinID = nil }
@@ -822,9 +983,18 @@ final class LibraryStore {
 
     private func applyBoardOrder(_ order: BoardOrder) {
         guard order != boardOrder else { return }
+        // Uploaded logos live outside `library.json`; replacing, renaming over,
+        // or deleting a board can orphan one. Diff the two maps so the file
+        // goes away with its last reference.
+        let previousFiles = Set(boardOrder.logos.values.compactMap(\.image))
+        let currentFiles = Set(order.logos.values.compactMap(\.image))
+        let orphaned = previousFiles.subtracting(currentFiles)
         boardOrder = order
         orderRevision &+= 1
         BoardOrderFile.save(order, root: root)
+        for relative in orphaned {
+            try? FileManager.default.removeItem(at: root.appendingPathComponent(relative))
+        }
     }
 
 
@@ -907,6 +1077,10 @@ final class LibraryStore {
         if let moved = BoardPath.replacingPrefix(in: defaultBoard, old: oldParts, new: newParts) {
             defaultBoard = moved
         }
+        if let editor = boardLogoEditor,
+           let moved = BoardPath.replacingPrefix(in: editor, old: oldParts, new: newParts) {
+            boardLogoEditor = moved
+        }
 
         guard changed > 0 || declaredOld else { return true }
         // Keep a reordered board where the user put it instead of dropping it
@@ -914,6 +1088,7 @@ final class LibraryStore {
         var order = boardOrder
         order.remap(old: oldKey, new: newKey)
         order.remapDeclared(old: oldParts, new: newParts)
+        order.remapLogos(old: oldKey, new: newKey)
         // Renaming onto an existing board merges the two: one entry is enough,
         // and the renamed path no longer needs to be declared.
         var seenDeclared = Set<String>()
@@ -955,6 +1130,10 @@ final class LibraryStore {
         }
         if BoardPath.segmentsHasPrefix(BoardPath.segments(defaultBoard), parts) {
             defaultBoard = "Unsorted"
+        }
+        if let editor = boardLogoEditor,
+           BoardPath.segmentsHasPrefix(BoardPath.segments(editor), parts) {
+            boardLogoEditor = nil
         }
 
         let key = BoardPath.key(parts.joined(separator: "/"))
@@ -1001,6 +1180,14 @@ final class LibraryStore {
         }
         try? fm.removeItem(at: LorePaths.cardsDirectory(root: root)
             .appendingPathComponent("\(pin.id.uuidString).jpg"))
+        // A board may be using this pin as its logo. Drop the reference so the
+        // board falls back to its first remaining image instead of pointing at
+        // a file that is about to disappear.
+        if boardOrder.logos.values.contains(where: { $0.pinID == pin.id }) {
+            var order = boardOrder
+            order.logos = order.logos.filter { $0.value.pinID != pin.id }
+            applyBoardOrder(order)
+        }
         pins.removeAll { $0.id == pin.id }
         selectedPinIDs.remove(pin.id)
         if selectedPinID == pin.id { selectedPinID = nil }

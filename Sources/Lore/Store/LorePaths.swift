@@ -38,6 +38,12 @@ enum LorePaths {
         root.appendingPathComponent("Cards", isDirectory: true)
     }
 
+    /// Uploaded board logos. Names are UUIDs and the paths are stored in
+    /// `boards.json`, so this directory never needs a manifest of its own.
+    static func logosDirectory(root: URL) -> URL {
+        root.appendingPathComponent("Logos", isDirectory: true)
+    }
+
     static func libraryFile(root: URL) -> URL {
         root.appendingPathComponent("library.json")
     }
@@ -48,6 +54,7 @@ enum LorePaths {
         try fm.createDirectory(at: imagesDirectory(root: root), withIntermediateDirectories: true)
         try fm.createDirectory(at: thumbnailsDirectory(root: root), withIntermediateDirectories: true)
         try fm.createDirectory(at: cardsDirectory(root: root), withIntermediateDirectories: true)
+        try fm.createDirectory(at: logosDirectory(root: root), withIntermediateDirectories: true)
     }
 
     // MARK: - Rename migration
